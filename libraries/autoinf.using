@@ -1,0 +1,35 @@
+#ifndef AUTOINF_USING_ALREADYINCLUDED
+#define AUTOINF_USING_ALREADYINCLUDED
+
+#include <algorithm>
+#include <deque>
+#include <future>
+
+#endif
+
+namespace autoinf {
+
+using core::numeric_limits;
+using core::setIeu;
+using autofrotz::State;
+using std::vector;
+using std::tuple;
+using std::string;
+using std::get;
+using std::lower_bound;
+using autofrotz::Vm;
+using core::GeneralException;
+using std::unique_ptr;
+using std::move;
+using std::ref;
+using autofrotz::zbyte;
+using autofrotz::zword;
+using std::deque;
+using std::tuple;
+using std::mutex;
+using std::condition_variable;
+using std::thread;
+using std::unique_lock;
+using std::packaged_task;
+
+}
