@@ -87,10 +87,10 @@ void Signature::Writer::close () {
   }
 }
 
-Multiverse::Node::Node (iu id, Signature &&signature, autofrotz::State &&state)
+Multiverse::Node::Node (iu id, Signature &&signature, State &&state)
   : id(id), signature(move(signature)), state(new State(move(state))), children(0)
 {
-  DW(, "created new Node with sig of hash ", signature.hash());
+  DW(, "created new Node with sig of hash ", this->signature.hash(), " and state size ", this->state->getSize());
 }
 
 iu Multiverse::Node::getId () const {
@@ -162,19 +162,20 @@ Multiverse::Node *Multiverse::NodePath::resolve (Node *node) const {
 }
 
 Multiverse::Multiverse (
-  Vm &vm, const string &initialInput, const string &saveActionInput, const string &restoreActionInput,
+  Vm &vm, const string &initialInput, string &r_initialOutput, const string &saveActionInput, const string &restoreActionInput,
   const vector<string> &words, const vector<vector<string>> &actionTemplates
 ) : saveActionInput(saveActionInput), restoreActionInput(restoreActionInput), rootNode(nullptr) {
   DS();
   DPRE(vm.isAlive());
 
-  initActionInputs(words, actionTemplates);
+  initActionInputs(words, actionTemplates, actionInputs, actionInputBegins);
   DW(, "all actions are this: **", actionInputs.c_str(), "**");
 
-  doAction(vm, initialInput, "VM died while running the initial input");
+  doAction(vm, initialInput, r_initialOutput, "VM died while running the initial input");
   Signature signature = createSignature(vm);
   State state;
   doSaveAction(vm, &state);
+  DW(, "root node save state has size ",state.getSize());
 
   unique_ptr<Node> node(new Node(42 /* XXXX */, move(signature), move(state)));
   rootNode = node.get();
@@ -182,31 +183,31 @@ Multiverse::Multiverse (
   node.release();
 }
 
-void Multiverse::initActionInputs (const vector<string> &words, const vector<vector<string>> &actionTemplates) {
+void Multiverse::initActionInputs (const vector<string> &words, const vector<vector<string>> &actionTemplates, string &r_actionInputs, vector<size_t> &r_actionInputBegins) {
   DS();
-  DPRE(actionInputs.empty());
-  DPRE(actionInputBegins.empty());
+  DPRE(r_actionInputs.empty());
+  DPRE(r_actionInputBegins.empty());
 
   string actionInput;
   for (auto &actionTemplate : actionTemplates) {
     DPRE(actionTemplate.size() != 0, "action templates must have at least one component");
     actionInput.clear();
     actionInput.append(actionTemplate[0]);
-    initActionInputsImpl(words, actionTemplate.begin() + 1, actionTemplate.end(), actionInput);
+    initActionInputsImpl(words, actionTemplate.begin() + 1, actionTemplate.end(), r_actionInputs, r_actionInputBegins, actionInput);
   }
-  actionInputBegins.push_back(actionInputs.size());
-  actionInputs.shrink_to_fit();
-  actionInputBegins.shrink_to_fit();
+  r_actionInputBegins.push_back(r_actionInputs.size());
+  r_actionInputs.shrink_to_fit();
+  r_actionInputBegins.shrink_to_fit();
 }
 
-void Multiverse::initActionInputsImpl (const vector<string> &words, vector<string>::const_iterator actionTemplateI, vector<string>::const_iterator actionTemplateEnd, string &r_actionInput) {
+void Multiverse::initActionInputsImpl (const vector<string> &words, vector<string>::const_iterator actionTemplateI, vector<string>::const_iterator actionTemplateEnd, string &r_actionInputs, vector<size_t> &r_actionInputBegins, string &r_actionInput) {
   if (actionTemplateI == actionTemplateEnd) {
-    if (actionInputBegins.size() - 1 == numeric_limits<ActionId>::max()) {
+    if (r_actionInputBegins.size() - 1 == numeric_limits<ActionId>::max()) {
       throw GeneralException("the limit for the number of actions has been reached");
     }
     DW(, "adding action **", r_actionInput.c_str(), "**");
-    actionInputBegins.push_back(actionInputs.size());
-    actionInputs.append(r_actionInput);
+    r_actionInputBegins.push_back(r_actionInputs.size());
+    r_actionInputs.append(r_actionInput);
     return;
   }
 
@@ -215,7 +216,7 @@ void Multiverse::initActionInputsImpl (const vector<string> &words, vector<strin
   for (const string &word : words) {
     r_actionInput.append(word);
     r_actionInput.append(nw);
-    initActionInputsImpl(words, actionTemplateI, actionTemplateEnd, r_actionInput);
+    initActionInputsImpl(words, actionTemplateI, actionTemplateEnd, r_actionInputs, r_actionInputBegins, r_actionInput);
     r_actionInput.resize(actionInputPreSize);
   }
 }
@@ -243,30 +244,33 @@ tuple<string::const_iterator, string::const_iterator> Multiverse::getActionInput
   return tuple<string::const_iterator, string::const_iterator>(begin + ptrdiff(actionInputBegins[id]), begin + ptrdiff(actionInputBegins[static_cast<size_t>(id) + 1]));
 }
 
-void Multiverse::doAction(Vm &vm, string::const_iterator inputBegin, string::const_iterator inputEnd, const char *deathExceptionMsg) {
+void Multiverse::doAction(Vm &vm, string::const_iterator inputBegin, string::const_iterator inputEnd, string &r_output, const char *deathExceptionMsg) {
   DPRE(vm.isAlive());
 
-  vm.doAction(inputBegin, inputEnd);
+  r_output.clear();
+  vm.doAction(inputBegin, inputEnd, r_output);
   if (!vm.isAlive()) {
     throw GeneralException(deathExceptionMsg);
   }
 }
 
-void Multiverse::doAction(Vm &vm, const string &input, const char *deathExceptionMsg) {
-  doAction(vm, input.begin(), input.end(), deathExceptionMsg);
+void Multiverse::doAction(Vm &vm, const string &input, string &r_output, const char *deathExceptionMsg) {
+  doAction(vm, input.begin(), input.end(), r_output, deathExceptionMsg);
 }
 
-void Multiverse::doSaveAction (Vm &vm, State *state) {
+void Multiverse::doSaveAction (Vm &vm, State *state) { // XXXX referenceise these?
+  string o;
   vm.setSaveState(state);
-  doAction(vm, saveActionInput, "VM died while saving a state");
+  doAction(vm, saveActionInput, o, "VM died while saving a state");
   if (vm.getSaveCount() == 0) {
     throw GeneralException("save action didn't cause saving");
   }
 }
 
 void Multiverse::doRestoreAction (Vm &vm, const State *state) {
+  string o;
   vm.setRestoreState(state);
-  doAction(vm, restoreActionInput, "VM died while restoring a state");
+  doAction(vm, restoreActionInput, o, "VM died while restoring a state");
   if (vm.getRestoreCount() == 0) {
     throw GeneralException("restore action didn't cause restoration");
   }

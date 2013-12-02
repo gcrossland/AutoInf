@@ -6,13 +6,10 @@ namespace autoinf {
 ----------------------------------------------------------------------------- */
 
 
+// XXXX move this lot to somewhere more core!!
 
 template<typename _F> class Finally {
   prv _F functor;
-
-  // XXXX needed?
-  pub Finally (const _F &functor) : functor(functor) {
-  }
 
   pub Finally (_F &&functor) : functor(move(functor)) {
   }
@@ -27,26 +24,16 @@ template<typename _F> class Finally {
 };
 
 template<typename _F> Finally<_F> finally (_F &&functor) {
-  DS();
-  DW(, "sizeof the functor is ", sizeof(functor));
   return Finally<_F>(move(functor));
 }
 
-template<typename _F> Finally<_F> finally (const _F &functor) {
-  DS();
-  DW(, "sizeof the functor is ", sizeof(functor));
-  return Finally<_F>(functor);
-}
 
 
-
-
-template<typename _I> void Multiverse::processNodes (_I nodePathsBegin, _I nodePathsEnd, Vm &vm) {
+template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd, Vm &vm) {
   typedef tuple<Node *, ActionId, string, Signature, State> result;
   DS();
 
   deque<result> resultQueue;
-  bool resultQueueDone = false;
   mutex resultQueueLock;
   condition_variable resultQueueCondVar;
 
@@ -61,15 +48,12 @@ template<typename _I> void Multiverse::processNodes (_I nodePathsBegin, _I nodeP
       DW(, "done adding done result to queue");
     });
 
+    string output;
     State postState;
-    for (; nodePathsBegin != nodePathsEnd; ++nodePathsBegin) {
+    for (; nodesBegin != nodesEnd; ++nodesBegin) {
       DW(, "looking at the next node:");
       DS();
-      const NodePath &nodePath = *nodePathsBegin;
-      Node *parentNode = nodePath.resolve(rootNode);
-      if (!parentNode) {
-        throw new GeneralException("invalid node path specified");
-      }
+      Node *parentNode = *nodesBegin;
       DW(, "node has sig of hash ", parentNode->getSignature().hash(), " and ", parentNode->getChildCount(), " children");
       const State *parentState = parentNode->getState();
       if (!parentState) {
@@ -84,26 +68,30 @@ template<typename _I> void Multiverse::processNodes (_I nodePathsBegin, _I nodeP
         DW(, "processing action **",string(actionInputBegin, actionInputEnd).c_str(),"** (id ",id,")");
 
         doRestoreAction(vm, parentState);
-        doAction(vm, actionInputBegin, actionInputEnd, "VM was dead after doing action");
+        doAction(vm, actionInputBegin, actionInputEnd, output, "VM was dead after doing action");
         Signature signature = createSignature(vm);
         if (signature == parentNode->getSignature()) {
           DW(, "the resultant VM state is the same as the parent's, so skipping");
           continue;
         }
-        string output(vm.getOutput()); // XXXX also make vm output an externally-provided buffer? probably... and make save state + restore state + output buffer passed at doAction? probably best, too...
-        DW(, "output from the action is **",output.c_str(),"**");
+        DW(, "output from the action is **", output.c_str(), "**");
         doSaveAction(vm, &postState);
         {
           DW(, "adding the result to queue");
           unique_lock<mutex> l(resultQueueLock);
-          resultQueue.emplace_back(parentNode, id, move(output), move(signature), postState);
+          resultQueue.emplace_back(parentNode, id, output, move(signature), postState); // XXXX will copy signature!!
           resultQueueCondVar.notify_one();
           DW(, "done adding the result to queue");
         }
+        // system("sleep 1"); // XXXX
       }
     }
   });
-  thread dispatcherThread(dispatcher);
+  auto dispatcherFuture = dispatcher.get_future();
+  thread dispatcherThread(move(dispatcher));
+  auto dispatcherThreadEnder = finally([&dispatcherThread] () {
+    dispatcherThread.join();
+  });
 
   Node *prevParentNode = nullptr;
   while (true) {
@@ -148,9 +136,11 @@ template<typename _I> void Multiverse::processNodes (_I nodePathsBegin, _I nodeP
     }
     parentNode->addChild(parentActionId, move(resultOutput), resultNode);
   }
+  if (prevParentNode) {
+    prevParentNode->allChildrenAdded();
+  }
 
-  dispatcher.get_future().get();
-  dispatcherThread.join();
+  dispatcherFuture.get();
 }
 
 /* -----------------------------------------------------------------------------

@@ -147,9 +147,9 @@ class Multiverse {
   prv Node *rootNode;
   prv std::unordered_map<std::reference_wrapper<const Signature>, Node *, Hasher<Signature>> nodesBySignature; // XXXX make Node * unique_ptr?
 
-  pub Multiverse (autofrotz::Vm &vm, const std::string &initialInput, const std::string &saveActionInput, const std::string &restoreActionInput, const std::vector<std::string> &words, const std::vector<std::vector<std::string>> &actionTemplates);
-  prv void initActionInputs (const std::vector<std::string> &words, const std::vector<std::vector<std::string>> &actionTemplates);
-  prv void initActionInputsImpl (const std::vector<std::string> &words, std::vector<std::string>::const_iterator actionTemplateI, std::vector<std::string>::const_iterator actionTemplateEnd, std::string &r_actionInput);
+  pub Multiverse (autofrotz::Vm &vm, const std::string &initialInput, std::string &r_initialOutput, const std::string &saveActionInput, const std::string &restoreActionInput, const std::vector<std::string> &words, const std::vector<std::vector<std::string>> &actionTemplates);
+  prv static void initActionInputs (const std::vector<std::string> &words, const std::vector<std::vector<std::string>> &actionTemplates, std::string &r_actionInputs, std::vector<size_t> &r_actionInputBegins);
+  prv static void initActionInputsImpl (const std::vector<std::string> &words, std::vector<std::string>::const_iterator actionTemplateI, std::vector<std::string>::const_iterator actionTemplateEnd, std::string &r_actionInputs, std::vector<size_t> &r_actionInputBegins, std::string &r_actionInput);
   Multiverse (const Multiverse &) = delete;
   Multiverse &operator= (const Multiverse &) = delete;
   Multiverse (Multiverse &&) = delete;
@@ -157,13 +157,13 @@ class Multiverse {
   pub ~Multiverse () noexcept;
 
   pub std::tuple<std::string::const_iterator, std::string::const_iterator> getActionInput (ActionId id) const;
-  prv static void doAction (autofrotz::Vm &vm, std::string::const_iterator inputBegin, std::string::const_iterator inputEnd, const char *deathExceptionMsg);
-  prv static void doAction (autofrotz::Vm &vm, const std::string &input, const char *deathExceptionMsg);
+  prv static void doAction (autofrotz::Vm &vm, std::string::const_iterator inputBegin, std::string::const_iterator inputEnd, std::string &r_output, const char *deathExceptionMsg);
+  prv static void doAction (autofrotz::Vm &vm, const std::string &input, std::string &r_output, const char *deathExceptionMsg);
   prv void doSaveAction (autofrotz::Vm &vm, autofrotz::State *state);
   prv void doRestoreAction (autofrotz::Vm &vm, const autofrotz::State *state);
   prv static Signature createSignature (autofrotz::Vm &vm);
   pub Node *getNode (const NodePath &nodePath) const;
-  pub template<typename _I> void processNodes (_I nodePathsBegin, _I nodePathsEnd, autofrotz::Vm &vm);
+  pub template<typename _I> void processNodes (_I nodesBegin, _I nodesEnd, autofrotz::Vm &vm);
   // XXXX pub template<typename _I> void compactNodes (_I nodesBegin, _I nodesEnd);
   // have the parent 'model' class have a) the vm b) the multiverse c) the set of memsets
 };
