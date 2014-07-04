@@ -37,6 +37,12 @@ int main (int argc, char *argv[]) {
     Vm vm("104/104.z5", 70, 128, 1, true, output);
     Multiverse multiverse(
       vm, u8("verbose\nfullscore\n"), output, u8("save\n\1\n"), u8("restore\n\1\n"),
+      vector<vector<u8string>> {
+        // {u8("z\n"), u8("z. z. z. z. z. z. z. z.\n")},
+        // {u8("verbitudeise the tangerine monstrosity. verbitudeise the tangerine monstrosity.\n"), u8("")},
+        // {u8("turn wheel. pull wheel.\n"), u8("turn wheel. pull wheel. east. west.\n"), u8("turn wheel. pull wheel. west. east.\n")},
+        // {u8("\n"), u8("east\n"), u8("west\n"), u8("take red sphere\n"), u8("take blue sphere\n"), u8("drop red sphere\n"), u8("drop blue sphere\n"), u8("open red sphere\n"), u8("open blue sphere\n"), u8("enter light\n")}
+      },
       vector<u8string> {
         u8("red sphere"), u8("blue sphere")
       },
@@ -48,15 +54,14 @@ int main (int argc, char *argv[]) {
         {u8("open "), u8("\n")},
         {u8("turn wheel. pull wheel\n")},
         {u8("enter light\n")}
-
-        // verbitudeise the tangerine monstrosity. verbitudeise the tangerine monstrosity. ...
-        // z. z. z. z. z. z. z. z.
       }
     );
     /*
     Vm vm("103/103.z5", 70, 128, 1, true, output);
     Multiverse multiverse(
       vm, u8(""), output, u8("s\n\1\n"), u8("r\n\1\n"),
+      vector<vector<u8string>> {
+      },
       vector<u8string> {
         u8("0"), u8("1"), u8("2"), u8("3"), u8("5"), u8("6"), u8("B"), u8("D")
       },

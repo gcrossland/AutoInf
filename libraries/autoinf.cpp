@@ -374,7 +374,7 @@ Multiverse::Node *Multiverse::NodePath::resolve (Node *node) const {
 
 Multiverse::Multiverse (
   Vm &vm, const u8string &initialInput, u8string &r_initialOutput, const u8string &saveActionInput, const u8string &restoreActionInput,
-  const vector<u8string> &words, const vector<vector<u8string>> &actionTemplates
+  const vector<vector<u8string>> &equivalentActionInputsSet, const vector<u8string> &words, const vector<vector<u8string>> &actionTemplates
 ) : saveActionInput(saveActionInput), restoreActionInput(restoreActionInput), ignoredBytes(initIgnoredBytes(vm)), ignoredByteRanges(ignoredBytes, vm.getDynamicMemorySize()), rootNode(nullptr) {
   DS();
   DPRE(vm.isAlive());
@@ -387,6 +387,30 @@ Multiverse::Multiverse (
   State state;
   doSaveAction(vm, &state);
   DW(, "root node save state has size ",state.getSize());
+
+  Bitset extraIgnoredBytes;
+  for (const auto &equivalentActionInputs : equivalentActionInputsSet) {
+    DS();
+    DW(, "running some equivalent actions to enrich the ignored byte set");
+    DPRE(equivalentActionInputs.size() > 1, "equivalent actions must give multiple actions");
+    Signature signatures[equivalentActionInputs.size()];
+    Signature::Iterator signatureIs[equivalentActionInputs.size()];
+    u8string tmp;
+    for (size_t i = 0, end = equivalentActionInputs.size(); i != end; ++i) {
+      const u8string &actionInput = equivalentActionInputs[i];
+      DW(, " doing **",actionInput.c_str(),"**");
+      doRestoreAction(vm, &state);
+      doAction(vm, actionInput, tmp, u8("VM was dead after doing action"));
+      DW(, " output was **",tmp.c_str(),"**");
+      tmp.clear();
+      signatures[i] = createSignature(vm, ignoredByteRanges);
+      signatureIs[i] = signatures[i].begin();
+    }
+    extraIgnoredBytes |= createExtraIgnoredBytes(signatures[0], signatureIs + 1, signatureIs + equivalentActionInputs.size(), vm);
+  }
+  ignoredBytes |= move(extraIgnoredBytes);
+  ignoredByteRanges = Bitranges(ignoredBytes, vm.getDynamicMemorySize());
+  signature = recreateSignature(signature, ignoredByteRanges);
 
   unique_ptr<Node> node(new Node(move(signature), move(state)));
   rootNode = node.get();

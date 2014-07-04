@@ -156,34 +156,15 @@ template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd,
   dispatcherFuture.get();
 }
 
-template<typename _I> void Multiverse::collapseNodes (_I nodesBegin, _I nodesEnd, const Vm &vm) {
-  DS();
-  DPRE(nodesBegin != nodesEnd);
-  DW(, "Collapsing nodes:");
-
-  // Build the set of extra ignored bytes (those which aren't the same across all
-  // of the given nodes).
-
-  Node *primeNode = *(nodesBegin++);
-  DW(, "prime node has sig of hash", primeNode->getSignature().hash());
-  const Signature &primeSignature = primeNode->getSignature();
-  vector<Signature::Iterator> otherSignatureIs;
-
-  vector<Signature::Iterator> es;
-  for (; nodesBegin != nodesEnd; ++nodesBegin) {
-    Node *node = *nodesBegin;
-    DW(, "other node has sig of hash", node->getSignature().hash());
-    otherSignatureIs.emplace_back(node->getSignature().begin());
-    es.emplace_back(node->getSignature().end());
-  }
-
+template<typename _I> Bitset Multiverse::createExtraIgnoredBytes (const Signature &firstSignature, _I otherSignatureIsBegin, _I otherSignatureIsEnd, const Vm &vm) {
   Bitset extraIgnoredBytes;
 
   iu16 addr = 0;
   const Bitset &vmWordSet = *vm.getWordSet();
-  for (auto byte : primeSignature) {
+  for (auto byte : firstSignature) {
     bool same = true;
-    for (auto &i : otherSignatureIs) {
+    for (auto otherSignatureIsI = otherSignatureIsBegin; otherSignatureIsI != otherSignatureIsEnd; ++otherSignatureIsI) {
+      Signature::Iterator &i = *otherSignatureIsI;
       if (*(i++) != byte) {
         same = false;
       }
@@ -202,10 +183,32 @@ template<typename _I> void Multiverse::collapseNodes (_I nodesBegin, _I nodesEnd
         extraIgnoredBytes.setBit(addr - 1);
       }
     }
+
     ++addr;
   }
-  DA(otherSignatureIs == es);
   DA(addr == vm.getDynamicMemorySize());
+
+  return extraIgnoredBytes;
+}
+
+template<typename _I> void Multiverse::collapseNodes (_I nodesBegin, _I nodesEnd, const Vm &vm) {
+  DS();
+  DPRE(nodesBegin != nodesEnd);
+  DW(, "Collapsing nodes:");
+
+  // Build the set of extra ignored bytes (those which aren't the same across all
+  // of the given nodes).
+
+  Node *firstNode = *(nodesBegin++);
+  DW(, "first node has sig of hash", firstNode->getSignature().hash());
+  const Signature &firstSignature = firstNode->getSignature();
+  vector<Signature::Iterator> otherSignatureIs;
+  for (; nodesBegin != nodesEnd; ++nodesBegin) {
+    Node *node = *nodesBegin;
+    DW(, "other node has sig of hash", node->getSignature().hash());
+    otherSignatureIs.emplace_back(node->getSignature().begin());
+  }
+  Bitset extraIgnoredBytes = createExtraIgnoredBytes(firstSignature, otherSignatureIs.begin(), otherSignatureIs.end(), vm);
 
   // Walk through the node tree, processing each node once (unless all its parents
   // are collapsed away, in which case it'll never be reached), and rebuild the

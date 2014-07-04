@@ -167,7 +167,7 @@ class Multiverse {
   prv Node *rootNode;
   prv std::unordered_map<std::reference_wrapper<const Signature>, Node *, Hasher<Signature>> nodes; // XXXX make Node * unique_ptr?
 
-  pub Multiverse (autofrotz::Vm &vm, const core::u8string &initialInput, core::u8string &r_initialOutput, const core::u8string &saveActionInput, const core::u8string &restoreActionInput, const std::vector<core::u8string> &words, const std::vector<std::vector<core::u8string>> &actionTemplates);
+  pub Multiverse (autofrotz::Vm &vm, const core::u8string &initialInput, core::u8string &r_initialOutput, const core::u8string &saveActionInput, const core::u8string &restoreActionInput, const std::vector<std::vector<core::u8string>> &equivalentActionInputsSet, const std::vector<core::u8string> &words, const std::vector<std::vector<core::u8string>> &actionTemplates);
   prv static bitset::Bitset initIgnoredBytes (autofrotz::Vm &vm);
   prv static void initActionInputs (const std::vector<core::u8string> &words, const std::vector<std::vector<core::u8string>> &actionTemplates, core::u8string &r_actionInputs, std::vector<size_t> &r_actionInputBegins);
   prv static void initActionInputsImpl (const std::vector<core::u8string> &words, std::vector<core::u8string>::const_iterator actionTemplateI, std::vector<core::u8string>::const_iterator actionTemplateEnd, core::u8string &r_actionInputs, std::vector<size_t> &r_actionInputBegins, core::u8string &r_actionInput);
@@ -186,6 +186,7 @@ class Multiverse {
   prv static Signature recreateSignature (const Signature &oldSignature, const Bitranges &extraIgnoredByteRanges);
   pub Node *getNode (const NodePath &nodePath) const;
   pub template<typename _I> void processNodes (_I nodesBegin, _I nodesEnd, autofrotz::Vm &vm);
+  pub template<typename _I> bitset::Bitset createExtraIgnoredBytes (const Signature &firstSignature, _I otherSignatureIsBegin, _I otherSignatureIsEnd, const autofrotz::Vm &vm);
   pub template<typename _I> void collapseNodes (_I nodesBegin, _I nodesEnd, const autofrotz::Vm &vm);
   prv static Node *collapseNode (
     Node *node, const Bitranges &extraIgnoredByteRanges,
