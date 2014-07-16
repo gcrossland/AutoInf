@@ -27,10 +27,15 @@ template<typename _F> Finally<_F> finally (_F &&functor) {
   return Finally<_F>(move(functor));
 }
 
+template<typename Key, typename T, typename Hash, typename KeyEqual, typename Allocator, typename Key_> const T *find (const unordered_map<Key, T, Hash, KeyEqual, Allocator> &map, const Key_ &key) {
+  auto e = map.find(key);
+  return e == map.end() ? nullptr : &get<1>(*e);
+}
+
 
 
 template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd, Vm &vm) {
-  typedef tuple<Node *, ActionId, string, Signature, State> result;
+  typedef tuple<Node *, ActionId, u8string, Signature, State> result;
   DS();
 
   deque<result> resultQueue;
@@ -43,39 +48,45 @@ template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd,
       DS();
       DW(, "adding done result to queue");
       unique_lock<mutex> l(resultQueueLock);
-      resultQueue.emplace_back(nullptr, 0, string{}, Signature{}, State{});
+      resultQueue.emplace_back(nullptr, 0, u8string(), Signature(), State());
       resultQueueCondVar.notify_one();
       DW(, "done adding done result to queue");
     });
 
-    string output;
+    u8string output;
     State postState;
     for (; nodesBegin != nodesEnd; ++nodesBegin) {
       DW(, "looking at the next node:");
       DS();
       Node *parentNode = *nodesBegin;
-      DW(, "node has sig of hash ", parentNode->getSignature().hash(), " and ", parentNode->getChildCount(), " children");
+      DW(, "node has sig of hash ", parentNode->getSignature().hash(), " and ", parentNode->getChildrenSize(), " children");
       const State *parentState = parentNode->getState();
       if (!parentState) {
+        DW(, "  node has already been processed, so skipping");
         continue;
       }
-      DA(parentNode->getChildCount() == 0);
+      DA(parentNode->getChildrenSize() == 0);
 
       size_t actionCount = actionInputBegins.size() - 1;
       for (ActionId id = 0; id != actionCount; ++id) {
         auto actionInputBegin = actionInputs.cbegin() + actionInputBegins[id];
         auto actionInputEnd = actionInputs.cbegin() + actionInputBegins[id + 1];
-        DW(, "processing action **",string(actionInputBegin, actionInputEnd).c_str(),"** (id ",id,")");
+        DW(, "processing action **",u8string(actionInputBegin, actionInputEnd).c_str(),"** (id ",id,")");
 
         doRestoreAction(vm, parentState);
-        doAction(vm, actionInputBegin, actionInputEnd, output, "VM was dead after doing action");
-        Signature signature = createSignature(vm);
+        doAction(vm, actionInputBegin, actionInputEnd, output, u8("VM was dead after doing action"));
+        Signature signature = createSignature(vm, ignoredByteRanges);
         if (signature == parentNode->getSignature()) {
           DW(, "the resultant VM state is the same as the parent's, so skipping");
           continue;
         }
         DW(, "output from the action is **", output.c_str(), "**");
-        doSaveAction(vm, &postState);
+        try {
+          // XXXX better response from doSaveAction on 'can't save'?
+          doSaveAction(vm, &postState);
+        } catch (...) {
+          postState.clear();
+        }
         {
           DW(, "adding the result to queue");
           unique_lock<mutex> l(resultQueueLock);
@@ -111,36 +122,119 @@ template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd,
     }
     DW(, "M the result is a child for the node with sig of hash ", parentNode->getSignature().hash());
     if (prevParentNode && parentNode != prevParentNode) {
-      prevParentNode->allChildrenAdded();
+      prevParentNode->batchOfChildChangesCompleted();
+      prevParentNode->clearState();
     }
     prevParentNode = parentNode;
     ActionId parentActionId = get<1>(rs);
-    string &resultOutput = get<2>(rs);
+    u8string &resultOutput = get<2>(rs);
     Signature &resultSignature = get<3>(rs);
     State &resultState = get<4>(rs);
     DW(, "M the child is for the action of id ",parentActionId,"; the sig is of hash ", resultSignature.hash());
     DA(!(resultSignature == parentNode->getSignature()));
 
     Node *resultNode;
-    auto e = nodesBySignature.find(resultSignature);
-    if (e == nodesBySignature.end()) {
+    auto v = find(nodes, resultSignature);
+    if (!v) {
       DW(, "M this is a new node for this multiverse!");
-      unique_ptr<Node> n(new Node(42 /* XXXX */, move(resultSignature), move(resultState)));
+      unique_ptr<Node> n(new Node(move(resultSignature), move(resultState)));
       resultNode = n.get();
-      nodesBySignature.emplace(ref(resultNode->getSignature()), resultNode);
+      nodes.emplace(ref(resultNode->getSignature()), resultNode);
       n.release();
     } else {
       DW(, "M there already exists a node of this signature");
-      resultNode = get<1>(*e);
+      resultNode = *v;
       DA(resultSignature == resultNode->getSignature());
     }
     parentNode->addChild(parentActionId, move(resultOutput), resultNode);
   }
   if (prevParentNode) {
-    prevParentNode->allChildrenAdded();
+    prevParentNode->batchOfChildChangesCompleted();
+    prevParentNode->clearState();
   }
 
   dispatcherFuture.get();
+}
+
+template<typename _I> void Multiverse::collapseNodes (_I nodesBegin, _I nodesEnd, const Vm &vm) {
+  DS();
+  DPRE(nodesBegin != nodesEnd);
+  DW(, "Collapsing nodes:");
+
+  // Build the set of extra ignored bytes (those which aren't the same across all
+  // of the given nodes).
+
+  Node *primeNode = *(nodesBegin++);
+  DW(, "prime node has sig of hash", primeNode->getSignature().hash());
+  const Signature &primeSignature = primeNode->getSignature();
+  vector<Signature::Iterator> otherSignatureIs;
+
+  vector<Signature::Iterator> es;
+  for (; nodesBegin != nodesEnd; ++nodesBegin) {
+    Node *node = *nodesBegin;
+    DW(, "other node has sig of hash", node->getSignature().hash());
+    otherSignatureIs.emplace_back(node->getSignature().begin());
+    es.emplace_back(node->getSignature().end());
+  }
+
+  Bitset extraIgnoredBytes;
+
+  iu16 addr = 0;
+  const Bitset &vmWordSet = *vm.getWordSet();
+  for (auto byte : primeSignature) {
+    bool same = true;
+    for (auto &i : otherSignatureIs) {
+      if (*(i++) != byte) {
+        same = false;
+      }
+    }
+
+    if (!same) {
+      DW(, "the signatures don't all match at dynmem addr ", addr);
+      extraIgnoredBytes.setBit(addr);
+
+      if (vmWordSet.getCapacitatedBit(addr)) {
+        DW(, "  (it's the first byte of a zword)");
+        extraIgnoredBytes.setBit(addr + 1);
+      }
+      if (addr > 0 && vmWordSet.getCapacitatedBit(addr - 1)) {
+        DW(, "  (it's the second byte of a zword)");
+        extraIgnoredBytes.setBit(addr - 1);
+      }
+    }
+    ++addr;
+  }
+  DA(otherSignatureIs == es);
+  DA(addr == vm.getDynamicMemorySize());
+
+  // Walk through the node tree, processing each node once (unless all its parents
+  // are collapsed away, in which case it'll never be reached), and rebuild the
+  // node map with only those nodes which have survived (and with their new
+  // signatures).
+
+  Bitranges extraIgnoredByteRanges(extraIgnoredBytes, vm.getDynamicMemorySize());
+  decltype(nodes) survivingNodes(nodes.bucket_count());
+  unordered_map<Node *, Node *> nodeCollapseTargets(nodes.bucket_count());
+  unordered_map<Node *, Signature> survivingNodePrevSignatures(nodes.bucket_count());
+  // XXXX should have an obj per surviving node to hold this + the child undo data i.e. 'surviving node undo object'
+
+  Node *t = collapseNode(rootNode, extraIgnoredByteRanges, survivingNodes, nodeCollapseTargets, survivingNodePrevSignatures);
+  DW(, "after collapsing all ",nodes.size()," nodes, there are ",survivingNodes.size()," surviving nodes");
+
+  ignoredBytes |= move(extraIgnoredBytes);
+  ignoredByteRanges = Bitranges(ignoredBytes, vm.getDynamicMemorySize());
+  DA(t == rootNode);
+  size_t dc = 0;
+  for (const auto &i : nodes) {
+    Node *node = get<1>(i);
+    auto s = find(survivingNodePrevSignatures, node);
+    if (!s) {
+      delete node;
+      ++dc;
+    }
+  }
+  DW(, dc, " old nodes were deleted");
+  nodes = move(survivingNodes);
 }
 
 /* -----------------------------------------------------------------------------

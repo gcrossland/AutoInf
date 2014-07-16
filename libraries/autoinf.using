@@ -4,6 +4,8 @@
 #include <algorithm>
 #include <deque>
 #include <future>
+#include <utility>
+#include <sstream>
 
 #endif
 
@@ -11,14 +13,15 @@ namespace autoinf {
 
 using core::numeric_limits;
 using core::setIeu;
+using core::getValidIeu;
 using autofrotz::State;
 using std::vector;
 using std::tuple;
-using std::string;
+using core::u8string;
 using std::get;
 using std::lower_bound;
 using autofrotz::Vm;
-using core::GeneralException;
+using core::PlainException;
 using std::unique_ptr;
 using std::move;
 using std::ref;
@@ -31,5 +34,11 @@ using std::condition_variable;
 using std::thread;
 using std::unique_lock;
 using std::packaged_task;
+using core::string;
+using std::min;
+using std::max;
+using std::unordered_map;
+using std::reference_wrapper;
+using bitset::Bitset;
 
 }
