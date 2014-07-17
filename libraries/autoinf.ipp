@@ -174,11 +174,11 @@ template<typename _I> Bitset Multiverse::createExtraIgnoredBytes (const Signatur
       DW(, "the signatures don't all match at dynmem addr ", addr);
       extraIgnoredBytes.setBit(addr);
 
-      if (vmWordSet.getCapacitatedBit(addr)) {
+      if (vmWordSet.getExistingBit(addr)) {
         DW(, "  (it's the first byte of a zword)");
         extraIgnoredBytes.setBit(addr + 1);
       }
-      if (addr > 0 && vmWordSet.getCapacitatedBit(addr - 1)) {
+      if (addr > 0 && vmWordSet.getExistingBit(addr - 1)) {
         DW(, "  (it's the second byte of a zword)");
         extraIgnoredBytes.setBit(addr - 1);
       }
