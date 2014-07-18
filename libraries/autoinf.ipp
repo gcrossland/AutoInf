@@ -73,7 +73,7 @@ template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd,
         auto actionInputEnd = actionInputs.cbegin() + actionInputBegins[id + 1];
         DW(, "processing action **",u8string(actionInputBegin, actionInputEnd).c_str(),"** (id ",id,")");
 
-        doRestoreAction(vm, parentState);
+        doRestoreAction(vm, *parentState);
         doAction(vm, actionInputBegin, actionInputEnd, output, u8("VM was dead after doing action"));
         Signature signature = createSignature(vm, ignoredByteRanges);
         if (signature == parentNode->getSignature()) {
@@ -83,7 +83,7 @@ template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd,
         DW(, "output from the action is **", output.c_str(), "**");
         try {
           // XXXX better response from doSaveAction on 'can't save'?
-          doSaveAction(vm, &postState);
+          doSaveAction(vm, postState);
         } catch (...) {
           postState.clear();
         }

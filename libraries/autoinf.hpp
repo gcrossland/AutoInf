@@ -180,8 +180,8 @@ class Multiverse {
   pub std::tuple<core::u8string::const_iterator, core::u8string::const_iterator> getActionInput (ActionId id) const;
   prv static void doAction (autofrotz::Vm &vm, core::u8string::const_iterator inputBegin, core::u8string::const_iterator inputEnd, core::u8string &r_output, const char8_t *deathExceptionMsg);
   prv static void doAction (autofrotz::Vm &vm, const core::u8string &input, core::u8string &r_output, const char8_t *deathExceptionMsg);
-  prv void doSaveAction (autofrotz::Vm &vm, autofrotz::State *state);
-  prv void doRestoreAction (autofrotz::Vm &vm, const autofrotz::State *state);
+  prv void doSaveAction (autofrotz::Vm &vm, autofrotz::State &r_state);
+  prv void doRestoreAction (autofrotz::Vm &vm, const autofrotz::State &state);
   prv static Signature createSignature (const autofrotz::Vm &vm, const Bitranges &ignoredByteRanges);
   prv static Signature recreateSignature (const Signature &oldSignature, const Bitranges &extraIgnoredByteRanges);
   pub Node *getNode (const NodePath &nodePath) const;

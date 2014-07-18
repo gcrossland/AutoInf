@@ -385,7 +385,7 @@ Multiverse::Multiverse (
   doAction(vm, initialInput, r_initialOutput, u8("VM died while running the initial input"));
   Signature signature = createSignature(vm, ignoredByteRanges);
   State state;
-  doSaveAction(vm, &state);
+  doSaveAction(vm, state);
   DW(, "root node save state has size ",state.getSize());
 
   Bitset extraIgnoredBytes;
@@ -399,7 +399,7 @@ Multiverse::Multiverse (
     for (size_t i = 0, end = equivalentActionInputs.size(); i != end; ++i) {
       const u8string &actionInput = equivalentActionInputs[i];
       DW(, " doing **",actionInput.c_str(),"**");
-      doRestoreAction(vm, &state);
+      doRestoreAction(vm, state);
       doAction(vm, actionInput, tmp, u8("VM was dead after doing action"));
       DW(, " output was **",tmp.c_str(),"**");
       tmp.clear();
@@ -510,19 +510,29 @@ void Multiverse::doAction(Vm &vm, const u8string &input, u8string &r_output, con
   doAction(vm, input.begin(), input.end(), r_output, deathExceptionMsg);
 }
 
-void Multiverse::doSaveAction (Vm &vm, State *state) { // XXXX referenceise these?
+void Multiverse::doSaveAction (Vm &vm, State &r_state) {
+  vm.setSaveState(&r_state);
+  auto _ = finally([&] () {
+    vm.setSaveState(nullptr);
+  });
+
   u8string o;
-  vm.setSaveState(state);
   doAction(vm, saveActionInput, o, u8("VM died while saving a state"));
+
   if (vm.getSaveCount() == 0) {
     throw PlainException(u8("save action didn't cause saving"));
   }
 }
 
-void Multiverse::doRestoreAction (Vm &vm, const State *state) {
+void Multiverse::doRestoreAction (Vm &vm, const State &state) {
+  vm.setRestoreState(&state);
+  auto _ = finally([&] () {
+    vm.setRestoreState(nullptr);
+  });
+
   u8string o;
-  vm.setRestoreState(state);
   doAction(vm, restoreActionInput, o, u8("VM died while restoring a state"));
+
   if (vm.getRestoreCount() == 0) {
     throw PlainException(u8("restore action didn't cause restoration"));
   }
