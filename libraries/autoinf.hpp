@@ -105,18 +105,17 @@ class Signature {
 class Multiverse {
   pub typedef iu16f ActionId;
 
-  prv struct BitrangesPart {
+  prv struct RangesetPart {
     iu16f setSize;
     iu16f clearSize;
   };
 
-  // XXXX gaah! naming classes with plurals!!!
-  prv class Bitranges : public std::vector<BitrangesPart> {
-    pub Bitranges (const bitset::Bitset &bitset, iu16 size);
-    Bitranges (const Bitranges &) = default;
-    Bitranges &operator= (const Bitranges &) = default;
-    Bitranges (Bitranges &&) = default;
-    Bitranges &operator= (Bitranges &&) = default;
+  prv class Rangeset : public std::vector<RangesetPart> {
+    pub Rangeset (const bitset::Bitset &bitset, iu16 size);
+    Rangeset (const Rangeset &) = default;
+    Rangeset &operator= (const Rangeset &) = default;
+    Rangeset (Rangeset &&) = default;
+    Rangeset &operator= (Rangeset &&) = default;
   };
 
   pub class Node {
@@ -163,7 +162,7 @@ class Multiverse {
   prv core::u8string actionInputs;
   prv std::vector<size_t> actionInputBegins;
   prv bitset::Bitset ignoredBytes;
-  prv Bitranges ignoredByteRanges;
+  prv Rangeset ignoredByteRangeset;
   prv Node *rootNode;
   prv std::unordered_map<std::reference_wrapper<const Signature>, Node *, Hasher<Signature>> nodes; // XXXX make Node * unique_ptr?
 
@@ -182,14 +181,14 @@ class Multiverse {
   prv static void doAction (autofrotz::Vm &vm, const core::u8string &input, core::u8string &r_output, const char8_t *deathExceptionMsg);
   prv void doSaveAction (autofrotz::Vm &vm, autofrotz::State &r_state);
   prv void doRestoreAction (autofrotz::Vm &vm, const autofrotz::State &state);
-  prv static Signature createSignature (const autofrotz::Vm &vm, const Bitranges &ignoredByteRanges);
-  prv static Signature recreateSignature (const Signature &oldSignature, const Bitranges &extraIgnoredByteRanges);
+  prv static Signature createSignature (const autofrotz::Vm &vm, const Rangeset &ignoredByteRangeset);
+  prv static Signature recreateSignature (const Signature &oldSignature, const Rangeset &extraIgnoredByteRangeset);
   pub Node *getNode (const NodePath &nodePath) const;
   pub template<typename _I> void processNodes (_I nodesBegin, _I nodesEnd, autofrotz::Vm &vm);
   pub template<typename _I> bitset::Bitset createExtraIgnoredBytes (const Signature &firstSignature, _I otherSignatureIsBegin, _I otherSignatureIsEnd, const autofrotz::Vm &vm);
   pub template<typename _I> void collapseNodes (_I nodesBegin, _I nodesEnd, const autofrotz::Vm &vm);
   prv static Node *collapseNode (
-    Node *node, const Bitranges &extraIgnoredByteRanges,
+    Node *node, const Rangeset &extraIgnoredByteRangeset,
     std::unordered_map<std::reference_wrapper<const Signature>, Node *, Hasher<Signature>> &r_survivingNodes,
     std::unordered_map<Node *, Node *> &r_nodeCollapseTargets,
     std::unordered_map<Node *, Signature> &r_survivingNodePrevSignatures

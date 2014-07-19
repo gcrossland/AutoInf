@@ -75,7 +75,7 @@ template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd,
 
         doRestoreAction(vm, *parentState);
         doAction(vm, actionInputBegin, actionInputEnd, output, u8("VM was dead after doing action"));
-        Signature signature = createSignature(vm, ignoredByteRanges);
+        Signature signature = createSignature(vm, ignoredByteRangeset);
         if (signature == parentNode->getSignature()) {
           DW(, "the resultant VM state is the same as the parent's, so skipping");
           continue;
@@ -215,17 +215,17 @@ template<typename _I> void Multiverse::collapseNodes (_I nodesBegin, _I nodesEnd
   // node map with only those nodes which have survived (and with their new
   // signatures).
 
-  Bitranges extraIgnoredByteRanges(extraIgnoredBytes, vm.getDynamicMemorySize());
+  Rangeset extraIgnoredByteRangeset(extraIgnoredBytes, vm.getDynamicMemorySize());
   decltype(nodes) survivingNodes(nodes.bucket_count());
   unordered_map<Node *, Node *> nodeCollapseTargets(nodes.bucket_count());
   unordered_map<Node *, Signature> survivingNodePrevSignatures(nodes.bucket_count());
   // XXXX should have an obj per surviving node to hold this + the child undo data i.e. 'surviving node undo object'
 
-  Node *t = collapseNode(rootNode, extraIgnoredByteRanges, survivingNodes, nodeCollapseTargets, survivingNodePrevSignatures);
+  Node *t = collapseNode(rootNode, extraIgnoredByteRangeset, survivingNodes, nodeCollapseTargets, survivingNodePrevSignatures);
   DW(, "after collapsing all ",nodes.size()," nodes, there are ",survivingNodes.size()," surviving nodes");
 
   ignoredBytes |= move(extraIgnoredBytes);
-  ignoredByteRanges = Bitranges(ignoredBytes, vm.getDynamicMemorySize());
+  ignoredByteRangeset = Rangeset(ignoredBytes, vm.getDynamicMemorySize());
   DA(t == rootNode);
   size_t dc = 0;
   for (const auto &i : nodes) {

@@ -258,9 +258,9 @@ void Signature::Iterator::copy (Writer &r_writer, size_t r) {
   }
 }
 
-Multiverse::Bitranges::Bitranges (const Bitset &bitset, iu16 rangesEnd) : vector() {
+Multiverse::Rangeset::Rangeset (const Bitset &bitset, iu16 rangesEnd) : vector() {
   DS();
-  DW(, "creating Bitranges from a bitset:");
+  DW(, "creating Rangeset from a bitset:");
   DPRE(bitset.getNextSetBit(rangesEnd) == Bitset::NON_INDEX);
 
   for (size_t end = 0; end != rangesEnd;) {
@@ -270,13 +270,13 @@ Multiverse::Bitranges::Bitranges (const Bitset &bitset, iu16 rangesEnd) : vector
     if (end == Bitset::NON_INDEX) {
       end = rangesEnd;
     }
-    this->push_back(BitrangesPart{static_cast<iu16f>(begin - prevEnd), static_cast<iu16f>(end - begin)});
+    this->push_back(RangesetPart{static_cast<iu16f>(begin - prevEnd), static_cast<iu16f>(end - begin)});
     DA(end <= rangesEnd);
   }
-  DA(std::accumulate(this->begin(), this->end(), static_cast<size_t>(0), [] (size_t a, const BitrangesPart &o) -> size_t {
+  DA(std::accumulate(this->begin(), this->end(), static_cast<size_t>(0), [] (size_t a, const RangesetPart &o) -> size_t {
     return a + o.setSize + o.clearSize;
   }) == rangesEnd);
-  DW(, "a total of ", std::accumulate(this->begin(), this->end(), static_cast<size_t>(0), [] (size_t a, const BitrangesPart &o) -> size_t {
+  DW(, "a total of ", std::accumulate(this->begin(), this->end(), static_cast<size_t>(0), [] (size_t a, const RangesetPart &o) -> size_t {
     return a + o.setSize;
   }), " bits are set");
 }
@@ -375,7 +375,7 @@ Multiverse::Node *Multiverse::NodePath::resolve (Node *node) const {
 Multiverse::Multiverse (
   Vm &vm, const u8string &initialInput, u8string &r_initialOutput, const u8string &saveActionInput, const u8string &restoreActionInput,
   const vector<vector<u8string>> &equivalentActionInputsSet, const vector<u8string> &words, const vector<vector<u8string>> &actionTemplates
-) : saveActionInput(saveActionInput), restoreActionInput(restoreActionInput), ignoredBytes(initIgnoredBytes(vm)), ignoredByteRanges(ignoredBytes, vm.getDynamicMemorySize()), rootNode(nullptr) {
+) : saveActionInput(saveActionInput), restoreActionInput(restoreActionInput), ignoredBytes(initIgnoredBytes(vm)), ignoredByteRangeset(ignoredBytes, vm.getDynamicMemorySize()), rootNode(nullptr) {
   DS();
   DPRE(vm.isAlive());
 
@@ -383,7 +383,7 @@ Multiverse::Multiverse (
   DW(, "all actions are this: **", actionInputs.c_str(), "**");
 
   doAction(vm, initialInput, r_initialOutput, u8("VM died while running the initial input"));
-  Signature signature = createSignature(vm, ignoredByteRanges);
+  Signature signature = createSignature(vm, ignoredByteRangeset);
   State state;
   doSaveAction(vm, state);
   DW(, "root node save state has size ",state.getSize());
@@ -403,14 +403,14 @@ Multiverse::Multiverse (
       doAction(vm, actionInput, tmp, u8("VM was dead after doing action"));
       DW(, " output was **",tmp.c_str(),"**");
       tmp.clear();
-      signatures[i] = createSignature(vm, ignoredByteRanges);
+      signatures[i] = createSignature(vm, ignoredByteRangeset);
       signatureIs[i] = signatures[i].begin();
     }
     extraIgnoredBytes |= createExtraIgnoredBytes(signatures[0], signatureIs + 1, signatureIs + equivalentActionInputs.size(), vm);
   }
   ignoredBytes |= move(extraIgnoredBytes);
-  ignoredByteRanges = Bitranges(ignoredBytes, vm.getDynamicMemorySize());
-  signature = recreateSignature(signature, ignoredByteRanges);
+  ignoredByteRangeset = Rangeset(ignoredBytes, vm.getDynamicMemorySize());
+  signature = recreateSignature(signature, ignoredByteRangeset);
 
   unique_ptr<Node> node(new Node(move(signature), move(state)));
   rootNode = node.get();
@@ -538,7 +538,7 @@ void Multiverse::doRestoreAction (Vm &vm, const State &state) {
   }
 }
 
-Signature Multiverse::createSignature (const Vm &vm, const Bitranges &ignoredByteRanges) {
+Signature Multiverse::createSignature (const Vm &vm, const Rangeset &ignoredByteRangeset) {
   DS();
   DPRE(vm.isAlive());
 
@@ -548,7 +548,7 @@ Signature Multiverse::createSignature (const Vm &vm, const Bitranges &ignoredByt
   const zbyte *initialMem = vm.getInitialDynamicMemory();
   Signature::Writer writer(signature);
   size_t ec = 0, ms = 0;
-  for (const auto &part : ignoredByteRanges) {
+  for (const auto &part : ignoredByteRangeset) {
     //DW(, "part has ignored len ",part.setSize," followed by used size ",part.clearSize);
     writer.appendZeroBytes(part.setSize);
     mem += part.setSize;
@@ -570,14 +570,14 @@ Signature Multiverse::createSignature (const Vm &vm, const Bitranges &ignoredByt
   return signature;
 }
 
-Signature Multiverse::recreateSignature (const Signature &oldSignature, const Bitranges &extraIgnoredByteRanges) {
+Signature Multiverse::recreateSignature (const Signature &oldSignature, const Rangeset &extraIgnoredByteRangeset) {
   DS();
 
   Signature signature; // XXXX init size? what units?
 
   auto i = oldSignature.begin();
   Signature::Writer writer(signature);
-  for (const auto &part : extraIgnoredByteRanges) {
+  for (const auto &part : extraIgnoredByteRangeset) {
     writer.appendZeroBytes(part.setSize);
     i += part.setSize;
 
@@ -594,7 +594,7 @@ Multiverse::Node *Multiverse::getNode (const NodePath &nodePath) const {
 }
 
 Multiverse::Node *Multiverse::collapseNode (
-  Node *node, const Bitranges &extraIgnoredByteRanges,
+  Node *node, const Rangeset &extraIgnoredByteRangeset,
   unordered_map<reference_wrapper<const Signature>, Node *, Hasher<Signature>> &r_survivingNodes,
   unordered_map<Node *, Node *> &r_nodeCollapseTargets,
   unordered_map<Node *, Signature> &r_survivingNodePrevSignatures
@@ -611,7 +611,7 @@ Multiverse::Node *Multiverse::collapseNode (
   }
 
   const Signature &prevSignature = node->getSignature();
-  Signature signature = recreateSignature(prevSignature, extraIgnoredByteRanges);
+  Signature signature = recreateSignature(prevSignature, extraIgnoredByteRangeset);
   DW(, " this node now has signature ", signature.hash());
 
   auto v1 = find(r_survivingNodes, signature);
@@ -634,7 +634,7 @@ Multiverse::Node *Multiverse::collapseNode (
       auto &child = node->getChild(i);
       Node *childNode = get<2>(child);
       DA(childNode != node);
-      Node *childTargetNode = collapseNode(childNode, extraIgnoredByteRanges, r_survivingNodes, r_nodeCollapseTargets, r_survivingNodePrevSignatures);
+      Node *childTargetNode = collapseNode(childNode, extraIgnoredByteRangeset, r_survivingNodes, r_nodeCollapseTargets, r_survivingNodePrevSignatures);
       if (childTargetNode == node) {
         node->removeChild(i);
         --i;
