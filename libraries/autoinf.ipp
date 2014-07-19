@@ -34,6 +34,28 @@ template<typename Key, typename T, typename Hash, typename KeyEqual, typename Al
 
 
 
+template<typename ..._Ts> Multiverse::ActionTemplate::ActionTemplate (_Ts &&...ts) {
+  DS();
+  segments.reserve((sizeof...(_Ts) + 1) / 2);
+  words.reserve((sizeof...(_Ts) - 1) / 2);
+  init(forward<_Ts>(ts)...);
+  DW(,"created an action template with segments");
+  for (auto &s : segments) {
+    DW(,"  ", s.c_str());
+  }
+  DW(,"and words");
+  for (auto &w : words) {
+    DW(,"  ", w);
+  }
+}
+
+template<typename ..._Ts> void Multiverse::ActionTemplate::init (u8string &&segment, ActionWord::CategorySet word, _Ts &&...ts)
+{
+  segments.push_back(move(segment));
+  words.push_back(word);
+  init(forward<_Ts>(ts)...);
+}
+
 template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd, Vm &vm) {
   typedef tuple<Node *, ActionId, u8string, Signature, State> result;
   DS();
@@ -53,6 +75,7 @@ template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd,
       DW(, "done adding done result to queue");
     });
 
+    u8string input;
     u8string output;
     State postState;
     for (; nodesBegin != nodesEnd; ++nodesBegin) {
@@ -67,15 +90,30 @@ template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd,
       }
       DA(parentNode->getChildrenSize() == 0);
 
-      size_t actionCount = actionInputBegins.size() - 1;
-      for (ActionId id = 0; id != actionCount; ++id) {
-        auto actionInputBegin = actionInputs.cbegin() + actionInputBegins[id];
-        auto actionInputEnd = actionInputs.cbegin() + actionInputBegins[id + 1];
-        DW(, "processing action **",u8string(actionInputBegin, actionInputEnd).c_str(),"** (id ",id,")");
+      Bitset dewordedWords;
+      for (ActionId id = 0, end = actionSet.getSize(); id != end; ++id) {
+        if (actionSet.includesAnyWords(id, dewordedWords)) {
+          DW(, "was about to process action of id ",id,", but at least one of the words used in the action is in the deworded set");
+          continue;
+        }
+        input.clear();
+        actionSet.getInput(id, input);
+        DW(, "processing action **",input.c_str(),"** (id ",id,")");
 
         doRestoreAction(vm, *parentState);
-        doAction(vm, actionInputBegin, actionInputEnd, output, u8("VM was dead after doing action"));
+        doAction(vm, input, output, u8("VM was dead after doing action"));
         Signature signature = createSignature(vm, ignoredByteRangeset);
+
+        auto dewordingWord = actionSet.getDewordingWord(id);
+        if (dewordingWord != NON_ID) {
+          DW(, "this action is a dewording one (for word of id ",dewordingWord,")");
+          // TODO de-hard-wire
+          if (output.find(u8("You can't see")) != std::string::npos) {
+            DW(, "word of id ",dewordingWord," is missing!");
+            dewordedWords.setBit(dewordingWord);
+          }
+        }
+
         if (signature == parentNode->getSignature()) {
           DW(, "the resultant VM state is the same as the parent's, so skipping");
           continue;

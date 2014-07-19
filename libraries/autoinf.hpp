@@ -104,6 +104,68 @@ class Signature {
 
 class Multiverse {
   pub typedef iu16f ActionId;
+  pub static constexpr ActionId NON_ID = static_cast<ActionId>(-1);
+
+  prv class ActionSet;
+
+  pub class ActionWord {
+    pub typedef iu64 CategorySet;
+
+    prv core::u8string word;
+    prv CategorySet categories;
+
+    pub ActionWord (core::u8string &&word, CategorySet categories);
+    pub ActionWord (const ActionWord &) = default;
+    pub ActionWord &operator= (const ActionWord &) = default;
+    pub ActionWord (ActionWord &&) = default;
+    pub ActionWord &operator= (ActionWord &&) = default;
+
+    friend class ActionSet;
+  };
+
+  pub class ActionTemplate {
+    prv std::vector<core::u8string> segments;
+    prv std::vector<ActionWord::CategorySet> words;
+
+    pub template<typename ..._Ts> ActionTemplate (_Ts &&...ts);
+    prv void init (core::u8string &&segment);
+    prv template<typename ..._Ts> void init (core::u8string &&segment, ActionWord::CategorySet word, _Ts &&...ts);
+    pub ActionTemplate (const ActionTemplate &) = default;
+    pub ActionTemplate &operator= (const ActionTemplate &) = default;
+    pub ActionTemplate (ActionTemplate &&) = default;
+    pub ActionTemplate &operator= (ActionTemplate &&) = default;
+
+    friend class ActionSet;
+  };
+
+  prv class ActionSet {
+    prv typedef iu8f Index;
+
+    prv std::vector<core::u8string> words;
+    prv std::vector<std::vector<core::u8string>> templates;
+    prv Index dewordingTemplateCount;
+    prv core::string<Index> specs;
+    prv std::vector<size_t> specBegins;
+
+    pub ActionSet (std::vector<ActionWord> &&words, std::vector<ActionTemplate> &&dewordingTemplates, std::vector<ActionTemplate> &&otherTemplates);
+    prv static void init (
+      const std::vector<ActionWord> &words, Index nextTemplateI, const std::vector<ActionTemplate> &templates,
+      core::string<Index> &r_specs, std::vector<size_t> &r_specBegins
+    );
+    prv static void initImpl (
+      const std::vector<ActionWord> &words, const ActionTemplate &templ, Index templateWordI,
+      core::string<Index> &r_specs, std::vector<size_t> &r_specBegins, core::string<Index> &r_spec
+    );
+    pub ActionSet (const ActionSet &) = default;
+    pub ActionSet &operator= (const ActionSet &) = default;
+    pub ActionSet (ActionSet &&) = default;
+    pub ActionSet &operator= (ActionSet &&) = default;
+
+    pub ActionId getSize () const;
+    pub ActionId getDewordingWord (ActionId id) const;
+    pub bool includesAnyWords (ActionId id, const bitset::Bitset &words) const;
+    pub void getInput (ActionId id, core::u8string &r_out) const;
+  };
 
   prv struct RangesetPart {
     iu16f setSize;
@@ -157,26 +219,28 @@ class Multiverse {
     pub Node *resolve (Node *node) const;
   };
 
-  prv core::u8string saveActionInput;
-  prv core::u8string restoreActionInput;
-  prv core::u8string actionInputs;
-  prv std::vector<size_t> actionInputBegins;
+  prv const core::u8string saveActionInput;
+  prv const core::u8string restoreActionInput;
+  prv const ActionSet actionSet;
   prv bitset::Bitset ignoredBytes;
   prv Rangeset ignoredByteRangeset;
   prv Node *rootNode;
   prv std::unordered_map<std::reference_wrapper<const Signature>, Node *, Hasher<Signature>> nodes; // XXXX make Node * unique_ptr?
 
-  pub Multiverse (autofrotz::Vm &vm, const core::u8string &initialInput, core::u8string &r_initialOutput, const core::u8string &saveActionInput, const core::u8string &restoreActionInput, const std::vector<std::vector<core::u8string>> &equivalentActionInputsSet, const std::vector<core::u8string> &words, const std::vector<std::vector<core::u8string>> &actionTemplates);
+  pub Multiverse (
+    autofrotz::Vm &vm, const core::u8string &initialInput, core::u8string &r_initialOutput,
+    const core::u8string &saveActionInput, const core::u8string &restoreActionInput,
+    const std::vector<std::vector<core::u8string>> &equivalentActionInputsSet,
+    std::vector<ActionWord> &&words, std::vector<ActionTemplate> &&dewordingTemplates, std::vector<ActionTemplate> &&otherTemplates
+  );
   prv static bitset::Bitset initIgnoredBytes (autofrotz::Vm &vm);
-  prv static void initActionInputs (const std::vector<core::u8string> &words, const std::vector<std::vector<core::u8string>> &actionTemplates, core::u8string &r_actionInputs, std::vector<size_t> &r_actionInputBegins);
-  prv static void initActionInputsImpl (const std::vector<core::u8string> &words, std::vector<core::u8string>::const_iterator actionTemplateI, std::vector<core::u8string>::const_iterator actionTemplateEnd, core::u8string &r_actionInputs, std::vector<size_t> &r_actionInputBegins, core::u8string &r_actionInput);
   Multiverse (const Multiverse &) = delete;
   Multiverse &operator= (const Multiverse &) = delete;
   Multiverse (Multiverse &&) = delete;
   Multiverse &operator= (Multiverse &&) = delete;
   pub ~Multiverse () noexcept;
 
-  pub std::tuple<core::u8string::const_iterator, core::u8string::const_iterator> getActionInput (ActionId id) const;
+  pub void getActionInput (ActionId id, core::u8string &r_out) const;
   prv static void doAction (autofrotz::Vm &vm, core::u8string::const_iterator inputBegin, core::u8string::const_iterator inputEnd, core::u8string &r_output, const char8_t *deathExceptionMsg);
   prv static void doAction (autofrotz::Vm &vm, const core::u8string &input, core::u8string &r_output, const char8_t *deathExceptionMsg);
   prv void doSaveAction (autofrotz::Vm &vm, autofrotz::State &r_state);

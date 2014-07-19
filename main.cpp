@@ -9,6 +9,8 @@ using core::u8string;
 using NodePath = autoinf::Multiverse::NodePath;
 using Node = autoinf::Multiverse::Node;
 using ActionId = autoinf::Multiverse::ActionId;
+using ActionWord = autoinf::Multiverse::ActionWord;
+using ActionTemplate = autoinf::Multiverse::ActionTemplate;
 using std::unordered_set;
 using std::get;
 using core::numeric_limits;
@@ -43,16 +45,21 @@ int main (int argc, char *argv[]) {
         // {u8("turn wheel. pull wheel.\n"), u8("turn wheel. pull wheel. east. west.\n"), u8("turn wheel. pull wheel. west. east.\n")},
         // {u8("\n"), u8("east\n"), u8("west\n"), u8("take red sphere\n"), u8("take blue sphere\n"), u8("drop red sphere\n"), u8("drop blue sphere\n"), u8("open red sphere\n"), u8("open blue sphere\n"), u8("enter light\n")}
       },
-      vector<u8string> {
-        u8("red sphere"), u8("blue sphere")
+      vector<ActionWord> {
+        {u8("red sphere"), 0b011},
+        {u8("blue sphere"), 0b011},
+        {u8("green sphere"), 0b001},
+        {u8("wheel"), 0b101}
       },
-      vector<vector<u8string>> {
+      vector<ActionTemplate> {
+      },
+      vector<ActionTemplate> {
         {u8("east\n")},
         {u8("west\n")},
-        {u8("take "), u8("\n")},
-        {u8("drop "), u8("\n")},
-        {u8("open "), u8("\n")},
-        {u8("turn wheel. pull wheel\n")},
+        {u8("take "), 0b010, u8("\n")},
+        {u8("drop "), 0b010, u8("\n")},
+        {u8("open "), 0b010, u8("\n")},
+        {u8("turn "), 0b100, u8(". pull "), 0b100, u8("\n")},
         {u8("enter light\n")}
       }
     );
@@ -178,8 +185,6 @@ int main (int argc, char *argv[]) {
   }
 }
 
-static ActionId NO_ID = static_cast<ActionId>(-1);
-
 void studyNodes (const Multiverse &multiverse, vector<NodeData> &r_nodesByIndex, unordered_map<Node *, size_t> &r_nodeIndices) {
   DPRE(r_nodesByIndex.empty(), "");
   DPRE(r_nodeIndices.empty(), "");
@@ -192,7 +197,7 @@ void studyNodes (const Multiverse &multiverse, vector<NodeData> &r_nodesByIndex,
   do {
     DW(, "studying nodes at depth ",depth);
     s0 = s1;
-    studyNode(0, depth, rootNode, nullptr, NO_ID, r_nodesByIndex, r_nodeIndices);
+    studyNode(0, depth, rootNode, nullptr, Multiverse::NON_ID, r_nodesByIndex, r_nodeIndices);
     s1 = r_nodesByIndex.size();
     DW(, "after studying nodes at depth ",depth,", we know about ",s1," nodes");
     ++depth;
@@ -277,15 +282,15 @@ void printNode (
   const vector<NodeData> &nodesByIndex, const unordered_map<Node *, size_t> &nodeIndices, bool elideDeadEndNodes
 ) {
   u8string prefix;
-  printNonleafNode(nullptr, rootNode, nullptr, NO_ID, multiverse, selectedNodes, verboseNodes, nodesByIndex, nodeIndices, elideDeadEndNodes, prefix);
+  printNonleafNode(nullptr, rootNode, nullptr, Multiverse::NON_ID, multiverse, selectedNodes, verboseNodes, nodesByIndex, nodeIndices, elideDeadEndNodes, prefix);
 }
 
 u8string renderActionInput (ActionId actionId, const Multiverse &multiverse) {
   u8string actionInput;
-  if (actionId != NO_ID) {
-    auto actionInputRange = multiverse.getActionInput(actionId);
+  if (actionId != Multiverse::NON_ID) {
     actionInput.push_back(U'"');
-    actionInput.append(get<0>(actionInputRange), get<1>(actionInputRange) - 1);
+    multiverse.getActionInput(actionId, actionInput);
+    actionInput.erase(actionInput.size() - 1);
     actionInput.append(u8("\" -> "));
   }
   return actionInput;

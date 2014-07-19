@@ -258,6 +258,141 @@ void Signature::Iterator::copy (Writer &r_writer, size_t r) {
   }
 }
 
+Multiverse::ActionWord::ActionWord (u8string &&word, CategorySet categories) : word(move(word)), categories(categories) {
+}
+
+void Multiverse::ActionTemplate::init (u8string &&segment) {
+  segments.push_back(move(segment));
+}
+
+Multiverse::ActionSet::ActionSet (vector<ActionWord> &&words, vector<ActionTemplate> &&dewordingTemplates, vector<ActionTemplate> &&otherTemplates) {
+  DS();
+  if (words.size() >= numeric_limits<Index>::max()) {
+    throw PlainException(u8("the limit for the number of action words has been reached"));
+  }
+  if (dewordingTemplates.size() + otherTemplates.size() >= numeric_limits<Index>::max()) {
+    throw PlainException(u8("the limit for the number of action templates has been reached"));
+  }
+  for (const ActionTemplate &templ : dewordingTemplates) {
+    DPRE(!templ.segments.empty(), "action templates must have at least one segment");
+    DPRE(templ.segments.size() - 1 == templ.words.size());
+    if (templ.words.size() != 1) {
+      throw PlainException(u8("dewording action templates must contain exactly one action word"));
+    }
+  }
+
+  init(words, 0, dewordingTemplates, specs, specBegins);
+  dewordingTemplateCount = specBegins.size();
+  init(words, static_cast<Index>(dewordingTemplates.size()), otherTemplates, specs, specBegins);
+  specs.shrink_to_fit();
+  specBegins.shrink_to_fit();
+
+  this->words.reserve(words.size());
+  for (ActionWord &word : words) {
+    this->words.push_back(move(word.word));
+  }
+  DW(,"words are:"); for (auto &w : this->words) { DW(,"  **",w.c_str(),"**"); }
+  this->templates.reserve(dewordingTemplates.size() + otherTemplates.size());
+  for (vector<ActionTemplate> *templates : {&dewordingTemplates, &otherTemplates}) {
+    for (ActionTemplate &templ : *templates) {
+      this->templates.push_back(move(templ.segments));
+    }
+  }
+  DW(,"templates are:"); for (auto &t : this->templates) { DWP(," "); for (auto &w : t) { DWP(," *",w.c_str(),"*"); } DWP(,""); }
+  DW(,"hence, action inputs are:");
+  for (ActionId i = 0; i != getSize(); ++i) {
+    u8string o;
+    getInput(i, o);
+    DW(,"  **",o.c_str(),"**");
+  }
+}
+
+void Multiverse::ActionSet::init (
+  const vector<ActionWord> &words, Index nextTemplateI, const vector<ActionTemplate> &templates,
+  string<Index> &r_specs, vector<size_t> &r_specBegins
+) {
+  DS();
+  string<Index> spec;
+  for (const ActionTemplate &templ : templates) {
+    spec.clear();
+    spec.push_back(nextTemplateI++);
+    initImpl(words, templ, 0, r_specs, r_specBegins, spec);
+  }
+}
+
+void Multiverse::ActionSet::initImpl (
+  const vector<ActionWord> &words, const ActionTemplate &templ, Index templateWordI,
+  string<Index> &r_specs, vector<size_t> &r_specBegins, string<Index> &r_spec
+) {
+  if (templateWordI == templ.words.size()) {
+    DA(r_spec.size() == static_cast<size_t>(templateWordI) + 1);
+    if (r_specBegins.size() == numeric_limits<ActionId>::max()) {
+      throw PlainException(u8("the limit for the number of actions has been reached"));
+    }
+    DWP(, "adding action ",r_specBegins.size()," (template ",r_spec[0]," with words"); for (size_t i = 1; i != r_spec.size(); ++i) { DWP(, " ", r_spec[i]); } DW(, ")");
+    r_specBegins.push_back(r_specs.size());
+    r_specs.append(r_spec);
+    return;
+  }
+
+  ActionWord::CategorySet categories = templ.words[templateWordI];
+  size_t specPreSize = r_spec.size();
+  for (Index i = 0, end = static_cast<Index>(words.size()); i != end; ++i) {
+    const ActionWord &word = words[i];
+    if ((categories & word.categories) == categories) {
+      r_spec.push_back(i);
+      initImpl(words, templ, templateWordI + 1, r_specs, r_specBegins, r_spec);
+      r_spec.erase(specPreSize);
+    }
+  }
+}
+
+Multiverse::ActionId Multiverse::ActionSet::getSize () const {
+  return specBegins.size();
+}
+
+Multiverse::ActionId Multiverse::ActionSet::getDewordingWord (ActionId id) const {
+  if (id >= dewordingTemplateCount) {
+    return NON_ID;
+  }
+
+  // XXXX tidy up
+  const Index *specI = &specs[specBegins[id]];
+  const vector<u8string> &segments = templates[*specI];
+  ++specI;
+
+  DA(segments.size() == 2);
+  return *specI;
+}
+
+bool Multiverse::ActionSet::includesAnyWords (ActionId id, const Bitset &words) const {
+  DPRE(id < specBegins.size());
+  const Index *specI = &specs[specBegins[id]];
+  const vector<u8string> &segments = templates[*specI];
+  ++specI;
+
+  for (const Index *specEnd = specI + segments.size() - 1; specI != specEnd; ++specI) {
+    if (words.getBit(*specI)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+void Multiverse::ActionSet::getInput (ActionId id, u8string &r_out) const {
+  DPRE(id < specBegins.size());
+  const Index *specI = &specs[specBegins[id]];
+  const vector<u8string> &segments = templates[*specI];
+  ++specI;
+
+  const u8string *segmentsI = &segments[0];
+  r_out.append(*(segmentsI++));
+  for (const Index *specEnd = specI + segments.size() - 1; specI != specEnd; ++specI, ++segmentsI) {
+    r_out.append(words[*specI]);
+    r_out.append(*segmentsI);
+  }
+}
+
 Multiverse::Rangeset::Rangeset (const Bitset &bitset, iu16 rangesEnd) : vector() {
   DS();
   DW(, "creating Rangeset from a bitset:");
@@ -374,13 +509,14 @@ Multiverse::Node *Multiverse::NodePath::resolve (Node *node) const {
 
 Multiverse::Multiverse (
   Vm &vm, const u8string &initialInput, u8string &r_initialOutput, const u8string &saveActionInput, const u8string &restoreActionInput,
-  const vector<vector<u8string>> &equivalentActionInputsSet, const vector<u8string> &words, const vector<vector<u8string>> &actionTemplates
-) : saveActionInput(saveActionInput), restoreActionInput(restoreActionInput), ignoredBytes(initIgnoredBytes(vm)), ignoredByteRangeset(ignoredBytes, vm.getDynamicMemorySize()), rootNode(nullptr) {
+  const vector<vector<u8string>> &equivalentActionInputsSet,
+  vector<ActionWord> &&words, vector<ActionTemplate> &&dewordingTemplates, vector<ActionTemplate> &&otherTemplates
+) :
+  saveActionInput(saveActionInput), restoreActionInput(restoreActionInput), actionSet(move(words), move(dewordingTemplates), move(otherTemplates)),
+  ignoredBytes(initIgnoredBytes(vm)), ignoredByteRangeset(ignoredBytes, vm.getDynamicMemorySize()), rootNode(nullptr)
+{
   DS();
   DPRE(vm.isAlive());
-
-  initActionInputs(words, actionTemplates, actionInputs, actionInputBegins);
-  DW(, "all actions are this: **", actionInputs.c_str(), "**");
 
   doAction(vm, initialInput, r_initialOutput, u8("VM died while running the initial input"));
   Signature signature = createSignature(vm, ignoredByteRangeset);
@@ -445,61 +581,20 @@ Bitset Multiverse::initIgnoredBytes (Vm &vm) {
   return ignoredBytes;
 }
 
-void Multiverse::initActionInputs (const vector<u8string> &words, const vector<vector<u8string>> &actionTemplates, u8string &r_actionInputs, vector<size_t> &r_actionInputBegins) {
-  DS();
-  DPRE(r_actionInputs.empty());
-  DPRE(r_actionInputBegins.empty());
-
-  u8string actionInput;
-  for (const auto &actionTemplate : actionTemplates) {
-    DPRE(actionTemplate.size() != 0, "action templates must have at least one component");
-    actionInput.clear();
-    actionInput.append(actionTemplate[0]);
-    initActionInputsImpl(words, actionTemplate.begin() + 1, actionTemplate.end(), r_actionInputs, r_actionInputBegins, actionInput);
-  }
-  r_actionInputBegins.push_back(r_actionInputs.size());
-  r_actionInputs.shrink_to_fit();
-  r_actionInputBegins.shrink_to_fit();
-}
-
-void Multiverse::initActionInputsImpl (const vector<u8string> &words, vector<u8string>::const_iterator actionTemplateI, vector<u8string>::const_iterator actionTemplateEnd, u8string &r_actionInputs, vector<size_t> &r_actionInputBegins, u8string &r_actionInput) {
-  if (actionTemplateI == actionTemplateEnd) {
-    if (r_actionInputBegins.size() == numeric_limits<ActionId>::max()) {
-      throw PlainException(u8("the limit for the number of actions has been reached"));
-    }
-    DW(, "adding action **", r_actionInput.c_str(), "**");
-    r_actionInputBegins.push_back(r_actionInputs.size());
-    r_actionInputs.append(r_actionInput);
-    return;
-  }
-
-  size_t actionInputPreSize = r_actionInput.size();
-  u8string nw = *(actionTemplateI++);
-  for (const u8string &word : words) {
-    r_actionInput.append(word);
-    r_actionInput.append(nw);
-    initActionInputsImpl(words, actionTemplateI, actionTemplateEnd, r_actionInputs, r_actionInputBegins, r_actionInput);
-    r_actionInput.resize(actionInputPreSize);
-  }
-}
-
 Multiverse::~Multiverse () noexcept {
   for (const auto &e : nodes) {
     delete get<1>(e);
   }
 }
 
-tuple<u8string::const_iterator, u8string::const_iterator> Multiverse::getActionInput (ActionId id) const {
-  DPRE(id < actionInputBegins.size() - 1);
-
-  auto begin = actionInputs.cbegin();
-  return tuple<u8string::const_iterator, u8string::const_iterator>(begin + actionInputBegins[id], begin + actionInputBegins[static_cast<size_t>(id) + 1]);
+void Multiverse::getActionInput (ActionId id, u8string &r_out) const {
+  actionSet.getInput(id, r_out);
 }
 
 void Multiverse::doAction(Vm &vm, u8string::const_iterator inputBegin, u8string::const_iterator inputEnd, u8string &r_output, const char8_t *deathExceptionMsg) {
   DPRE(vm.isAlive());
 
-  r_output.clear();
+  r_output.clear(); // XXXX really do this here? not let the caller do it? ...
   vm.doAction(inputBegin, inputEnd, r_output);
   if (!vm.isAlive()) {
     throw PlainException(deathExceptionMsg);
