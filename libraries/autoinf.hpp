@@ -9,6 +9,7 @@
 #include <autofrotz.hpp>
 #include <vector>
 #include <unordered_map>
+#include <functional>
 
 namespace autoinf {
 
@@ -222,6 +223,7 @@ class Multiverse {
   prv const core::u8string saveActionInput;
   prv const core::u8string restoreActionInput;
   prv const ActionSet actionSet;
+  prv const std::function<bool (const autofrotz::Vm &vm, const core::u8string &output)> deworder;
   prv bitset::Bitset ignoredBytes;
   prv Rangeset ignoredByteRangeset;
   prv Node *rootNode;
@@ -231,7 +233,8 @@ class Multiverse {
     autofrotz::Vm &vm, const core::u8string &initialInput, core::u8string &r_initialOutput,
     const core::u8string &saveActionInput, const core::u8string &restoreActionInput,
     const std::vector<std::vector<core::u8string>> &equivalentActionInputsSet,
-    std::vector<ActionWord> &&words, std::vector<ActionTemplate> &&dewordingTemplates, std::vector<ActionTemplate> &&otherTemplates
+    std::vector<ActionWord> &&words, std::vector<ActionTemplate> &&dewordingTemplates, std::vector<ActionTemplate> &&otherTemplates,
+    std::function<bool (const autofrotz::Vm &vm, const core::u8string &output)> deworder
   );
   prv static bitset::Bitset initIgnoredBytes (autofrotz::Vm &vm);
   Multiverse (const Multiverse &) = delete;

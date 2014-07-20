@@ -107,8 +107,7 @@ template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd,
         auto dewordingWord = actionSet.getDewordingWord(id);
         if (dewordingWord != NON_ID) {
           DW(, "this action is a dewording one (for word of id ",dewordingWord,")");
-          // TODO de-hard-wire
-          if (output.find(u8("You can't see")) != std::string::npos) {
+          if (deworder(vm, output)) {
             DW(, "word of id ",dewordingWord," is missing!");
             dewordedWords.setBit(dewordingWord);
           }

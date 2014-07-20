@@ -43,7 +43,7 @@ int main (int argc, char *argv[]) {
         // {u8("z\n"), u8("z. z. z. z. z. z. z. z.\n")},
         // {u8("verbitudeise the tangerine monstrosity. verbitudeise the tangerine monstrosity.\n"), u8("")},
         // {u8("turn wheel. pull wheel.\n"), u8("turn wheel. pull wheel. east. west.\n"), u8("turn wheel. pull wheel. west. east.\n")},
-        // {u8("\n"), u8("east\n"), u8("west\n"), u8("take red sphere\n"), u8("take blue sphere\n"), u8("drop red sphere\n"), u8("drop blue sphere\n"), u8("open red sphere\n"), u8("open blue sphere\n"), u8("enter light\n")}
+        // {u8(""), u8("east\n"), u8("west\n"), u8("take red sphere\n"), u8("take blue sphere\n"), u8("drop red sphere\n"), u8("drop blue sphere\n"), u8("open red sphere\n"), u8("open blue sphere\n"), u8("enter light\n")}
       },
       vector<ActionWord> {
         {u8("red sphere"), 0b011},
@@ -52,6 +52,7 @@ int main (int argc, char *argv[]) {
         {u8("wheel"), 0b101}
       },
       vector<ActionTemplate> {
+        {u8("examine "), 0b001, u8("\n")},
       },
       vector<ActionTemplate> {
         {u8("east\n")},
@@ -61,6 +62,9 @@ int main (int argc, char *argv[]) {
         {u8("open "), 0b010, u8("\n")},
         {u8("turn "), 0b100, u8(". pull "), 0b100, u8("\n")},
         {u8("enter light\n")}
+      },
+      [] (const Vm &vm, const u8string &output) -> bool {
+        return output.find(u8("You can't see")) != std::string::npos;
       }
     );
     /*

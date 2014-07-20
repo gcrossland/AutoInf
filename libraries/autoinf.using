@@ -41,5 +41,6 @@ using std::unordered_map;
 using std::reference_wrapper;
 using bitset::Bitset;
 using std::forward;
+using std::function;
 
 }

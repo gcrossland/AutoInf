@@ -510,9 +510,10 @@ Multiverse::Node *Multiverse::NodePath::resolve (Node *node) const {
 Multiverse::Multiverse (
   Vm &vm, const u8string &initialInput, u8string &r_initialOutput, const u8string &saveActionInput, const u8string &restoreActionInput,
   const vector<vector<u8string>> &equivalentActionInputsSet,
-  vector<ActionWord> &&words, vector<ActionTemplate> &&dewordingTemplates, vector<ActionTemplate> &&otherTemplates
+  vector<ActionWord> &&words, vector<ActionTemplate> &&dewordingTemplates, vector<ActionTemplate> &&otherTemplates,
+  function<bool (const Vm &vm, const u8string &output)> deworder
 ) :
-  saveActionInput(saveActionInput), restoreActionInput(restoreActionInput), actionSet(move(words), move(dewordingTemplates), move(otherTemplates)),
+  saveActionInput(saveActionInput), restoreActionInput(restoreActionInput), actionSet(move(words), move(dewordingTemplates), move(otherTemplates)), deworder(deworder),
   ignoredBytes(initIgnoredBytes(vm)), ignoredByteRangeset(ignoredBytes, vm.getDynamicMemorySize()), rootNode(nullptr)
 {
   DS();
