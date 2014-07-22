@@ -41,7 +41,7 @@ void printNonleafNode (
 );
 
 void readLine(core::u8string &r_out);
-is getNaturalNumber(const core::u8string &in);
+is getNaturalNumber(const char8_t *iBegin, const char8_t *iEnd);
 
 /* -----------------------------------------------------------------------------
 ----------------------------------------------------------------------------- */

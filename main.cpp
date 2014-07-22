@@ -18,6 +18,7 @@ using std::exception;
 using std::unordered_map;
 using std::move;
 using core::PlainException;
+using std::copy;
 
 /* -----------------------------------------------------------------------------
 ----------------------------------------------------------------------------- */
@@ -425,15 +426,27 @@ int main (int argc, char *argv[]) {
         }
         nodesByIndex.clear();
       } else {
-        is n = getNaturalNumber(line);
-        size_t nn;
-        if (n >= 0 && (nn = static_cast<size_t>(n)) < nodesByIndex.size()) {
-          Node *node = nodesByIndex[nn].node;
-          auto pos = selectedNodes.find(node);
-          if (pos == selectedNodes.end()) {
-            selectedNodes.insert(node);
-          } else {
-            selectedNodes.erase(pos);
+        const char8_t *lineI = line.data();
+        const char8_t *lineEnd = lineI + line.size();
+        while (true) {
+          for (; lineI != lineEnd && *lineI == ' '; ++lineI);
+          const char8_t *numBegin = lineI;
+          if (numBegin == lineEnd) {
+            break;
+          }
+          for (; lineI != lineEnd && *lineI != ' '; ++lineI);
+          const char8_t *numEnd = lineI;
+
+          is n = getNaturalNumber(numBegin, numEnd);
+          size_t nn;
+          if (n >= 0 && (nn = static_cast<size_t>(n)) < nodesByIndex.size()) {
+            Node *node = nodesByIndex[nn].node;
+            auto pos = selectedNodes.find(node);
+            if (pos == selectedNodes.end()) {
+              selectedNodes.insert(node);
+            } else {
+              selectedNodes.erase(pos);
+            }
           }
         }
       }
@@ -688,12 +701,17 @@ void readLine (u8string &r_out) {
   r_out.append(b, size);
 }
 
-is getNaturalNumber (const u8string &in) {
-  const char8_t *inBegin = in.c_str();
+is getNaturalNumber (const char8_t *iBegin, const char8_t *iEnd) {
+  char8_t in[iEnd - iBegin + 1];
+  copy(iBegin, iEnd, in);
+  in[iEnd - iBegin] = U'\0';
+
+  const char8_t *inBegin = in;
+  const char8_t *inEnd = inBegin + (iEnd - iBegin);
   char8_t *numberEnd;
   long number = strtol(reinterpret_cast<const char *>(inBegin), reinterpret_cast<char **>(&numberEnd), 10);
 
-  if (numberEnd != inBegin + in.size() || number < 0 || number == LONG_MAX || number > numeric_limits<is>::max()) {
+  if (numberEnd != inEnd || number < 0 || number == LONG_MAX || number > numeric_limits<is>::max()) {
     return -1;
   }
   return static_cast<is>(number);
