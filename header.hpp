@@ -27,17 +27,17 @@ void markDeadEndNodes (std::vector<NodeData> &nodesByIndex, const std::unordered
 void printNode (
   autoinf::Multiverse::Node *rootNode,
   const autoinf::Multiverse &multiverse, const std::unordered_set<autoinf::Multiverse::Node *> &selectedNodes, const std::unordered_set<autoinf::Multiverse::Node *> &verboseNodes,
-  const std::vector<NodeData> &nodesByIndex, const std::unordered_map<autoinf::Multiverse::Node *, size_t> &nodeIndices, bool elideDeadEndNodes
+  const std::vector<NodeData> &nodesByIndex, const std::unordered_map<autoinf::Multiverse::Node *, size_t> &nodeIndices, bool elideDeadEndNodes, FILE *out
 );
 void printLeafNode (
   const core::u8string *output, autoinf::Multiverse::Node *node, autoinf::Multiverse::Node *parentNode, autoinf::Multiverse::ActionId actionId,
   const autoinf::Multiverse &multiverse, const std::unordered_set<autoinf::Multiverse::Node *> &selectedNodes, const std::unordered_set<autoinf::Multiverse::Node *> &verboseNodes,
-  const std::vector<NodeData> &nodesByIndex, const std::unordered_map<autoinf::Multiverse::Node *, size_t> &nodeIndices, bool elideDeadEndNodes, core::u8string &r_prefix
+  const std::vector<NodeData> &nodesByIndex, const std::unordered_map<autoinf::Multiverse::Node *, size_t> &nodeIndices, bool elideDeadEndNodes, core::u8string &r_prefix, FILE *out
 );
 void printNonleafNode (
   const core::u8string *output, autoinf::Multiverse::Node *node, autoinf::Multiverse::Node *parentNode, autoinf::Multiverse::ActionId actionId,
   const autoinf::Multiverse &multiverse, const std::unordered_set<autoinf::Multiverse::Node *> &selectedNodes, const std::unordered_set<autoinf::Multiverse::Node *> &verboseNodes,
-  const std::vector<NodeData> &nodesByIndex, const std::unordered_map<autoinf::Multiverse::Node *, size_t> &nodeIndices, bool elideDeadEndNodes, core::u8string &r_prefix
+  const std::vector<NodeData> &nodesByIndex, const std::unordered_map<autoinf::Multiverse::Node *, size_t> &nodeIndices, bool elideDeadEndNodes, core::u8string &r_prefix, FILE *out
 );
 
 void readLine(core::u8string &r_out);

@@ -17,6 +17,7 @@ using core::numeric_limits;
 using std::exception;
 using std::unordered_map;
 using std::move;
+using core::PlainException;
 
 /* -----------------------------------------------------------------------------
 ----------------------------------------------------------------------------- */
@@ -26,6 +27,8 @@ void terminator () {
   core::dieHard();
 }
 
+FILE *out;
+
 int main (int argc, char *argv[]) {
   std::set_terminate(&terminator);
   try {
@@ -34,6 +37,11 @@ int main (int argc, char *argv[]) {
     autoinf::DOPEN(, errs);
     //autofrotz::DOPEN(, errs);
     //autofrotz::vmlink::DOPEN(, errs);
+
+    const char *outPathName = nullptr;
+    if (argc == 2) {
+      outPathName = argv[1];
+    }
 
     u8string output;
     Vm vm("104/104.z5", 70, 128, 1, true, output);
@@ -339,7 +347,22 @@ int main (int argc, char *argv[]) {
         }
       }
 
-      printNode(multiverse.getNode(NodePath()), multiverse, selectedNodes, verboseNodes, nodesByIndex, nodeIndices, elideDeadEndNodes);
+      {
+        FILE *out = stdout;
+        if (outPathName) {
+          out = fopen(outPathName, "wb");
+          if (!out) {
+            throw PlainException(u8("unable to open output file"));
+          }
+        }
+        auto _ = autoinf::finally([&] {
+          if (outPathName) {
+            fclose(out);
+          }
+        });
+
+        printNode(multiverse.getNode(NodePath()), multiverse, selectedNodes, verboseNodes, nodesByIndex, nodeIndices, elideDeadEndNodes, out);
+      }
 
       printf(
         "_Quit\n"
@@ -519,10 +542,10 @@ void markDeadEndNodes (vector<NodeData> &nodesByIndex, const unordered_map<Node 
 void printNode (
   Node *rootNode,
   const Multiverse &multiverse, const unordered_set<Node *> &selectedNodes, const unordered_set<Node *> &verboseNodes,
-  const vector<NodeData> &nodesByIndex, const unordered_map<Node *, size_t> &nodeIndices, bool elideDeadEndNodes
+  const vector<NodeData> &nodesByIndex, const unordered_map<Node *, size_t> &nodeIndices, bool elideDeadEndNodes, FILE *out
 ) {
   u8string prefix;
-  printNonleafNode(nullptr, rootNode, nullptr, Multiverse::NON_ID, multiverse, selectedNodes, verboseNodes, nodesByIndex, nodeIndices, elideDeadEndNodes, prefix);
+  printNonleafNode(nullptr, rootNode, nullptr, Multiverse::NON_ID, multiverse, selectedNodes, verboseNodes, nodesByIndex, nodeIndices, elideDeadEndNodes, prefix, out);
 }
 
 u8string renderActionInput (ActionId actionId, const Multiverse &multiverse) {
@@ -539,15 +562,16 @@ u8string renderActionInput (ActionId actionId, const Multiverse &multiverse) {
 void printLeafNode (
   const u8string *output, Node *node, Node *parentNode, ActionId actionId,
   const Multiverse &multiverse, const unordered_set<Node *> &selectedNodes, const unordered_set<Node *> &verboseNodes,
-  const vector<NodeData> &nodesByIndex, const unordered_map<Node *, size_t> &nodeIndices, bool elideDeadEndNodes, u8string &r_prefix
+  const vector<NodeData> &nodesByIndex, const unordered_map<Node *, size_t> &nodeIndices, bool elideDeadEndNodes, u8string &r_prefix, FILE *out
 ) {
   // XXXX 'map contains' fn as well? also 'find an entry known to be present'? just subclass unordered_*<> (as we will soon do for basic_string) ???
   bool selected = selectedNodes.find(node) != selectedNodes.end();
   if (selected) {
-    printf("* ");
+    fprintf(out, "* ");
   }
 
-  printf(
+  fprintf(
+    out,
     "%ssig of hash %u (elsewhere)\n",
     renderActionInput(actionId, multiverse).c_str(),
     node->getSignature().hash()
@@ -557,16 +581,17 @@ void printLeafNode (
 void printNonleafNode (
   const u8string *output, Node *node, Node *parentNode, ActionId actionId,
   const Multiverse &multiverse, const unordered_set<Node *> &selectedNodes, const unordered_set<Node *> &verboseNodes,
-  const vector<NodeData> &nodesByIndex, const unordered_map<Node *, size_t> &nodeIndices, bool elideDeadEndNodes, u8string &r_prefix
+  const vector<NodeData> &nodesByIndex, const unordered_map<Node *, size_t> &nodeIndices, bool elideDeadEndNodes, u8string &r_prefix, FILE *out
 ) {
   bool selected = selectedNodes.find(node) != selectedNodes.end();
   if (selected) {
-    printf("* ");
+    fprintf(out, "* ");
   }
 
   size_t nodeIndex = *find(nodeIndices, node);
 
-  printf(
+  fprintf(
+    out,
     "(%u) %ssig of hash %u / state size %d / %u children\n",
     nodeIndex,
     renderActionInput(actionId, multiverse).c_str(),
@@ -586,7 +611,7 @@ void printNonleafNode (
     auto lineStart = o.cbegin();
     for (auto i = o.cbegin(), end = o.cend(); i != end; ++i) {
       if (*i == U'\n') {
-        printf("%s  %s\n", r_prefix.c_str(), u8string(lineStart, i).c_str());
+        fprintf(out, "%s  %s\n", r_prefix.c_str(), u8string(lineStart, i).c_str());
         lineStart = i + 1;
       }
     }
@@ -635,9 +660,9 @@ void printNonleafNode (
     const u8string &childOuput = get<1>(child);
     Node *childNode = get<2>(child);
 
-    printf("%s%c-> ", r_prefix.c_str(), last ? '+' : '|');
+    fprintf(out, "%s%c-> ", r_prefix.c_str(), last ? '+' : '|');
     r_prefix.append(last ? u8("    ") : u8("|   "));
-    (fmts[i] == LEAF ? printLeafNode : printNonleafNode)(verboseNodes.find(childNode) != verboseNodes.end() ? &childOuput : nullptr, childNode, node, childActionId, multiverse, selectedNodes, verboseNodes, nodesByIndex, nodeIndices, elideDeadEndNodes, r_prefix);
+    (fmts[i] == LEAF ? printLeafNode : printNonleafNode)(verboseNodes.find(childNode) != verboseNodes.end() ? &childOuput : nullptr, childNode, node, childActionId, multiverse, selectedNodes, verboseNodes, nodesByIndex, nodeIndices, elideDeadEndNodes, r_prefix, out);
     r_prefix.resize(r_prefix.size() - 4);
   }
 }

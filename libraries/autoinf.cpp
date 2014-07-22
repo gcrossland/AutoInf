@@ -385,7 +385,7 @@ void Multiverse::ActionSet::getInput (ActionId id, u8string &r_out) const {
   const vector<u8string> &segments = templates[*specI];
   ++specI;
 
-  const u8string *segmentsI = &segments[0];
+  const u8string *segmentsI = segments.data();
   r_out.append(*(segmentsI++));
   for (const Index *specEnd = specI + segments.size() - 1; specI != specEnd; ++specI, ++segmentsI) {
     r_out.append(words[*specI]);

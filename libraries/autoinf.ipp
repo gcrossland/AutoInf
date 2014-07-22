@@ -66,7 +66,7 @@ template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd,
 
   packaged_task<void ()> dispatcher([&] () {
     DS();
-    auto resultQueueEnder = finally([&] () {
+    auto _ = finally([&] () {
       DS();
       DW(, "adding done result to queue");
       unique_lock<mutex> l(resultQueueLock);
@@ -137,7 +137,7 @@ template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd,
   });
   auto dispatcherFuture = dispatcher.get_future();
   thread dispatcherThread(move(dispatcher));
-  auto dispatcherThreadEnder = finally([&dispatcherThread] () {
+  auto _ = finally([&dispatcherThread] () {
     dispatcherThread.join();
   });
 
