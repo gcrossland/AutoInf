@@ -24,50 +24,6 @@ template<typename _I> _I operator+ (_I i, size_t o) {
   return i + static_cast<ptrdiff_t>(o);
 }
 
-iu64 Signature::BYTE_COUNTS[256] = {0,};
-
-u8string Signature::wrXXXX () const {
-  const char8_t HEX_DIGITS[] = "0123456789ABCDEF";
-
-  u8string o;
-
-  o.append(u8("{"));
-
-  bool first = true;
-  const iu8f *i = &b[0];
-  const iu8f *end = i + b.size();
-  while (i != end) {
-    if (!first) {
-      o.push_back(U' ');
-    }
-    first = false;
-
-    iu8 b = *(i++);
-    if (b != ESCAPE) {
-      o.push_back(HEX_DIGITS[b >> 4]);
-      o.push_back(HEX_DIGITS[b & 0b1111]);
-    } else {
-      auto v = getValidIeu<iu32>(i);
-      DA(v != 1 && v != 2);
-      if (v == 0) {
-        o.push_back(HEX_DIGITS[ESCAPE >> 4]);
-        o.push_back(HEX_DIGITS[ESCAPE & 0b1111]);
-      } else {
-        std::basic_ostringstream<char> os;
-        os << v;
-        os.flush();
-
-        o.append(reinterpret_cast<const char8_t *>(os.str().c_str()));
-        o.append(u8("*0"));
-      }
-    }
-  }
-
-  o.push_back(U'}');
-
-  return o;
-}
-
 Signature::Signature () : h(0) {
 }
 
@@ -109,7 +65,6 @@ void Signature::Writer::flushZeroBytes () {
     setIeu(bEnd, zeroByteCount);
     signature.b.append(b, bEnd);
   }
-  BYTE_COUNTS[0] += zeroByteCount;
   zeroByteCount = 0;
 }
 
@@ -118,7 +73,6 @@ void Signature::Writer::appendByte (iu8 byte) {
     appendZeroBytes(1);
   } else {
     flushZeroBytes();
-    ++BYTE_COUNTS[byte];
     if (byte == ESCAPE) {
       iu8f b[2] = {ESCAPE, 0};
       signature.b.append(b, 2);
@@ -140,12 +94,6 @@ void Signature::Writer::close () {
   signature.h = hashImpl(i, i + signature.b.size());
 
   DW(, "finished writing sig of hash ", signature.h);
-  /*DW(, "SSSS updated signature stats:");
-  for (iu i = 0; i != 256; ++i) {
-    if (BYTE_COUNTS[i] != 0) {
-      DW(, "SSSS   byte value ", i, " count = ", BYTE_COUNTS[i]);
-    }
-  }*/
 }
 
 Signature::Iterator::Iterator () noexcept : i(nullptr), end(nullptr), currentByte(0), zeroByteCount(0) {

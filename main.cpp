@@ -560,7 +560,7 @@ void printNode (
   const vector<NodeData> &nodesByIndex, const unordered_map<Node *, size_t> &nodeIndices, bool elideDeadEndNodes, FILE *out
 ) {
   u8string prefix;
-  printNonleafNode(nullptr, rootNode, nullptr, Multiverse::NON_ID, multiverse, selectedNodes, verboseNodes, nodesByIndex, nodeIndices, elideDeadEndNodes, prefix, out);
+  printNodeAsNonleaf(nullptr, rootNode, nullptr, Multiverse::NON_ID, multiverse, selectedNodes, verboseNodes, nodesByIndex, nodeIndices, elideDeadEndNodes, prefix, out);
 }
 
 u8string renderActionInput (ActionId actionId, const Multiverse &multiverse) {
@@ -574,7 +574,7 @@ u8string renderActionInput (ActionId actionId, const Multiverse &multiverse) {
   return actionInput;
 }
 
-void printLeafNode (
+void printNodeAsLeaf (
   const u8string *output, Node *node, Node *parentNode, ActionId actionId,
   const Multiverse &multiverse, const unordered_set<Node *> &selectedNodes, const unordered_set<Node *> &verboseNodes,
   const vector<NodeData> &nodesByIndex, const unordered_map<Node *, size_t> &nodeIndices, bool elideDeadEndNodes, u8string &r_prefix, FILE *out
@@ -585,15 +585,12 @@ void printLeafNode (
     fprintf(out, "* ");
   }
 
-  fprintf(
-    out,
-    "%ssig of hash %u (elsewhere)\n",
-    renderActionInput(actionId, multiverse).c_str(),
-    node->getSignature().hash()
-  );
+  fprintf(out, "%s", renderActionInput(actionId, multiverse).c_str());
+  fprintf(out, "[sig of hash &%08X] ", node->getSignature().hash());
+  fprintf(out, "(elsewhere)\n");
 }
 
-void printNonleafNode (
+void printNodeAsNonleaf (
   const u8string *output, Node *node, Node *parentNode, ActionId actionId,
   const Multiverse &multiverse, const unordered_set<Node *> &selectedNodes, const unordered_set<Node *> &verboseNodes,
   const vector<NodeData> &nodesByIndex, const unordered_map<Node *, size_t> &nodeIndices, bool elideDeadEndNodes, u8string &r_prefix, FILE *out
@@ -603,18 +600,14 @@ void printNonleafNode (
     fprintf(out, "* ");
   }
 
-  size_t nodeIndex = *find(nodeIndices, node);
-
-  fprintf(
-    out,
-    "(%u) %ssig of hash %u / state size %d / %u children\n",
-    nodeIndex,
-    renderActionInput(actionId, multiverse).c_str(),
-    /* node->getSignature().wrXXXX().c_str(), */
-    node->getSignature().hash(),
-    node->getState() != nullptr ? node->getState()->getSize() : static_cast<size_t>(-1),
-    node->getChildrenSize()
-  );
+  fprintf(out, "(%u) %s", *find(nodeIndices, node), renderActionInput(actionId, multiverse).c_str());
+  fprintf(out, "[sig of hash &%08X] ", node->getSignature().hash());
+  if (node->getState()) {
+    fprintf(out, "unprocessed\n");
+  } else {
+    size_t c = node->getChildrenSize();
+    fprintf(out, "%u %s\n", c, c == 1 ? "child" : "children");
+  }
   if (output) {
     u8string o(*output);
     char8_t c;
@@ -677,7 +670,7 @@ void printNonleafNode (
 
     fprintf(out, "%s%c-> ", r_prefix.c_str(), last ? '+' : '|');
     r_prefix.append(last ? u8("    ") : u8("|   "));
-    (fmts[i] == LEAF ? printLeafNode : printNonleafNode)(verboseNodes.find(childNode) != verboseNodes.end() ? &childOuput : nullptr, childNode, node, childActionId, multiverse, selectedNodes, verboseNodes, nodesByIndex, nodeIndices, elideDeadEndNodes, r_prefix, out);
+    (fmts[i] == LEAF ? printNodeAsLeaf : printNodeAsNonleaf)(verboseNodes.find(childNode) != verboseNodes.end() ? &childOuput : nullptr, childNode, node, childActionId, multiverse, selectedNodes, verboseNodes, nodesByIndex, nodeIndices, elideDeadEndNodes, r_prefix, out);
     r_prefix.resize(r_prefix.size() - 4);
   }
 }

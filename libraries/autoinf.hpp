@@ -38,13 +38,10 @@ template<typename _T> class Hasher {
 class Signature {
   pub class Iterator;
 
-  // XXXX debug-only stuff!!
-  prv static iu64 BYTE_COUNTS[256];
   prv static const iu8f ESCAPE = 200;
   prv core::string<iu8f> b;
   prv size_t h;
 
-  pub core::u8string wrXXXX () const;
   pub Signature ();
   pub Signature (const Signature &) = default;
   pub Signature &operator= (const Signature &) = default;

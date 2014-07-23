@@ -29,12 +29,12 @@ void printNode (
   const autoinf::Multiverse &multiverse, const std::unordered_set<autoinf::Multiverse::Node *> &selectedNodes, const std::unordered_set<autoinf::Multiverse::Node *> &verboseNodes,
   const std::vector<NodeData> &nodesByIndex, const std::unordered_map<autoinf::Multiverse::Node *, size_t> &nodeIndices, bool elideDeadEndNodes, FILE *out
 );
-void printLeafNode (
+void printNodeAsLeaf (
   const core::u8string *output, autoinf::Multiverse::Node *node, autoinf::Multiverse::Node *parentNode, autoinf::Multiverse::ActionId actionId,
   const autoinf::Multiverse &multiverse, const std::unordered_set<autoinf::Multiverse::Node *> &selectedNodes, const std::unordered_set<autoinf::Multiverse::Node *> &verboseNodes,
   const std::vector<NodeData> &nodesByIndex, const std::unordered_map<autoinf::Multiverse::Node *, size_t> &nodeIndices, bool elideDeadEndNodes, core::u8string &r_prefix, FILE *out
 );
-void printNonleafNode (
+void printNodeAsNonleaf (
   const core::u8string *output, autoinf::Multiverse::Node *node, autoinf::Multiverse::Node *parentNode, autoinf::Multiverse::ActionId actionId,
   const autoinf::Multiverse &multiverse, const std::unordered_set<autoinf::Multiverse::Node *> &selectedNodes, const std::unordered_set<autoinf::Multiverse::Node *> &verboseNodes,
   const std::vector<NodeData> &nodesByIndex, const std::unordered_map<autoinf::Multiverse::Node *, size_t> &nodeIndices, bool elideDeadEndNodes, core::u8string &r_prefix, FILE *out
