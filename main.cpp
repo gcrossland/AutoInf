@@ -44,8 +44,10 @@ int main (int argc, char *argv[]) {
       outPathName = argv[1];
     }
 
+    const iu height = 64;
+    const iu undoDepth = 0;
     u8string output;
-    Vm vm("104/104.z5", 70, 128, 1, true, output);
+    Vm vm("104/104.z5", 70, height, undoDepth, true, output);
     Multiverse multiverse(
       vm, u8("verbose\nfullscore\n"), output, u8("save\n\1\n"), u8("restore\n\1\n"),
       vector<vector<u8string>> {
@@ -77,7 +79,7 @@ int main (int argc, char *argv[]) {
       }
     );
     /*
-    Vm vm("103/103.z5", 70, 128, 1, true, output);
+    Vm vm("103/103.z5", 70, height, undoDepth, true, output);
     Multiverse multiverse(
       vm, u8(""), output, u8("s\n\1\n"), u8("r\n\1\n"),
       vector<vector<u8string>> {
@@ -95,7 +97,7 @@ int main (int argc, char *argv[]) {
     );
     */
     /*
-    Vm vm("advent/advent.z5", 70, 128, 1, true, output);
+    Vm vm("advent/advent.z5", 70, height, undoDepth, true, output);
     const ActionWord::CategorySet holdable = 1 << 0;
     const ActionWord::CategorySet lightable = 1 << 1;
     const ActionWord::CategorySet wearable = 1 << 2;
