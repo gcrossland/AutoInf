@@ -1,10 +1,10 @@
 # CMD_RM CMD_MKDIR CMD_CP LIBCACHEDIR CONFIG FLAGS
 AUTOINF_MAJ=1
 AUTOINF_MIN=0
-LIBS=core-1.0 bitset-1.0 autofrotz-1.0
+REQUIRED_LIBS=core-1.0 bitset-1.0 autofrotz-1.0
 
-LIBFLAGS::=$(foreach o,$(LIBS),-I$(LIBCACHEDIR)/$(o)/include) $(foreach o,$(LIBS),-L$(LIBCACHEDIR)/$(o)/lib-$(CONFIG)) $(foreach o,$(shell parselibs libnames $(LIBS)),-l$(o))
-DEPENDENCIESFLAGS::=-DDEPENDENCIES="$(shell parselibs dependenciesdefn $(LIBS))"
+AVAILABLE_LIBS::=$(shell parselibs availablelibs $(REQUIRED_LIBS))
+LIBFLAGS::=$(foreach o,$(AVAILABLE_LIBS),-I$(LIBCACHEDIR)/$(o)/include) $(foreach o,$(AVAILABLE_LIBS),-L$(LIBCACHEDIR)/$(o)/lib-$(CONFIG)) $(foreach o,$(shell parselibs libnames $(AVAILABLE_LIBS)),-l$(o))
 
 autoinf: autoinf.exe
 
@@ -16,7 +16,7 @@ o:
 AUTOINF_HDRS=libraries/autoinf.hpp libraries/autoinf.ipp libraries/autoinf.using
 
 o/autoinf.o: libraries/autoinf.cpp $(AUTOINF_HDRS) | o
-	gcc $(FLAGS) $(LIBFLAGS) $(DEPENDENCIESFLAGS) -DLIB_MAJ=$(AUTOINF_MAJ) -DLIB_MIN=$(AUTOINF_MIN) -x c++ -c $< -o $@
+	gcc $(FLAGS) $(LIBFLAGS) -DLIB_MAJ=$(AUTOINF_MAJ) -DLIB_MIN=$(AUTOINF_MIN) -DDEPENDENCIES="$(shell parselibs dependenciesdefn $(AVAILABLE_LIBS))" -x c++ -c $< -o $@
 
 AUTOINF_OBJS=o/autoinf.o
 
