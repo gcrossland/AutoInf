@@ -57,7 +57,7 @@ template<typename ..._Ts> void Multiverse::ActionTemplate::init (u8string &&segm
 }
 
 template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd, Vm &vm) {
-  typedef tuple<Node *, ActionId, u8string, Signature, State> result;
+  typedef tuple<Node *, ActionId, u8string, Signature, State, vector<MetricValue>> result;
   DS();
 
   deque<result> resultQueue;
@@ -70,13 +70,14 @@ template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd,
       DS();
       DW(, "adding done result to queue");
       unique_lock<mutex> l(resultQueueLock);
-      resultQueue.emplace_back(nullptr, 0, u8string(), Signature(), State());
+      resultQueue.emplace_back(nullptr, 0, u8string(), Signature(), State(), vector<MetricValue>());
       resultQueueCondVar.notify_one();
       DW(, "done adding done result to queue");
     });
 
     u8string input;
     u8string output;
+    vector<MetricValue> metricValues;
     State postState;
     for (; nodesBegin != nodesEnd; ++nodesBegin) {
       DW(, "looking at the next node:");
@@ -96,6 +97,7 @@ template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd,
           DW(, "was about to process action of id ",id,", but at least one of the words used in the action is in the deworded set");
           continue;
         }
+
         input.clear();
         actionSet.getInput(id, input);
         DW(, "processing action **",input.c_str(),"** (id ",id,")");
@@ -117,6 +119,12 @@ template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd,
           DW(, "the resultant VM state is the same as the parent's, so skipping");
           continue;
         }
+
+        metricValues.clear();
+        for (const Metric &metric : metrics) {
+          metricValues.push_back(metric(vm, signature, output));
+        }
+
         DW(, "output from the action is **", output.c_str(), "**");
         try {
           // XXXX better response from doSaveAction on 'can't save'?
@@ -127,7 +135,7 @@ template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd,
         {
           DW(, "adding the result to queue");
           unique_lock<mutex> l(resultQueueLock);
-          resultQueue.emplace_back(parentNode, id, output, move(signature), postState); // XXXX will copy signature!!
+          resultQueue.emplace_back(parentNode, id, output, move(signature), postState, metricValues);
           resultQueueCondVar.notify_one();
           DW(, "done adding the result to queue");
         }
@@ -167,6 +175,7 @@ template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd,
     u8string &resultOutput = get<2>(rs);
     Signature &resultSignature = get<3>(rs);
     State &resultState = get<4>(rs);
+    vector<MetricValue> &resultMetricValues = get<5>(rs);
     DW(, "M the child is for the action of id ",parentActionId,"; the sig is of hash ", resultSignature.hash());
     DA(!(resultSignature == parentNode->getSignature()));
 
@@ -174,7 +183,7 @@ template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd,
     auto v = find(nodes, resultSignature);
     if (!v) {
       DW(, "M this is a new node for this multiverse!");
-      unique_ptr<Node> n(new Node(move(resultSignature), move(resultState)));
+      unique_ptr<Node> n(new Node(move(resultSignature), move(resultState), move(resultMetricValues)));
       resultNode = n.get();
       nodes.emplace(ref(resultNode->getSignature()), resultNode);
       n.release();

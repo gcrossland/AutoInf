@@ -165,6 +165,9 @@ class Multiverse {
     pub void getInput (ActionId id, core::u8string &r_out) const;
   };
 
+  pub typedef size_t MetricValue;
+  pub typedef std::function<MetricValue (const autofrotz::Vm &vm, const Signature &signature, const core::u8string &output)> Metric;
+
   prv struct RangesetPart {
     iu16f setSize;
     iu16f clearSize;
@@ -181,9 +184,11 @@ class Multiverse {
   pub class Node {
     prv Signature signature;
     prv std::unique_ptr<autofrotz::State> state;
+    prv std::vector<MetricValue> metricValues;
     prv std::vector<std::tuple<ActionId, core::u8string, Node *>> children;
 
-    pub Node (Signature &&signature, autofrotz::State &&state);
+    // XXXX on collapse, pick the highest metric value for each metric from every collapsed-in node? OR require them to be the same?
+    pub Node (Signature &&signature, autofrotz::State &&state, std::vector<MetricValue> &&metricValues);
     Node (const Node &) = delete;
     Node &operator= (const Node &) = delete;
     Node (Node &&) = delete;
@@ -192,6 +197,7 @@ class Multiverse {
     pub const Signature &getSignature () const;
     pub const autofrotz::State *getState () const;
     pub void clearState ();
+    pub MetricValue getMetricValue (size_t i) const;
     pub void addChild (ActionId actionId, core::u8string &&output, Node *node);
     pub void batchOfChildChangesCompleted ();
     pub size_t getChildrenSize () const;
@@ -221,6 +227,7 @@ class Multiverse {
   prv const core::u8string restoreActionInput;
   prv const ActionSet actionSet;
   prv const std::function<bool (const autofrotz::Vm &vm, const core::u8string &output)> deworder;
+  prv const std::vector<Metric> metrics;
   prv bitset::Bitset ignoredBytes;
   prv Rangeset ignoredByteRangeset;
   prv Node *rootNode;
@@ -231,7 +238,7 @@ class Multiverse {
     const core::u8string &saveActionInput, const core::u8string &restoreActionInput,
     const std::vector<std::vector<core::u8string>> &equivalentActionInputsSet,
     std::vector<ActionWord> &&words, std::vector<ActionTemplate> &&dewordingTemplates, std::vector<ActionTemplate> &&otherTemplates,
-    std::function<bool (const autofrotz::Vm &vm, const core::u8string &output)> deworder
+    std::function<bool (const autofrotz::Vm &vm, const core::u8string &output)> &&deworder, std::vector<Metric> &&metrics
   );
   prv static bitset::Bitset initIgnoredBytes (autofrotz::Vm &vm);
   Multiverse (const Multiverse &) = delete;
@@ -241,6 +248,7 @@ class Multiverse {
   pub ~Multiverse () noexcept;
 
   pub void getActionInput (ActionId id, core::u8string &r_out) const;
+  pub size_t getMetricCount () const;
   prv static void doAction (autofrotz::Vm &vm, core::u8string::const_iterator inputBegin, core::u8string::const_iterator inputEnd, core::u8string &r_output, const char8_t *deathExceptionMsg);
   prv static void doAction (autofrotz::Vm &vm, const core::u8string &input, core::u8string &r_output, const char8_t *deathExceptionMsg);
   prv void doSaveAction (autofrotz::Vm &vm, autofrotz::State &r_state);

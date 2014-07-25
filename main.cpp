@@ -19,6 +19,9 @@ using std::unordered_map;
 using std::move;
 using core::PlainException;
 using std::copy;
+using Metric = autoinf::Multiverse::Metric;
+using MetricValue = autoinf::Multiverse::MetricValue;
+using autoinf::Signature;
 
 /* -----------------------------------------------------------------------------
 ----------------------------------------------------------------------------- */
@@ -27,8 +30,6 @@ DC();
 void terminator () {
   core::dieHard();
 }
-
-FILE *out;
 
 int main (int argc, char *argv[]) {
   std::set_terminate(&terminator);
@@ -76,6 +77,26 @@ int main (int argc, char *argv[]) {
       },
       [] (const Vm &vm, const u8string &output) -> bool {
         return output.find(u8("You can't see")) != std::string::npos;
+      },
+      vector<Metric> {
+        [] (const Vm &vm, const Signature &signature, const u8string &output) -> MetricValue {
+          MetricValue v = 0;
+          for (iu8 b : signature) {
+            if (b != 0) {
+              for (iu8 i = 0; i != 8; ++i) {
+                v += (b >> i) & 0b1;
+              }
+            }
+          }
+          return v;
+        },
+        [] (const Vm &vm, const Signature &signature, const u8string &output) -> MetricValue {
+          MetricValue v = 0;
+          for (iu8 b : signature) {
+            v += (b != 0);
+          }
+          return v;
+        }
       }
     );
     /*
@@ -569,15 +590,15 @@ u8string renderActionInput (ActionId actionId, const Multiverse &multiverse) {
     actionInput.push_back(U'"');
     multiverse.getActionInput(actionId, actionInput);
     actionInput.erase(actionInput.size() - 1);
-    actionInput.append(u8("\" -> "));
+    actionInput.append(u8("\" ->"));
   }
   return actionInput;
 }
 
-void printNodeAsLeaf (
-  const u8string *output, Node *node, Node *parentNode, ActionId actionId,
-  const Multiverse &multiverse, const unordered_set<Node *> &selectedNodes, const unordered_set<Node *> &verboseNodes,
-  const vector<NodeData> &nodesByIndex, const unordered_map<Node *, size_t> &nodeIndices, bool elideDeadEndNodes, u8string &r_prefix, FILE *out
+void printNodeHeader (
+  bool printNodeIndex, Node *node, ActionId actionId,
+  const Multiverse &multiverse, const unordered_set<Node *> &selectedNodes,
+  const unordered_map<Node *, size_t> &nodeIndices, FILE *out
 ) {
   // XXXX 'map contains' fn as well? also 'find an entry known to be present'? just subclass unordered_*<> (as we will soon do for basic_string) ???
   bool selected = selectedNodes.find(node) != selectedNodes.end();
@@ -585,9 +606,24 @@ void printNodeAsLeaf (
     fprintf(out, "* ");
   }
 
+  if (printNodeIndex) {
+    fprintf(out, "(%u) ", *find(nodeIndices, node));
+  }
+
   fprintf(out, "%s", renderActionInput(actionId, multiverse).c_str());
-  fprintf(out, "[sig of hash &%08X] ", node->getSignature().hash());
-  fprintf(out, "(elsewhere)\n");
+  fprintf(out, " [sig of hash &%08X]", node->getSignature().hash());
+  for (size_t i = 0, end = multiverse.getMetricCount(); i != end; ++i) {
+    fprintf(out, "%s%d", i == 0 ? " " : "/", node->getMetricValue(i));
+  }
+}
+
+void printNodeAsLeaf (
+  const u8string *output, Node *node, Node *parentNode, ActionId actionId,
+  const Multiverse &multiverse, const unordered_set<Node *> &selectedNodes, const unordered_set<Node *> &verboseNodes,
+  const vector<NodeData> &nodesByIndex, const unordered_map<Node *, size_t> &nodeIndices, bool elideDeadEndNodes, u8string &r_prefix, FILE *out
+) {
+  printNodeHeader(false, node, actionId, multiverse, selectedNodes, nodeIndices, out);
+  fprintf(out, " (elsewhere)\n");
 }
 
 void printNodeAsNonleaf (
@@ -595,18 +631,12 @@ void printNodeAsNonleaf (
   const Multiverse &multiverse, const unordered_set<Node *> &selectedNodes, const unordered_set<Node *> &verboseNodes,
   const vector<NodeData> &nodesByIndex, const unordered_map<Node *, size_t> &nodeIndices, bool elideDeadEndNodes, u8string &r_prefix, FILE *out
 ) {
-  bool selected = selectedNodes.find(node) != selectedNodes.end();
-  if (selected) {
-    fprintf(out, "* ");
-  }
-
-  fprintf(out, "(%u) %s", *find(nodeIndices, node), renderActionInput(actionId, multiverse).c_str());
-  fprintf(out, "[sig of hash &%08X] ", node->getSignature().hash());
+  printNodeHeader(true, node, actionId, multiverse, selectedNodes, nodeIndices, out);
   if (node->getState()) {
-    fprintf(out, "unprocessed\n");
+    fprintf(out, " unprocessed\n");
   } else {
     size_t c = node->getChildrenSize();
-    fprintf(out, "%u %s\n", c, c == 1 ? "child" : "children");
+    fprintf(out, " %u %s\n", c, c == 1 ? "child" : "children");
   }
   if (output) {
     u8string o(*output);

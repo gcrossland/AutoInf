@@ -156,7 +156,7 @@ Signature::Iterator Signature::Iterator::operator++ (int) noexcept {
 }
 
 bool operator== (const Signature::Iterator &l, const Signature::Iterator &r) noexcept {
-  return l.i == r.i;
+  return l.i == r.i && l.zeroByteCount == r.zeroByteCount;
 }
 
 bool operator!= (const Signature::Iterator &l, const Signature::Iterator &r) noexcept {
@@ -364,13 +364,13 @@ Multiverse::Rangeset::Rangeset (const Bitset &bitset, iu16 rangesEnd) : vector()
   }), " bits are set");
 }
 
-Multiverse::Node::Node (Signature &&signature, State &&state) :
-  signature(move(signature)), state(), children(0)
+Multiverse::Node::Node (Signature &&signature, State &&state, vector<MetricValue> &&metricValues) :
+  signature(move(signature)), state(), metricValues(metricValues), children(0)
 {
   if (!state.isEmpty()) {
     this->state.reset(new State(move(state)));
   }
-  DW(, "created new Node with sig of hash ", this->signature.hash(), " and state size ", this->state ? static_cast<is64>(this->state->getSize()) : -1);
+  DW(, "created new Node with sig of hash ", this->signature.hash());
 }
 
 const Signature &Multiverse::Node::getSignature () const {
@@ -384,6 +384,10 @@ const State *Multiverse::Node::getState () const {
 void Multiverse::Node::clearState () {
   DW(, "done with trying to process Node with sig of hash ", signature.hash());
   state.reset();
+}
+
+Multiverse::MetricValue Multiverse::Node::getMetricValue (size_t i) const {
+  return metricValues[i];
 }
 
 void Multiverse::Node::addChild (ActionId actionId, u8string &&output, Node *node) {
@@ -459,9 +463,10 @@ Multiverse::Multiverse (
   Vm &vm, const u8string &initialInput, u8string &r_initialOutput, const u8string &saveActionInput, const u8string &restoreActionInput,
   const vector<vector<u8string>> &equivalentActionInputsSet,
   vector<ActionWord> &&words, vector<ActionTemplate> &&dewordingTemplates, vector<ActionTemplate> &&otherTemplates,
-  function<bool (const Vm &vm, const u8string &output)> deworder
+  function<bool (const Vm &vm, const u8string &output)> &&deworder, vector<Metric> &&metrics
 ) :
-  saveActionInput(saveActionInput), restoreActionInput(restoreActionInput), actionSet(move(words), move(dewordingTemplates), move(otherTemplates)), deworder(deworder),
+  saveActionInput(saveActionInput), restoreActionInput(restoreActionInput), actionSet(move(words), move(dewordingTemplates), move(otherTemplates)),
+  deworder(deworder), metrics(metrics),
   ignoredBytes(initIgnoredBytes(vm)), ignoredByteRangeset(ignoredBytes, vm.getDynamicMemorySize()), rootNode(nullptr)
 {
   DS();
@@ -471,7 +476,6 @@ Multiverse::Multiverse (
   Signature signature = createSignature(vm, ignoredByteRangeset);
   State state;
   doSaveAction(vm, state);
-  DW(, "root node save state has size ",state.getSize());
 
   Bitset extraIgnoredBytes;
   for (const auto &equivalentActionInputs : equivalentActionInputsSet) {
@@ -497,7 +501,7 @@ Multiverse::Multiverse (
   ignoredByteRangeset = Rangeset(ignoredBytes, vm.getDynamicMemorySize());
   signature = recreateSignature(signature, ignoredByteRangeset);
 
-  unique_ptr<Node> node(new Node(move(signature), move(state)));
+  unique_ptr<Node> node(new Node(move(signature), move(state), vector<MetricValue>(getMetricCount(), 0)));
   rootNode = node.get();
   nodes.emplace(ref(rootNode->getSignature()), rootNode);
   node.release();
@@ -538,6 +542,10 @@ Multiverse::~Multiverse () noexcept {
 
 void Multiverse::getActionInput (ActionId id, u8string &r_out) const {
   actionSet.getInput(id, r_out);
+}
+
+size_t Multiverse::getMetricCount () const {
+  return metrics.size();
 }
 
 void Multiverse::doAction(Vm &vm, u8string::const_iterator inputBegin, u8string::const_iterator inputEnd, u8string &r_output, const char8_t *deathExceptionMsg) {
