@@ -64,15 +64,15 @@ int main (int argc, char *argv[]) {
         {u8("wheel"), 0b101}
       },
       vector<ActionTemplate> {
-        {u8("examine "), 0b001, u8("\n")},
+        {u8("examine "), 0b001U, u8("\n")},
       },
       vector<ActionTemplate> {
         {u8("east\n")},
         {u8("west\n")},
-        {u8("take "), 0b010, u8("\n")},
-        {u8("drop "), 0b010, u8("\n")},
-        {u8("open "), 0b010, u8("\n")},
-        {u8("turn "), 0b100, u8(". pull "), 0b100, u8("\n")},
+        {u8("take "), 0b010U, u8("\n")},
+        {u8("drop "), 0b010U, u8("\n")},
+        {u8("open "), 0b010U, u8("\n")},
+        {u8("turn "), 0b100U, u8(". pull "), 0b100U, u8("\n")},
         {u8("enter light\n")}
       },
       [] (const Vm &vm, const u8string &output) -> bool {
