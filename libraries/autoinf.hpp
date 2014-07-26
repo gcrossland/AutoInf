@@ -137,7 +137,8 @@ class Multiverse {
   };
 
   prv class ActionSet {
-    prv typedef iu8f Index;
+    pub typedef iu8f Index;
+    pub class Action;
 
     prv std::vector<core::u8string> words;
     prv std::vector<std::vector<core::u8string>> templates;
@@ -159,10 +160,31 @@ class Multiverse {
     pub ActionSet (ActionSet &&) = default;
     pub ActionSet &operator= (ActionSet &&) = default;
 
+    pub const core::u8string &getWord (Index i) const;
     pub ActionId getSize () const;
-    pub ActionId getDewordingWord (ActionId id) const;
-    pub bool includesAnyWords (ActionId id, const bitset::Bitset &words) const;
-    pub void getInput (ActionId id, core::u8string &r_out) const;
+    pub Action get (ActionId id) const;
+
+    friend class Action;
+    pub class Action {
+      prv Action (const ActionSet &actionSet, ActionId id, const Index *specI);
+      pub Action (const Action &) = default;
+      pub Action &operator= (const Action &) = default;
+      pub Action (Action &&) = default;
+      pub Action &operator= (Action &&) = default;
+
+      prv const ActionSet &actionSet;
+      prv ActionId id;
+      prv const std::vector<core::u8string> &segments;
+      prv const Index *specWordsBegin;
+
+      pub ActionId getDewordingTarget () const;
+      pub size_t getWordCount () const;
+      pub Index getWord (size_t i) const;
+      pub void getInput (core::u8string &r_out) const;
+      pub bool includesAnyWords (const bitset::Bitset &words) const;
+
+      friend class ActionSet;
+    };
   };
 
   pub typedef size_t MetricValue;

@@ -250,7 +250,7 @@ Multiverse::ActionSet::ActionSet (vector<ActionWord> &&words, vector<ActionTempl
   DW(,"hence, action inputs are:");
   for (ActionId i = 0; i != getSize(); ++i) {
     u8string o;
-    getInput(i, o);
+    get(i).getInput(o);
     DW(,"  **",o.c_str(),"**");
   }
 }
@@ -295,50 +295,62 @@ void Multiverse::ActionSet::initImpl (
   }
 }
 
+const u8string &Multiverse::ActionSet::getWord (Index i) const {
+  DPRE(i < words.size());
+  return words[i];
+}
+
+
 Multiverse::ActionId Multiverse::ActionSet::getSize () const {
   return specBegins.size();
 }
 
-Multiverse::ActionId Multiverse::ActionSet::getDewordingWord (ActionId id) const {
-  if (id >= dewordingTemplateCount) {
+
+Multiverse::ActionSet::Action Multiverse::ActionSet::get (ActionId id) const {
+  DPRE(id < specBegins.size());
+  const Index *specI = &specs[specBegins[id]];
+
+  return Action(*this, id, specI);
+}
+
+Multiverse::ActionSet::Action::Action (const ActionSet &actionSet, ActionId id, const Index *specI) :
+  actionSet(actionSet), id(id), segments(actionSet.templates[*specI]), specWordsBegin(specI + 1)
+{
+}
+
+Multiverse::ActionId Multiverse::ActionSet::Action::getDewordingTarget () const {
+  if (id >= actionSet.dewordingTemplateCount) {
     return NON_ID;
   }
 
-  // XXXX tidy up
-  const Index *specI = &specs[specBegins[id]];
-  const vector<u8string> &segments = templates[*specI];
-  ++specI;
-
-  DA(segments.size() == 2);
-  return *specI;
+  DA(getWordCount() == 1);
+  return getWord(0);
 }
 
-bool Multiverse::ActionSet::includesAnyWords (ActionId id, const Bitset &words) const {
-  DPRE(id < specBegins.size());
-  const Index *specI = &specs[specBegins[id]];
-  const vector<u8string> &segments = templates[*specI];
-  ++specI;
+size_t Multiverse::ActionSet::Action::getWordCount () const {
+  return segments.size() - 1;
+}
 
-  for (const Index *specEnd = specI + segments.size() - 1; specI != specEnd; ++specI) {
-    if (words.getBit(*specI)) {
+Multiverse::ActionSet::Index Multiverse::ActionSet::Action::getWord (size_t i) const {
+  return specWordsBegin[i];
+}
+
+void Multiverse::ActionSet::Action::getInput (u8string &r_out) const {
+  const u8string *segmentsI = segments.data();
+  r_out.append(*(segmentsI++));
+  for (size_t i = 0, end = getWordCount(); i != end; ++i, ++segmentsI) {
+    r_out.append(actionSet.words[getWord(i)]);
+    r_out.append(*segmentsI);
+  }
+}
+
+bool Multiverse::ActionSet::Action::includesAnyWords (const Bitset &words) const {
+  for (size_t i = 0, end = getWordCount(); i != end; ++i) {
+    if (words.getBit(getWord(i))) {
       return true;
     }
   }
   return false;
-}
-
-void Multiverse::ActionSet::getInput (ActionId id, u8string &r_out) const {
-  DPRE(id < specBegins.size());
-  const Index *specI = &specs[specBegins[id]];
-  const vector<u8string> &segments = templates[*specI];
-  ++specI;
-
-  const u8string *segmentsI = segments.data();
-  r_out.append(*(segmentsI++));
-  for (const Index *specEnd = specI + segments.size() - 1; specI != specEnd; ++specI, ++segmentsI) {
-    r_out.append(words[*specI]);
-    r_out.append(*segmentsI);
-  }
 }
 
 Multiverse::Rangeset::Rangeset (const Bitset &bitset, iu16 rangesEnd) : vector() {
@@ -541,7 +553,7 @@ Multiverse::~Multiverse () noexcept {
 }
 
 void Multiverse::getActionInput (ActionId id, u8string &r_out) const {
-  actionSet.getInput(id, r_out);
+  actionSet.get(id).getInput(r_out);
 }
 
 size_t Multiverse::getMetricCount () const {

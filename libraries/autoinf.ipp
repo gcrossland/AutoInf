@@ -93,20 +93,22 @@ template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd,
 
       Bitset dewordedWords;
       for (ActionId id = 0, end = actionSet.getSize(); id != end; ++id) {
-        if (actionSet.includesAnyWords(id, dewordedWords)) {
+        ActionSet::Action action = actionSet.get(id);
+
+        if (action.includesAnyWords(dewordedWords)) {
           DW(, "was about to process action of id ",id,", but at least one of the words used in the action is in the deworded set");
           continue;
         }
 
         input.clear();
-        actionSet.getInput(id, input);
+        action.getInput(input);
         DW(, "processing action **",input.c_str(),"** (id ",id,")");
 
         doRestoreAction(vm, *parentState);
         doAction(vm, input, output, u8("VM was dead after doing action"));
         Signature signature = createSignature(vm, ignoredByteRangeset);
 
-        auto dewordingWord = actionSet.getDewordingWord(id);
+        auto dewordingWord = action.getDewordingTarget();
         if (dewordingWord != NON_ID) {
           DW(, "this action is a dewording one (for word of id ",dewordingWord,")");
           if (deworder(vm, output)) {
