@@ -40,8 +40,10 @@ void printNodeAsNonleaf (
   const std::vector<NodeData> &nodesByIndex, const std::unordered_map<autoinf::Multiverse::Node *, size_t> &nodeIndices, bool elideDeadEndNodes, core::u8string &r_prefix, FILE *out
 );
 
-void readLine(core::u8string &r_out);
-is getNaturalNumber(const char8_t *iBegin, const char8_t *iEnd);
+void readLine (core::u8string &r_out);
+const char8_t *skipSpaces (const char8_t *i, const char8_t *end);
+const char8_t *skipNonSpaces (const char8_t *i, const char8_t *end);
+is getNaturalNumber (const char8_t *iBegin, const char8_t *iEnd);
 
 /* -----------------------------------------------------------------------------
 ----------------------------------------------------------------------------- */

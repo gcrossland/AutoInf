@@ -295,11 +295,14 @@ void Multiverse::ActionSet::initImpl (
   }
 }
 
+Multiverse::ActionSet::Index Multiverse::ActionSet::getWordsSize () const {
+  return words.size();
+}
+
 const u8string &Multiverse::ActionSet::getWord (Index i) const {
   DPRE(i < words.size());
   return words[i];
 }
-
 
 Multiverse::ActionId Multiverse::ActionSet::getSize () const {
   return specBegins.size();
@@ -353,6 +356,18 @@ bool Multiverse::ActionSet::Action::includesAnyWords (const Bitset &words) const
   return false;
 }
 
+Multiverse::Metrics::State::State () {
+}
+
+Multiverse::Metrics::State::~State () {
+}
+
+Multiverse::Metrics::Metrics () {
+}
+
+Multiverse::Metrics::~Metrics () {
+}
+
 Multiverse::Rangeset::Rangeset (const Bitset &bitset, iu16 rangesEnd) : vector() {
   DS();
   DW(, "creating Rangeset from a bitset:");
@@ -376,8 +391,8 @@ Multiverse::Rangeset::Rangeset (const Bitset &bitset, iu16 rangesEnd) : vector()
   }), " bits are set");
 }
 
-Multiverse::Node::Node (Signature &&signature, State &&state, vector<MetricValue> &&metricValues) :
-  signature(move(signature)), state(), metricValues(metricValues), children(0)
+Multiverse::Node::Node (Signature &&signature, State &&state, unique_ptr<Metrics::State> &&metricsState) :
+  signature(move(signature)), state(), metricsState(move(metricsState)), children(0)
 {
   if (!state.isEmpty()) {
     this->state.reset(new State(move(state)));
@@ -389,6 +404,12 @@ const Signature &Multiverse::Node::getSignature () const {
   return signature;
 }
 
+Signature Multiverse::Node::setSignature (Signature &&signature) {
+  Signature oldSignature(move(this->signature));
+  this->signature = move(signature);
+  return oldSignature;
+}
+
 const State *Multiverse::Node::getState () const {
   return state.get();
 }
@@ -398,8 +419,8 @@ void Multiverse::Node::clearState () {
   state.reset();
 }
 
-Multiverse::MetricValue Multiverse::Node::getMetricValue (size_t i) const {
-  return metricValues[i];
+Multiverse::Metrics::State *Multiverse::Node::getMetricsState () const {
+  return metricsState.get();
 }
 
 void Multiverse::Node::addChild (ActionId actionId, u8string &&output, Node *node) {
@@ -433,12 +454,6 @@ const tuple<Multiverse::ActionId, u8string, Multiverse::Node *> *Multiverse::Nod
     return nullptr;
   }
   return &(*i);
-}
-
-Signature Multiverse::Node::setSignature (Signature &&signature) {
-  Signature oldSignature(move(this->signature));
-  this->signature = move(signature);
-  return oldSignature;
 }
 
 void Multiverse::Node::removeChild (size_t i) {
@@ -475,14 +490,15 @@ Multiverse::Multiverse (
   Vm &vm, const u8string &initialInput, u8string &r_initialOutput, const u8string &saveActionInput, const u8string &restoreActionInput,
   const vector<vector<u8string>> &equivalentActionInputsSet,
   vector<ActionWord> &&words, vector<ActionTemplate> &&dewordingTemplates, vector<ActionTemplate> &&otherTemplates,
-  function<bool (const Vm &vm, const u8string &output)> &&deworder, vector<Metric> &&metrics
+  function<bool (const Vm &vm, const u8string &output)> &&deworder, unique_ptr<Metrics> &&metrics
 ) :
   saveActionInput(saveActionInput), restoreActionInput(restoreActionInput), actionSet(move(words), move(dewordingTemplates), move(otherTemplates)),
-  deworder(deworder), metrics(metrics),
+  deworder(move(deworder)), metrics(move(metrics)),
   ignoredBytes(initIgnoredBytes(vm)), ignoredByteRangeset(ignoredBytes, vm.getDynamicMemorySize()), rootNode(nullptr)
 {
   DS();
   DPRE(vm.isAlive());
+  DPRE(!!this->metrics);
 
   doAction(vm, initialInput, r_initialOutput, u8("VM died while running the initial input"));
   Signature signature = createSignature(vm, ignoredByteRangeset);
@@ -513,7 +529,8 @@ Multiverse::Multiverse (
   ignoredByteRangeset = Rangeset(ignoredBytes, vm.getDynamicMemorySize());
   signature = recreateSignature(signature, ignoredByteRangeset);
 
-  unique_ptr<Node> node(new Node(move(signature), move(state), vector<MetricValue>(getMetricCount(), 0)));
+  unique_ptr<Metrics::State> metricsState(this->metrics.get()->nodeCreated(*this, NON_ID, r_initialOutput, signature));
+  unique_ptr<Node> node(new Node(move(signature), move(state), move(metricsState)));
   rootNode = node.get();
   nodes.emplace(ref(rootNode->getSignature()), rootNode);
   node.release();
@@ -552,12 +569,8 @@ Multiverse::~Multiverse () noexcept {
   }
 }
 
-void Multiverse::getActionInput (ActionId id, u8string &r_out) const {
-  actionSet.get(id).getInput(r_out);
-}
-
-size_t Multiverse::getMetricCount () const {
-  return metrics.size();
+const Multiverse::ActionSet &Multiverse::getActionSet () const {
+  return actionSet;
 }
 
 void Multiverse::doAction(Vm &vm, u8string::const_iterator inputBegin, u8string::const_iterator inputEnd, u8string &r_output, const char8_t *deathExceptionMsg) {
@@ -655,6 +668,10 @@ Signature Multiverse::recreateSignature (const Signature &oldSignature, const Ra
 
 Multiverse::Node *Multiverse::getNode (const NodePath &nodePath) const {
   return nodePath.resolve(rootNode);
+}
+
+Multiverse::Node *Multiverse::getRootNode () const {
+  return rootNode;
 }
 
 Multiverse::Node *Multiverse::collapseNode (

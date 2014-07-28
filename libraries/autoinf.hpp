@@ -104,7 +104,7 @@ class Multiverse {
   pub typedef iu16f ActionId;
   pub static constexpr ActionId NON_ID = static_cast<ActionId>(-1);
 
-  prv class ActionSet;
+  pub class ActionSet;
 
   pub class ActionWord {
     pub typedef iu64 CategorySet;
@@ -136,7 +136,7 @@ class Multiverse {
     friend class ActionSet;
   };
 
-  prv class ActionSet {
+  pub class ActionSet {
     pub typedef iu8f Index;
     pub class Action;
 
@@ -160,6 +160,7 @@ class Multiverse {
     pub ActionSet (ActionSet &&) = default;
     pub ActionSet &operator= (ActionSet &&) = default;
 
+    pub Index getWordsSize () const;
     pub const core::u8string &getWord (Index i) const;
     pub ActionId getSize () const;
     pub Action get (ActionId id) const;
@@ -187,8 +188,22 @@ class Multiverse {
     };
   };
 
-  pub typedef size_t MetricValue;
-  pub typedef std::function<MetricValue (const autofrotz::Vm &vm, const Signature &signature, const core::u8string &output)> Metric;
+  pub class Node;
+
+  pub class Metrics {
+    pub class State {
+      prt State ();
+      pub virtual ~State ();
+    };
+
+    prt Metrics ();
+    pub virtual ~Metrics ();
+
+    pub virtual std::unique_ptr<State> nodeCreated (const Multiverse &multiverse, ActionId parentActionId, const core::u8string &output, const Signature &signature) = 0;
+    pub virtual void nodeProcessed (const Multiverse &multiverse, Node &r_node) = 0;
+    pub virtual void nodesProcessed (const Multiverse &multiverse, Node &r_rootNode, std::unordered_map<std::reference_wrapper<const Signature>, Node *, Hasher<Signature>> &r_nodes) = 0;
+    pub virtual void nodesCollapsed (const Multiverse &multiverse, Node &r_rootNode, std::unordered_map<std::reference_wrapper<const Signature>, Node *, Hasher<Signature>> &r_nodes) = 0;
+  };
 
   prv struct RangesetPart {
     iu16f setSize;
@@ -197,36 +212,35 @@ class Multiverse {
 
   prv class Rangeset : public std::vector<RangesetPart> {
     pub Rangeset (const bitset::Bitset &bitset, iu16 size);
-    Rangeset (const Rangeset &) = default;
-    Rangeset &operator= (const Rangeset &) = default;
-    Rangeset (Rangeset &&) = default;
-    Rangeset &operator= (Rangeset &&) = default;
+    pub Rangeset (const Rangeset &) = default;
+    pub Rangeset &operator= (const Rangeset &) = default;
+    pub Rangeset (Rangeset &&) = default;
+    pub Rangeset &operator= (Rangeset &&) = default;
   };
 
   pub class Node {
     prv Signature signature;
     prv std::unique_ptr<autofrotz::State> state;
-    prv std::vector<MetricValue> metricValues;
+    prv std::unique_ptr<Metrics::State> metricsState;
     prv std::vector<std::tuple<ActionId, core::u8string, Node *>> children;
 
-    // XXXX on collapse, pick the highest metric value for each metric from every collapsed-in node? OR require them to be the same?
-    pub Node (Signature &&signature, autofrotz::State &&state, std::vector<MetricValue> &&metricValues);
+    pub Node (Signature &&signature, autofrotz::State &&state, std::unique_ptr<Metrics::State> &&metricsState);
     Node (const Node &) = delete;
     Node &operator= (const Node &) = delete;
     Node (Node &&) = delete;
     Node &operator= (Node &&) = delete;
 
     pub const Signature &getSignature () const;
+    pub Signature setSignature (Signature &&signature);
     pub const autofrotz::State *getState () const;
     pub void clearState ();
-    pub MetricValue getMetricValue (size_t i) const;
+    pub Metrics::State *getMetricsState () const;
     pub void addChild (ActionId actionId, core::u8string &&output, Node *node);
     pub void batchOfChildChangesCompleted ();
     pub size_t getChildrenSize () const;
     pub const std::tuple<ActionId, core::u8string, Node *> &getChild (size_t i) const;
     pub const std::tuple<ActionId, core::u8string, Node *> *getChildByActionId (ActionId id) const;
     // XXXX get index by action id?
-    pub Signature setSignature (Signature &&signature);
     pub void removeChild (size_t i);
     pub void changeChild (size_t i, Node *node);
   };
@@ -249,7 +263,7 @@ class Multiverse {
   prv const core::u8string restoreActionInput;
   prv const ActionSet actionSet;
   prv const std::function<bool (const autofrotz::Vm &vm, const core::u8string &output)> deworder;
-  prv const std::vector<Metric> metrics;
+  prv const std::unique_ptr<Metrics> metrics;
   prv bitset::Bitset ignoredBytes;
   prv Rangeset ignoredByteRangeset;
   prv Node *rootNode;
@@ -260,7 +274,7 @@ class Multiverse {
     const core::u8string &saveActionInput, const core::u8string &restoreActionInput,
     const std::vector<std::vector<core::u8string>> &equivalentActionInputsSet,
     std::vector<ActionWord> &&words, std::vector<ActionTemplate> &&dewordingTemplates, std::vector<ActionTemplate> &&otherTemplates,
-    std::function<bool (const autofrotz::Vm &vm, const core::u8string &output)> &&deworder, std::vector<Metric> &&metrics
+    std::function<bool (const autofrotz::Vm &vm, const core::u8string &output)> &&deworder, std::unique_ptr<Metrics> &&metrics
   );
   prv static bitset::Bitset initIgnoredBytes (autofrotz::Vm &vm);
   Multiverse (const Multiverse &) = delete;
@@ -269,8 +283,7 @@ class Multiverse {
   Multiverse &operator= (Multiverse &&) = delete;
   pub ~Multiverse () noexcept;
 
-  pub void getActionInput (ActionId id, core::u8string &r_out) const;
-  pub size_t getMetricCount () const;
+  pub const ActionSet &getActionSet () const;
   prv static void doAction (autofrotz::Vm &vm, core::u8string::const_iterator inputBegin, core::u8string::const_iterator inputEnd, core::u8string &r_output, const char8_t *deathExceptionMsg);
   prv static void doAction (autofrotz::Vm &vm, const core::u8string &input, core::u8string &r_output, const char8_t *deathExceptionMsg);
   prv void doSaveAction (autofrotz::Vm &vm, autofrotz::State &r_state);
@@ -278,6 +291,7 @@ class Multiverse {
   prv static Signature createSignature (const autofrotz::Vm &vm, const Rangeset &ignoredByteRangeset);
   prv static Signature recreateSignature (const Signature &oldSignature, const Rangeset &extraIgnoredByteRangeset);
   pub Node *getNode (const NodePath &nodePath) const;
+  pub Node *getRootNode () const;
   pub template<typename _I> void processNodes (_I nodesBegin, _I nodesEnd, autofrotz::Vm &vm);
   pub template<typename _I> bitset::Bitset createExtraIgnoredBytes (const Signature &firstSignature, _I otherSignatureIsBegin, _I otherSignatureIsEnd, const autofrotz::Vm &vm);
   pub template<typename _I> void collapseNodes (_I nodesBegin, _I nodesEnd, const autofrotz::Vm &vm);

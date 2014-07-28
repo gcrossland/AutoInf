@@ -57,7 +57,7 @@ template<typename ..._Ts> void Multiverse::ActionTemplate::init (u8string &&segm
 }
 
 template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd, Vm &vm) {
-  typedef tuple<Node *, ActionId, u8string, Signature, State, vector<MetricValue>> result;
+  typedef tuple<Node *, ActionId, u8string, Signature, State> result;
   DS();
 
   deque<result> resultQueue;
@@ -70,14 +70,13 @@ template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd,
       DS();
       DW(, "adding done result to queue");
       unique_lock<mutex> l(resultQueueLock);
-      resultQueue.emplace_back(nullptr, 0, u8string(), Signature(), State(), vector<MetricValue>());
+      resultQueue.emplace_back(nullptr, 0, u8string(), Signature(), State());
       resultQueueCondVar.notify_one();
       DW(, "done adding done result to queue");
     });
 
     u8string input;
     u8string output;
-    vector<MetricValue> metricValues;
     State postState;
     for (; nodesBegin != nodesEnd; ++nodesBegin) {
       DW(, "looking at the next node:");
@@ -122,11 +121,6 @@ template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd,
           continue;
         }
 
-        metricValues.clear();
-        for (const Metric &metric : metrics) {
-          metricValues.push_back(metric(vm, signature, output));
-        }
-
         DW(, "output from the action is **", output.c_str(), "**");
         try {
           // XXXX better response from doSaveAction on 'can't save'?
@@ -137,7 +131,7 @@ template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd,
         {
           DW(, "adding the result to queue");
           unique_lock<mutex> l(resultQueueLock);
-          resultQueue.emplace_back(parentNode, id, output, move(signature), postState, metricValues);
+          resultQueue.emplace_back(parentNode, id, output, move(signature), postState);
           resultQueueCondVar.notify_one();
           DW(, "done adding the result to queue");
         }
@@ -163,21 +157,21 @@ template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd,
     l.unlock();
 
     Node *parentNode = get<0>(rs);
+    if (prevParentNode && parentNode != prevParentNode) {
+      prevParentNode->batchOfChildChangesCompleted();
+      prevParentNode->clearState();
+      metrics.get()->nodeProcessed(*this, *prevParentNode);
+    }
+    prevParentNode = parentNode;
     if (!parentNode) {
       DW(, "M it's the end of the queue!");
       break;
     }
     DW(, "M the result is a child for the node with sig of hash ", parentNode->getSignature().hash());
-    if (prevParentNode && parentNode != prevParentNode) {
-      prevParentNode->batchOfChildChangesCompleted();
-      prevParentNode->clearState();
-    }
-    prevParentNode = parentNode;
     ActionId parentActionId = get<1>(rs);
     u8string &resultOutput = get<2>(rs);
     Signature &resultSignature = get<3>(rs);
     State &resultState = get<4>(rs);
-    vector<MetricValue> &resultMetricValues = get<5>(rs);
     DW(, "M the child is for the action of id ",parentActionId,"; the sig is of hash ", resultSignature.hash());
     DA(!(resultSignature == parentNode->getSignature()));
 
@@ -185,7 +179,8 @@ template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd,
     auto v = find(nodes, resultSignature);
     if (!v) {
       DW(, "M this is a new node for this multiverse!");
-      unique_ptr<Node> n(new Node(move(resultSignature), move(resultState), move(resultMetricValues)));
+      unique_ptr<Metrics::State> metricsState(metrics.get()->nodeCreated(*this, parentActionId, resultOutput, resultSignature));
+      unique_ptr<Node> n(new Node(move(resultSignature), move(resultState), move(metricsState)));
       resultNode = n.get();
       nodes.emplace(ref(resultNode->getSignature()), resultNode);
       n.release();
@@ -196,12 +191,10 @@ template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd,
     }
     parentNode->addChild(parentActionId, move(resultOutput), resultNode);
   }
-  if (prevParentNode) {
-    prevParentNode->batchOfChildChangesCompleted();
-    prevParentNode->clearState();
-  }
 
   dispatcherFuture.get();
+
+  metrics.get()->nodesProcessed(*this, *rootNode, nodes);
 }
 
 template<typename _I> Bitset Multiverse::createExtraIgnoredBytes (const Signature &firstSignature, _I otherSignatureIsBegin, _I otherSignatureIsEnd, const Vm &vm) {
@@ -286,6 +279,8 @@ template<typename _I> void Multiverse::collapseNodes (_I nodesBegin, _I nodesEnd
   }
   DW(, dc, " old nodes were deleted");
   nodes = move(survivingNodes);
+
+  metrics.get()->nodesCollapsed(*this, *rootNode, nodes);
 }
 
 /* -----------------------------------------------------------------------------

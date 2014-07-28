@@ -6,7 +6,6 @@ using autofrotz::Vm;
 using autoinf::Multiverse;
 using std::vector;
 using core::u8string;
-using NodePath = autoinf::Multiverse::NodePath;
 using Node = autoinf::Multiverse::Node;
 using ActionId = autoinf::Multiverse::ActionId;
 using ActionWord = autoinf::Multiverse::ActionWord;
@@ -19,9 +18,15 @@ using std::unordered_map;
 using std::move;
 using core::PlainException;
 using std::copy;
-using Metric = autoinf::Multiverse::Metric;
-using MetricValue = autoinf::Multiverse::MetricValue;
 using autoinf::Signature;
+using Metrics = autoinf::Multiverse::Metrics;
+using std::unique_ptr;
+using std::unordered_map;
+using std::reference_wrapper;
+using bitset::Bitset;
+using std::tuple;
+using std::sort;
+using std::min;
 
 /* -----------------------------------------------------------------------------
 ----------------------------------------------------------------------------- */
@@ -30,6 +35,130 @@ DC();
 void terminator () {
   core::dieHard();
 }
+
+class WordUsageMetrics : public virtual Metrics {
+  pub class State : public virtual Metrics::State {
+    prv Bitset interestingChildActionWords;
+    prv size_t score;
+    pub static constexpr size_t NON_SCORE = static_cast<size_t>(-1);
+
+    pub State () : score(NON_SCORE) {
+    }
+
+    State (const State &) = delete;
+    State &operator= (const State &) = delete;
+    State (State &&) = delete;
+    State &operator= (State &&) = delete;
+
+    pub size_t getScore () const {
+      return score;
+    }
+
+    friend class WordUsageMetrics;
+  };
+
+  pub WordUsageMetrics () {
+  }
+
+  prv void updateInterestingChildActionWords (const Multiverse::ActionSet &actionSet, const Node &node, Bitset &r_words) {
+    DPRE(!node.getState());
+
+    r_words.clear();
+    for (size_t i = 0, end = node.getChildrenSize(); i != end; ++i) {
+      auto action = actionSet.get(get<0>(node.getChild(i)));
+      for (size_t i = 0, end = action.getWordCount(); i != end; ++i) {
+        r_words.setBit(action.getWord(i));
+      }
+    }
+    r_words.compact();
+  }
+
+  pub unique_ptr<Metrics::State> nodeCreated (const Multiverse &multiverse, ActionId parentActionId, const u8string &output, const Signature &signature) {
+    char b[10];
+    sprintf(b, "&%08X", signature.hash());
+    DW(, "DDDD created new node with sig of hash ",b);
+    return unique_ptr<Metrics::State>(new State());
+  }
+
+  pub void nodeProcessed (const Multiverse &multiverse, Node &r_node) {
+    const Multiverse::ActionSet &actionSet = multiverse.getActionSet();
+
+    updateInterestingChildActionWords(actionSet, r_node, dynamic_cast<State *>(r_node.getMetricsState())->interestingChildActionWords);
+  }
+
+  prv void calculateNodeScore (Node *node, size_t parentNodeScore, size_t nodesSize, const size_t *wordCounts) {
+    State *state = dynamic_cast<State *>(node->getMetricsState());
+    if (state->score != State::NON_SCORE) {
+      return;
+    }
+    char b[10];
+    sprintf(b, "&%08X", node->getSignature().hash());
+    DW(, "DDDD calculating node score for node with sig of hash ",b);
+
+    size_t score;
+    if (node->getState()) {
+      score = 0;
+    } else {
+      Bitset &words = state->interestingChildActionWords;
+      score = 0;
+      for (size_t i = words.getNextSetBit(0); i != Bitset::NON_INDEX; i = words.getNextSetBit(i + 1)) {
+        DW(, "       action word of id ", i);
+        score += nodesSize / wordCounts[i];
+      }
+    }
+    DW(, "       final local score is ", score);
+    DW(, "       (parent score is ", parentNodeScore,")");
+    score += parentNodeScore;
+    state->score = score;
+
+    for (size_t i = 0, end = node->getChildrenSize(); i != end; ++i) {
+      calculateNodeScore(get<2>(node->getChild(i)), score, nodesSize, wordCounts);
+    }
+  }
+
+  prv void nodesChanged (bool updateWords, const Multiverse &multiverse, Node &r_rootNode, unordered_map<reference_wrapper<const Signature>, Node *, autoinf::Hasher<Signature>> &r_nodes) {
+    DS();
+    DW(, "DDDD nodes have changed!");
+    const Multiverse::ActionSet &actionSet = multiverse.getActionSet();
+    size_t nodesSize = r_nodes.size();
+
+    size_t wordCounts[actionSet.getWordsSize()];
+    for (auto &c : wordCounts) {
+      c = 0;
+    }
+
+    for (auto &entry : r_nodes) {
+      Node *node = get<1>(entry);
+      State *state = dynamic_cast<State *>(node->getMetricsState());
+      state->score = State::NON_SCORE;
+      if (node->getState()) {
+        continue;
+      }
+      Bitset &words = state->interestingChildActionWords;
+      if (updateWords) {
+        updateInterestingChildActionWords(actionSet, *node, words);
+      }
+      for (size_t i = words.getNextSetBit(0); i != Bitset::NON_INDEX; i = words.getNextSetBit(i + 1)) {
+        ++wordCounts[i];
+      }
+    }
+    DW(, "DDDD word counts:");
+    for (size_t i = 0, end = actionSet.getWordsSize(); i != end; ++i) {
+      DW(, "DDDD   ",actionSet.getWord(i).c_str()," - ",wordCounts[i]);
+    }
+
+    // XXXX walk in a bredth first fashion (like prime parent)?
+    calculateNodeScore(&r_rootNode, 0, nodesSize, wordCounts);
+  }
+
+  pub void nodesProcessed (const Multiverse &multiverse, Node &r_rootNode, unordered_map<reference_wrapper<const Signature>, Node *, autoinf::Hasher<Signature>> &r_nodes) {
+    nodesChanged(false, multiverse, r_rootNode, r_nodes);
+  }
+
+  pub void nodesCollapsed (const Multiverse &multiverse, Node &r_rootNode, unordered_map<reference_wrapper<const Signature>, Node *, autoinf::Hasher<Signature>> &r_nodes) {
+    nodesChanged(true, multiverse, r_rootNode, r_nodes);
+  }
+};
 
 int main (int argc, char *argv[]) {
   std::set_terminate(&terminator);
@@ -61,7 +190,8 @@ int main (int argc, char *argv[]) {
         {u8("red sphere"), 0b011},
         {u8("blue sphere"), 0b011},
         {u8("green sphere"), 0b001},
-        {u8("wheel"), 0b101}
+        {u8("wheel"), 0b101},
+        {u8("light"), 0b1001},
       },
       vector<ActionTemplate> {
         {u8("examine "), 0b001U, u8("\n")},
@@ -73,31 +203,12 @@ int main (int argc, char *argv[]) {
         {u8("drop "), 0b010U, u8("\n")},
         {u8("open "), 0b010U, u8("\n")},
         {u8("turn "), 0b100U, u8(". pull "), 0b100U, u8("\n")},
-        {u8("enter light\n")}
+        {u8("enter "), 0b1000U, u8("\n")}
       },
       [] (const Vm &vm, const u8string &output) -> bool {
         return output.find(u8("You can't see")) != std::string::npos;
       },
-      vector<Metric> {
-        [] (const Vm &vm, const Signature &signature, const u8string &output) -> MetricValue {
-          MetricValue v = 0;
-          for (iu8 b : signature) {
-            if (b != 0) {
-              for (iu8 i = 0; i != 8; ++i) {
-                v += (b >> i) & 0b1;
-              }
-            }
-          }
-          return v;
-        },
-        [] (const Vm &vm, const Signature &signature, const u8string &output) -> MetricValue {
-          MetricValue v = 0;
-          for (iu8 b : signature) {
-            v += (b != 0);
-          }
-          return v;
-        }
-      }
+      unique_ptr<Metrics>(new WordUsageMetrics())
     );
     /*
     Vm vm("103/103.z5", 70, height, undoDepth, true, output);
@@ -350,7 +461,8 @@ int main (int argc, char *argv[]) {
       },
       [] (const Vm &vm, const u8string &output) -> bool {
         return output.find(u8("You can't see")) != std::string::npos;
-      }
+      },
+      unique_ptr<Metrics>(new WordUsageMetrics())
     );
     */
 
@@ -360,13 +472,14 @@ int main (int argc, char *argv[]) {
     unordered_map<Node *, size_t> nodeIndices;
     bool elideDeadEndNodes = false;
     u8string line;
+    u8string message;
     while (true) {
       system("cls");
 
       if (nodesByIndex.empty()) {
         nodeIndices.clear();
         studyNodes(multiverse, nodesByIndex, nodeIndices);
-        for (unordered_set<Node *> *nodes: {&selectedNodes, &verboseNodes}) {
+        for (unordered_set<Node *> *nodes : {&selectedNodes, &verboseNodes}) {
           nodes->clear();
         }
       }
@@ -385,17 +498,23 @@ int main (int argc, char *argv[]) {
           }
         });
 
-        printNode(multiverse.getNode(NodePath()), multiverse, selectedNodes, verboseNodes, nodesByIndex, nodeIndices, elideDeadEndNodes, out);
+        printNode(multiverse.getRootNode(), multiverse, selectedNodes, verboseNodes, nodesByIndex, nodeIndices, elideDeadEndNodes, out);
       }
 
+      if (!message.empty()) {
+        printf("%s\n\n", message.c_str());
+        message.clear();
+      }
       printf(
         "_Quit\n"
         "Show All _Nodes     Hide All _Dead End Nodes\n"
         "Select _All         _Clear Selection    _Invert Selection\n"
+        "Select by Top Sc_ore <n>\n"
         "_Show Output        _Hide Output\n"
         "_Process            Co_llapse           _Terminate\n"
         ">"
       );
+
       do {
         line.clear();
         readLine(line);
@@ -421,6 +540,39 @@ int main (int argc, char *argv[]) {
           }
         }
         selectedNodes = move(nextSelectedNodes);
+      } else if (line[0] == U'O' || line[0] == U'o') {
+        const char8_t *lineEnd = line.data() + line.size();
+        const char8_t *lineI = skipSpaces(line.data() + 1, lineEnd);
+        is n = getNaturalNumber(lineI, lineEnd);
+        if (n > 0) {
+          vector<tuple<size_t, Node *>> scoredNodes;
+          scoredNodes.reserve(nodesByIndex.size());
+
+          for (const auto &d : nodesByIndex) {
+            Node *node = d.node;
+            size_t score = dynamic_cast<WordUsageMetrics::State *>(node->getMetricsState())->getScore();
+            scoredNodes.emplace_back(score, node);
+          }
+          sort(scoredNodes.begin(), scoredNodes.end(), [] (const tuple<size_t, Node *> &o0, const tuple<size_t, Node *> &o1) -> bool {
+            return get<0>(o0) > get<0>(o1);
+          });
+
+          size_t count = min(static_cast<size_t>(n), scoredNodes.size());
+          auto scoredNodesI = scoredNodes.begin() + static_cast<ptrdiff_t>(count - 1); // XXXX sort out size_t -> ptrdiff_t
+          size_t minScore = get<0>(*scoredNodesI);
+          auto scoredNodesEnd = scoredNodes.end();
+          ++scoredNodesI;
+          for (; scoredNodesI != scoredNodesEnd && get<0>(*scoredNodesI) == minScore; ++scoredNodesI);
+          count = static_cast<size_t>(scoredNodesI - scoredNodes.begin());
+
+          for (auto i = scoredNodes.begin(); i != scoredNodesI; ++i) {
+            selectedNodes.insert(get<1>(*i));
+          }
+
+          char8_t b[1024];
+          sprintf(reinterpret_cast<char *>(b), "Selected %d (of %d) nodes (threshold score %d)", count, scoredNodes.size(), minScore);
+          message.append(b);
+        }
       } else if (line == u8("S") || line == u8("s")) {
         verboseNodes.insert(selectedNodes.cbegin(), selectedNodes.cend());
       } else if (line == u8("H") || line == u8("h")) {
@@ -451,15 +603,9 @@ int main (int argc, char *argv[]) {
       } else {
         const char8_t *lineI = line.data();
         const char8_t *lineEnd = lineI + line.size();
-        while (true) {
-          for (; lineI != lineEnd && *lineI == ' '; ++lineI);
-          const char8_t *numBegin = lineI;
-          if (numBegin == lineEnd) {
-            break;
-          }
-          for (; lineI != lineEnd && *lineI != ' '; ++lineI);
-          const char8_t *numEnd = lineI;
-
+        while (lineI != lineEnd) {
+          const char8_t *numBegin = lineI = skipSpaces(lineI, lineEnd);
+          const char8_t *numEnd = lineI = skipNonSpaces(lineI, lineEnd);
           is n = getNaturalNumber(numBegin, numEnd);
           size_t nn;
           if (n >= 0 && (nn = static_cast<size_t>(n)) < nodesByIndex.size()) {
@@ -492,7 +638,7 @@ void studyNodes (const Multiverse &multiverse, vector<NodeData> &r_nodesByIndex,
   iu depth = 0;
   size_t s0;
   size_t s1 = 0;
-  Node *rootNode = multiverse.getNode(NodePath());
+  Node *rootNode = multiverse.getRootNode();
   do {
     DW(, "studying nodes at depth ",depth);
     s0 = s1;
@@ -588,7 +734,7 @@ u8string renderActionInput (ActionId actionId, const Multiverse &multiverse) {
   u8string actionInput;
   if (actionId != Multiverse::NON_ID) {
     actionInput.push_back(U'"');
-    multiverse.getActionInput(actionId, actionInput);
+    multiverse.getActionSet().get(actionId).getInput(actionInput);
     actionInput.erase(actionInput.size() - 1);
     actionInput.append(u8("\" ->"));
   }
@@ -612,9 +758,7 @@ void printNodeHeader (
 
   fprintf(out, "%s", renderActionInput(actionId, multiverse).c_str());
   fprintf(out, " [sig of hash &%08X]", node->getSignature().hash());
-  for (size_t i = 0, end = multiverse.getMetricCount(); i != end; ++i) {
-    fprintf(out, "%s%d", i == 0 ? " " : "/", node->getMetricValue(i));
-  }
+  fprintf(out, " score %d /", dynamic_cast<WordUsageMetrics::State *>(node->getMetricsState())->getScore());
 }
 
 void printNodeAsLeaf (
@@ -724,6 +868,16 @@ void readLine (u8string &r_out) {
   char8_t b[1024];
   size_t size = readLine(b, sizeof(b));
   r_out.append(b, size);
+}
+
+const char8_t *skipSpaces (const char8_t *i, const char8_t *end) {
+  for (; i != end && *i == ' '; ++i);
+  return i;
+}
+
+const char8_t *skipNonSpaces (const char8_t *i, const char8_t *end) {
+  for (; i != end && *i != ' '; ++i);
+  return i;
 }
 
 is getNaturalNumber (const char8_t *iBegin, const char8_t *iEnd) {
