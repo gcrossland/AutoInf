@@ -27,6 +27,7 @@ using bitset::Bitset;
 using std::tuple;
 using std::sort;
 using std::min;
+using std::find;
 
 /* -----------------------------------------------------------------------------
 ----------------------------------------------------------------------------- */
@@ -606,15 +607,36 @@ int main (int argc, char *argv[]) {
         while (lineI != lineEnd) {
           const char8_t *numBegin = lineI = skipSpaces(lineI, lineEnd);
           const char8_t *numEnd = lineI = skipNonSpaces(lineI, lineEnd);
-          is n = getNaturalNumber(numBegin, numEnd);
+          const char8_t *dash = find(numBegin, numEnd, U'-');
+
+          const size_t rX = static_cast<size_t>(-1);
+          size_t r0 = rX;
+          size_t r1 = rX;
+
+          is n = getNaturalNumber(numBegin, dash);
           size_t nn;
           if (n >= 0 && (nn = static_cast<size_t>(n)) < nodesByIndex.size()) {
-            Node *node = nodesByIndex[nn].node;
-            auto pos = selectedNodes.find(node);
-            if (pos == selectedNodes.end()) {
-              selectedNodes.insert(node);
-            } else {
-              selectedNodes.erase(pos);
+            r0 = nn;
+          }
+          if (dash == numEnd) {
+            r1 = r0 + 1;
+          } else {
+            is n = getNaturalNumber(dash + 1, numEnd);
+            size_t nn;
+            if (n >= 0 && (nn = static_cast<size_t>(n)) < nodesByIndex.size()) {
+              r1 = nn + 1;
+            }
+          }
+
+          if (r0 != rX && r1 != rX) {
+            for (size_t i = r0; i != r1; ++i) {
+              Node *node = nodesByIndex[i].node;
+              auto pos = selectedNodes.find(node);
+              if (pos == selectedNodes.end()) {
+                selectedNodes.insert(node);
+              } else {
+                selectedNodes.erase(pos);
+              }
             }
           }
         }
