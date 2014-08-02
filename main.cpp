@@ -776,6 +776,27 @@ void printNodeHeader (
   fprintf(out, " score %d /", dynamic_cast<WordUsageMetrics::State *>(node->getMetricsState())->getScore());
 }
 
+void printNodeOutput (const u8string *output, const u8string &prefix, FILE *out) {
+  if (!output) {
+    return;
+  }
+
+  u8string o(*output);
+  char8_t c;
+  while ((c = o.back()) == U'\n' || c == U'>') {
+    o.pop_back();
+  }
+  o.push_back(U'\n');
+
+  auto lineStart = o.cbegin();
+  for (auto i = o.cbegin(), end = o.cend(); i != end; ++i) {
+    if (*i == U'\n') {
+      fprintf(out, "%s  %.*s\n", prefix.c_str(), static_cast<int>(i - lineStart), &*lineStart);
+      lineStart = i + 1;
+    }
+  }
+}
+
 void printNodeAsLeaf (
   const u8string *output, Node *node, Node *parentNode, ActionId actionId,
   const Multiverse &multiverse, const unordered_set<Node *> &selectedNodes, const unordered_set<Node *> &verboseNodes,
@@ -783,6 +804,7 @@ void printNodeAsLeaf (
 ) {
   printNodeHeader(U'{', U'}', node, actionId, multiverse, selectedNodes, nodeIndices, out);
   fprintf(out, " (elsewhere)\n");
+  printNodeOutput(output, r_prefix, out);
 }
 
 void printNodeAsNonleaf (
@@ -797,22 +819,7 @@ void printNodeAsNonleaf (
     size_t c = node->getChildrenSize();
     fprintf(out, " %u %s\n", c, c == 1 ? "child" : "children");
   }
-  if (output) {
-    u8string o(*output);
-    char8_t c;
-    while ((c = o.back()) == U'\n' || c == U'>') {
-      o.pop_back();
-    }
-    o.push_back(U'\n');
-
-    auto lineStart = o.cbegin();
-    for (auto i = o.cbegin(), end = o.cend(); i != end; ++i) {
-      if (*i == U'\n') {
-        fprintf(out, "%s  %s\n", r_prefix.c_str(), u8string(lineStart, i).c_str());
-        lineStart = i + 1;
-      }
-    }
-  }
+  printNodeOutput(output, r_prefix, out);
 
   enum {
     NONE,

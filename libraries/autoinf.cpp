@@ -392,7 +392,7 @@ Multiverse::Rangeset::Rangeset (const Bitset &bitset, iu16 rangesEnd) : vector()
 }
 
 Multiverse::Node::Node (Signature &&signature, State &&state, unique_ptr<Metrics::State> &&metricsState) :
-  signature(move(signature)), state(), metricsState(move(metricsState)), children(0)
+  signature(move(signature)), state(), metricsState(move(metricsState)), children()
 {
   if (!state.isEmpty()) {
     this->state.reset(new State(move(state)));
