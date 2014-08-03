@@ -487,23 +487,23 @@ Multiverse::Node *Multiverse::NodePath::resolve (Node *node) const {
 }
 
 Multiverse::Multiverse (
-  Vm &vm, const u8string &initialInput, u8string &r_initialOutput, const u8string &saveActionInput, const u8string &restoreActionInput,
+  Vm &r_vm, const u8string &initialInput, u8string &r_initialOutput, const u8string &saveActionInput, const u8string &restoreActionInput,
   const vector<vector<u8string>> &equivalentActionInputsSet,
   vector<ActionWord> &&words, vector<ActionTemplate> &&dewordingTemplates, vector<ActionTemplate> &&otherTemplates,
   function<bool (const Vm &vm, const u8string &output)> &&deworder, unique_ptr<Metrics> &&metrics
 ) :
   saveActionInput(saveActionInput), restoreActionInput(restoreActionInput), actionSet(move(words), move(dewordingTemplates), move(otherTemplates)),
   deworder(move(deworder)), metrics(move(metrics)),
-  ignoredBytes(initIgnoredBytes(vm)), ignoredByteRangeset(ignoredBytes, vm.getDynamicMemorySize()), rootNode(nullptr)
+  ignoredBytes(initIgnoredBytes(r_vm)), ignoredByteRangeset(ignoredBytes, r_vm.getDynamicMemorySize()), rootNode(nullptr)
 {
   DS();
-  DPRE(vm.isAlive());
+  DPRE(r_vm.isAlive());
   DPRE(!!this->metrics);
 
-  doAction(vm, initialInput, r_initialOutput, u8("VM died while running the initial input"));
-  Signature signature = createSignature(vm, ignoredByteRangeset);
+  doAction(r_vm, initialInput, r_initialOutput, u8("VM died while running the initial input"));
+  Signature signature = createSignature(r_vm, ignoredByteRangeset);
   State state;
-  doSaveAction(vm, state);
+  doSaveAction(r_vm, state);
 
   Bitset extraIgnoredBytes;
   for (const auto &equivalentActionInputs : equivalentActionInputsSet) {
@@ -516,17 +516,17 @@ Multiverse::Multiverse (
     for (size_t i = 0, end = equivalentActionInputs.size(); i != end; ++i) {
       const u8string &actionInput = equivalentActionInputs[i];
       DW(, " doing **",actionInput.c_str(),"**");
-      doRestoreAction(vm, state);
-      doAction(vm, actionInput, tmp, u8("VM was dead after doing action"));
+      doRestoreAction(r_vm, state);
+      doAction(r_vm, actionInput, tmp, u8("VM was dead after doing action"));
       DW(, " output was **",tmp.c_str(),"**");
       tmp.clear();
-      signatures[i] = createSignature(vm, ignoredByteRangeset);
+      signatures[i] = createSignature(r_vm, ignoredByteRangeset);
       signatureIs[i] = signatures[i].begin();
     }
-    extraIgnoredBytes |= createExtraIgnoredBytes(signatures[0], signatureIs + 1, signatureIs + equivalentActionInputs.size(), vm);
+    extraIgnoredBytes |= createExtraIgnoredBytes(signatures[0], signatureIs + 1, signatureIs + equivalentActionInputs.size(), r_vm);
   }
   ignoredBytes |= move(extraIgnoredBytes);
-  ignoredByteRangeset = Rangeset(ignoredBytes, vm.getDynamicMemorySize());
+  ignoredByteRangeset = Rangeset(ignoredBytes, r_vm.getDynamicMemorySize());
   signature = recreateSignature(signature, ignoredByteRangeset);
 
   unique_ptr<Metrics::State> metricsState(this->metrics.get()->nodeCreated(*this, NON_ID, r_initialOutput, signature));
@@ -537,7 +537,7 @@ Multiverse::Multiverse (
 }
 
 // XXXX trial - handy for keeping signatures clean with 103
-Bitset Multiverse::initIgnoredBytes (Vm &vm) {
+Bitset Multiverse::initIgnoredBytes (const Vm &vm) {
   Bitset ignoredBytes;
 
   /*
@@ -573,44 +573,44 @@ const Multiverse::ActionSet &Multiverse::getActionSet () const {
   return actionSet;
 }
 
-void Multiverse::doAction(Vm &vm, u8string::const_iterator inputBegin, u8string::const_iterator inputEnd, u8string &r_output, const char8_t *deathExceptionMsg) {
-  DPRE(vm.isAlive());
+void Multiverse::doAction(Vm &r_vm, u8string::const_iterator inputBegin, u8string::const_iterator inputEnd, u8string &r_output, const char8_t *deathExceptionMsg) {
+  DPRE(r_vm.isAlive());
 
   r_output.clear(); // XXXX really do this here? not let the caller do it? ...
-  vm.doAction(inputBegin, inputEnd, r_output);
-  if (!vm.isAlive()) {
+  r_vm.doAction(inputBegin, inputEnd, r_output);
+  if (!r_vm.isAlive()) {
     throw PlainException(deathExceptionMsg);
   }
 }
 
-void Multiverse::doAction(Vm &vm, const u8string &input, u8string &r_output, const char8_t *deathExceptionMsg) {
-  doAction(vm, input.begin(), input.end(), r_output, deathExceptionMsg);
+void Multiverse::doAction(Vm &r_vm, const u8string &input, u8string &r_output, const char8_t *deathExceptionMsg) {
+  doAction(r_vm, input.begin(), input.end(), r_output, deathExceptionMsg);
 }
 
-void Multiverse::doSaveAction (Vm &vm, State &r_state) {
-  vm.setSaveState(&r_state);
+void Multiverse::doSaveAction (Vm &r_vm, State &r_state) {
+  r_vm.setSaveState(&r_state);
   auto _ = finally([&] () {
-    vm.setSaveState(nullptr);
+    r_vm.setSaveState(nullptr);
   });
 
   u8string o;
-  doAction(vm, saveActionInput, o, u8("VM died while saving a state"));
+  doAction(r_vm, saveActionInput, o, u8("VM died while saving a state"));
 
-  if (vm.getSaveCount() == 0) {
+  if (r_vm.getSaveCount() == 0) {
     throw PlainException(u8("save action didn't cause saving"));
   }
 }
 
-void Multiverse::doRestoreAction (Vm &vm, const State &state) {
-  vm.setRestoreState(&state);
+void Multiverse::doRestoreAction (Vm &r_vm, const State &state) {
+  r_vm.setRestoreState(&state);
   auto _ = finally([&] () {
-    vm.setRestoreState(nullptr);
+    r_vm.setRestoreState(nullptr);
   });
 
   u8string o;
-  doAction(vm, restoreActionInput, o, u8("VM died while restoring a state"));
+  doAction(r_vm, restoreActionInput, o, u8("VM died while restoring a state"));
 
-  if (vm.getRestoreCount() == 0) {
+  if (r_vm.getRestoreCount() == 0) {
     throw PlainException(u8("restore action didn't cause restoration"));
   }
 }

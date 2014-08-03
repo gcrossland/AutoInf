@@ -56,7 +56,7 @@ template<typename ..._Ts> void Multiverse::ActionTemplate::init (u8string &&segm
   init(forward<_Ts>(ts)...);
 }
 
-template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd, Vm &vm) {
+template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd, Vm &r_vm) {
   typedef tuple<Node *, ActionId, u8string, Signature, State> result;
   DS();
 
@@ -103,14 +103,14 @@ template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd,
         action.getInput(input);
         DW(, "processing action **",input.c_str(),"** (id ",id,")");
 
-        doRestoreAction(vm, *parentState);
-        doAction(vm, input, output, u8("VM was dead after doing action"));
-        Signature signature = createSignature(vm, ignoredByteRangeset);
+        doRestoreAction(r_vm, *parentState);
+        doAction(r_vm, input, output, u8("VM was dead after doing action"));
+        Signature signature = createSignature(r_vm, ignoredByteRangeset);
 
         auto dewordingWord = action.getDewordingTarget();
         if (dewordingWord != NON_ID) {
           DW(, "this action is a dewording one (for word of id ",dewordingWord,")");
-          if (deworder(vm, output)) {
+          if (deworder(r_vm, output)) {
             DW(, "word of id ",dewordingWord," is missing!");
             dewordedWords.setBit(dewordingWord);
           }
@@ -124,7 +124,7 @@ template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd,
         DW(, "output from the action is **", output.c_str(), "**");
         try {
           // XXXX better response from doSaveAction on 'can't save'?
-          doSaveAction(vm, postState);
+          doSaveAction(r_vm, postState);
         } catch (...) {
           postState.clear();
         }
