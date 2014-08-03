@@ -356,16 +356,16 @@ bool Multiverse::ActionSet::Action::includesAnyWords (const Bitset &words) const
   return false;
 }
 
-Multiverse::Metrics::State::State () {
+Multiverse::Metric::State::State () {
 }
 
-Multiverse::Metrics::State::~State () {
+Multiverse::Metric::State::~State () {
 }
 
-Multiverse::Metrics::Metrics () {
+Multiverse::Metric::Metric () {
 }
 
-Multiverse::Metrics::~Metrics () {
+Multiverse::Metric::~Metric () {
 }
 
 Multiverse::Rangeset::Rangeset (const Bitset &bitset, iu16 rangesEnd) : vector() {
@@ -391,8 +391,8 @@ Multiverse::Rangeset::Rangeset (const Bitset &bitset, iu16 rangesEnd) : vector()
   }), " bits are set");
 }
 
-Multiverse::Node::Node (Signature &&signature, State &&state, unique_ptr<Metrics::State> &&metricsState) :
-  signature(move(signature)), state(), metricsState(move(metricsState)), children()
+Multiverse::Node::Node (Signature &&signature, State &&state, unique_ptr<Metric::State> &&metricState) :
+  signature(move(signature)), state(), metricState(move(metricState)), children()
 {
   if (!state.isEmpty()) {
     this->state.reset(new State(move(state)));
@@ -419,8 +419,8 @@ void Multiverse::Node::clearState () {
   state.reset();
 }
 
-Multiverse::Metrics::State *Multiverse::Node::getMetricsState () const {
-  return metricsState.get();
+Multiverse::Metric::State *Multiverse::Node::getMetricState () const {
+  return metricState.get();
 }
 
 void Multiverse::Node::addChild (ActionId actionId, u8string &&output, Node *node) {
@@ -490,15 +490,15 @@ Multiverse::Multiverse (
   Vm &r_vm, const u8string &initialInput, u8string &r_initialOutput, function<bool (Vm &r_vm)> &&saver, function<bool (Vm &r_vm)> &&restorer,
   const vector<vector<u8string>> &equivalentActionInputsSet,
   vector<ActionWord> &&words, vector<ActionTemplate> &&dewordingTemplates, vector<ActionTemplate> &&otherTemplates,
-  function<bool (const Vm &vm, const u8string &output)> &&deworder, unique_ptr<Metrics> &&metrics
+  function<bool (const Vm &vm, const u8string &output)> &&deworder, unique_ptr<Metric> &&metric
 ) :
   saver(saver), restorer(restorer), actionSet(move(words), move(dewordingTemplates), move(otherTemplates)),
-  deworder(move(deworder)), metrics(move(metrics)),
+  deworder(move(deworder)), metric(move(metric)),
   ignoredBytes(initIgnoredBytes(r_vm)), ignoredByteRangeset(ignoredBytes, r_vm.getDynamicMemorySize()), rootNode(nullptr)
 {
   DS();
   DPRE(r_vm.isAlive());
-  DPRE(!!this->metrics);
+  DPRE(!!this->metric);
 
   doAction(r_vm, initialInput, r_initialOutput, u8("VM died while running the initial input"));
   Signature signature = createSignature(r_vm, ignoredByteRangeset);
@@ -529,8 +529,8 @@ Multiverse::Multiverse (
   ignoredByteRangeset = Rangeset(ignoredBytes, r_vm.getDynamicMemorySize());
   signature = recreateSignature(signature, ignoredByteRangeset);
 
-  unique_ptr<Metrics::State> metricsState(this->metrics.get()->nodeCreated(*this, NON_ID, r_initialOutput, signature));
-  unique_ptr<Node> node(new Node(move(signature), move(state), move(metricsState)));
+  unique_ptr<Metric::State> metricState(this->metric.get()->nodeCreated(*this, NON_ID, r_initialOutput, signature));
+  unique_ptr<Node> node(new Node(move(signature), move(state), move(metricState)));
   rootNode = node.get();
   nodes.emplace(ref(rootNode->getSignature()), rootNode);
   node.release();

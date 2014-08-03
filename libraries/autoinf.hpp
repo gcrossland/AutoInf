@@ -190,14 +190,16 @@ class Multiverse {
 
   pub class Node;
 
-  pub class Metrics {
+  pub class Metric {
     pub class State {
       prt State ();
       pub virtual ~State ();
+
+      pub virtual size_t getValue () = 0;
     };
 
-    prt Metrics ();
-    pub virtual ~Metrics ();
+    prt Metric ();
+    pub virtual ~Metric ();
 
     pub virtual std::unique_ptr<State> nodeCreated (const Multiverse &multiverse, ActionId parentActionId, const core::u8string &output, const Signature &signature) = 0;
     pub virtual void nodeProcessed (const Multiverse &multiverse, Node &r_node) = 0;
@@ -221,10 +223,10 @@ class Multiverse {
   pub class Node {
     prv Signature signature;
     prv std::unique_ptr<autofrotz::State> state;
-    prv std::unique_ptr<Metrics::State> metricsState;
+    prv std::unique_ptr<Metric::State> metricState;
     prv std::vector<std::tuple<ActionId, core::u8string, Node *>> children;
 
-    pub Node (Signature &&signature, autofrotz::State &&state, std::unique_ptr<Metrics::State> &&metricsState);
+    pub Node (Signature &&signature, autofrotz::State &&state, std::unique_ptr<Metric::State> &&metricState);
     Node (const Node &) = delete;
     Node &operator= (const Node &) = delete;
     Node (Node &&) = delete;
@@ -234,7 +236,7 @@ class Multiverse {
     pub Signature setSignature (Signature &&signature);
     pub const autofrotz::State *getState () const;
     pub void clearState ();
-    pub Metrics::State *getMetricsState () const;
+    pub Metric::State *getMetricState () const;
     pub void addChild (ActionId actionId, core::u8string &&output, Node *node);
     pub void batchOfChildChangesCompleted ();
     pub size_t getChildrenSize () const;
@@ -263,7 +265,7 @@ class Multiverse {
   prv const std::function<bool (autofrotz::Vm &r_vm)> restorer;
   prv const ActionSet actionSet;
   prv const std::function<bool (const autofrotz::Vm &vm, const core::u8string &output)> deworder;
-  prv const std::unique_ptr<Metrics> metrics;
+  prv const std::unique_ptr<Metric> metric;
   prv bitset::Bitset ignoredBytes;
   prv Rangeset ignoredByteRangeset;
   prv Node *rootNode;
@@ -274,7 +276,7 @@ class Multiverse {
     std::function<bool (autofrotz::Vm &r_vm)> &&saver, std::function<bool (autofrotz::Vm &r_vm)> &&restorer,
     const std::vector<std::vector<core::u8string>> &equivalentActionInputsSet,
     std::vector<ActionWord> &&words, std::vector<ActionTemplate> &&dewordingTemplates, std::vector<ActionTemplate> &&otherTemplates,
-    std::function<bool (const autofrotz::Vm &vm, const core::u8string &output)> &&deworder, std::unique_ptr<Metrics> &&metrics
+    std::function<bool (const autofrotz::Vm &vm, const core::u8string &output)> &&deworder, std::unique_ptr<Metric> &&metric
   );
   prv static bitset::Bitset initIgnoredBytes (const autofrotz::Vm &vm);
   Multiverse (const Multiverse &) = delete;
