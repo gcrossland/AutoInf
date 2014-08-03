@@ -259,8 +259,8 @@ class Multiverse {
     pub Node *resolve (Node *node) const;
   };
 
-  prv const core::u8string saveActionInput;
-  prv const core::u8string restoreActionInput;
+  prv const std::function<bool (autofrotz::Vm &r_vm)> saver;
+  prv const std::function<bool (autofrotz::Vm &r_vm)> restorer;
   prv const ActionSet actionSet;
   prv const std::function<bool (const autofrotz::Vm &vm, const core::u8string &output)> deworder;
   prv const std::unique_ptr<Metrics> metrics;
@@ -271,7 +271,7 @@ class Multiverse {
 
   pub Multiverse (
     autofrotz::Vm &r_vm, const core::u8string &initialInput, core::u8string &r_initialOutput,
-    const core::u8string &saveActionInput, const core::u8string &restoreActionInput,
+    std::function<bool (autofrotz::Vm &r_vm)> &&saver, std::function<bool (autofrotz::Vm &r_vm)> &&restorer,
     const std::vector<std::vector<core::u8string>> &equivalentActionInputsSet,
     std::vector<ActionWord> &&words, std::vector<ActionTemplate> &&dewordingTemplates, std::vector<ActionTemplate> &&otherTemplates,
     std::function<bool (const autofrotz::Vm &vm, const core::u8string &output)> &&deworder, std::unique_ptr<Metrics> &&metrics
@@ -284,8 +284,8 @@ class Multiverse {
   pub ~Multiverse () noexcept;
 
   pub const ActionSet &getActionSet () const;
-  prv static void doAction (autofrotz::Vm &r_vm, core::u8string::const_iterator inputBegin, core::u8string::const_iterator inputEnd, core::u8string &r_output, const char8_t *deathExceptionMsg);
-  prv static void doAction (autofrotz::Vm &r_vm, const core::u8string &input, core::u8string &r_output, const char8_t *deathExceptionMsg);
+  pub static void doAction (autofrotz::Vm &r_vm, core::u8string::const_iterator inputBegin, core::u8string::const_iterator inputEnd, core::u8string &r_output, const char8_t *deathExceptionMsg);
+  pub static void doAction (autofrotz::Vm &r_vm, const core::u8string &input, core::u8string &r_output, const char8_t *deathExceptionMsg);
   prv void doSaveAction (autofrotz::Vm &r_vm, autofrotz::State &r_state);
   prv void doRestoreAction (autofrotz::Vm &r_vm, const autofrotz::State &state);
   prv static Signature createSignature (const autofrotz::Vm &vm, const Rangeset &ignoredByteRangeset);

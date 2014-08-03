@@ -102,9 +102,10 @@ template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd,
         input.clear();
         action.getInput(input);
         DW(, "processing action **",input.c_str(),"** (id ",id,")");
+        output.clear();
 
         doRestoreAction(r_vm, *parentState);
-        doAction(r_vm, input, output, u8("VM was dead after doing action"));
+        doAction(r_vm, input, output, u8("VM died while doing action"));
         Signature signature = createSignature(r_vm, ignoredByteRangeset);
 
         auto dewordingWord = action.getDewordingTarget();

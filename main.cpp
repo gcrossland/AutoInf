@@ -177,10 +177,22 @@ int main (int argc, char *argv[]) {
 
     const iu height = 64;
     const iu undoDepth = 0;
+    const u8string saveActionInput(u8("save\n\1\n"));
+    const u8string restoreActionInput(u8("restore\n\1\n"));
     u8string output;
     Vm vm("104/104.z5", 70, height, undoDepth, true, output);
     Multiverse multiverse(
-      vm, u8("verbose\nfullscore\n"), output, u8("save\n\1\n"), u8("restore\n\1\n"),
+      vm, u8("verbose\nfullscore\n"), output,
+      [&saveActionInput] (Vm &r_vm) -> bool {
+        u8string o;
+        Multiverse::doAction(r_vm, saveActionInput, o, u8("VM died while saving a state"));
+        return r_vm.getSaveCount() != 0;
+      },
+      [&restoreActionInput] (Vm &r_vm) -> bool {
+        u8string o;
+        Multiverse::doAction(r_vm, restoreActionInput, o, u8("VM died while restoring a state"));
+        return r_vm.getRestoreCount() != 0;
+      },
       vector<vector<u8string>> {
         // {u8("z\n"), u8("z. z. z. z. z. z. z. z.\n")},
         // {u8("verbitudeise the tangerine monstrosity. verbitudeise the tangerine monstrosity.\n"), u8("")},
@@ -212,25 +224,9 @@ int main (int argc, char *argv[]) {
       unique_ptr<Metrics>(new WordUsageMetrics())
     );
     /*
-    Vm vm("103/103.z5", 70, height, undoDepth, true, output);
-    Multiverse multiverse(
-      vm, u8(""), output, u8("s\n\1\n"), u8("r\n\1\n"),
-      vector<vector<u8string>> {
-      },
-      vector<u8string> {
-        u8("0"), u8("1"), u8("2"), u8("3"), u8("5"), u8("6"), u8("B"), u8("D")
-      },
-      vector<vector<u8string>> {
-        {u8("xxxxxx\n")},
-        {u8("yyyyyyy\n")},
-        {u8("i"), u8("\n")},
-        {u8("b01\n")},
-        {u8("b23\n")}
-      }
-    );
-    */
-    /*
     Vm vm("advent/advent.z5", 70, height, undoDepth, true, output);
+    const u8string noResurrectionSaveActionInput(u8("no\n") + saveActionInput);
+    const u8string noResurrectionRestoreActionInput(u8("no\n") + restoreActionInput);
     iu c = 0;
     const ActionWord::CategorySet direction = 1U << (c++);
     const ActionWord::CategorySet noun = 1U << (c++);
@@ -250,7 +246,27 @@ int main (int argc, char *argv[]) {
     const ActionWord::CategorySet  flammable = 1U << (c++);
     const ActionWord::CategorySet  attachable = 1U << (c++);
     Multiverse multiverse(
-      vm, u8("verbose\nfullscore\n"), output, u8("save\n\1\n"), u8("restore\n\1\n"),
+      vm, u8("verbose\nfullscore\n"), output,
+      [&saveActionInput, &noResurrectionSaveActionInput] (Vm &r_vm) -> bool {
+        u8string o;
+        Multiverse::doAction(r_vm, saveActionInput, o, u8("VM died while saving a state"));
+
+        if (r_vm.getSaveCount() == 0 && o.find(u8("Please answer yes or no.")) != u8string::npos) {
+          Multiverse::doAction(r_vm, noResurrectionSaveActionInput, o, u8("VM died while declining resurrection and saving a state"));
+        }
+
+        return r_vm.getSaveCount() != 0;
+      },
+      [&restoreActionInput, &noResurrectionRestoreActionInput] (Vm &r_vm) -> bool {
+        u8string o;
+        Multiverse::doAction(r_vm, restoreActionInput, o, u8("VM died while restoring a state"));
+
+        if (r_vm.getRestoreCount() == 0 && o.find(u8("Please answer yes or no.")) != u8string::npos) {
+          Multiverse::doAction(r_vm, noResurrectionRestoreActionInput, o, u8("VM died while declining resurrection and restoring a state"));
+        }
+
+        return r_vm.getRestoreCount() != 0;
+      },
       vector<vector<u8string>> {
       },
       vector<ActionWord> {

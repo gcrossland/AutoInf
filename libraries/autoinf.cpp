@@ -487,12 +487,12 @@ Multiverse::Node *Multiverse::NodePath::resolve (Node *node) const {
 }
 
 Multiverse::Multiverse (
-  Vm &r_vm, const u8string &initialInput, u8string &r_initialOutput, const u8string &saveActionInput, const u8string &restoreActionInput,
+  Vm &r_vm, const u8string &initialInput, u8string &r_initialOutput, function<bool (Vm &r_vm)> &&saver, function<bool (Vm &r_vm)> &&restorer,
   const vector<vector<u8string>> &equivalentActionInputsSet,
   vector<ActionWord> &&words, vector<ActionTemplate> &&dewordingTemplates, vector<ActionTemplate> &&otherTemplates,
   function<bool (const Vm &vm, const u8string &output)> &&deworder, unique_ptr<Metrics> &&metrics
 ) :
-  saveActionInput(saveActionInput), restoreActionInput(restoreActionInput), actionSet(move(words), move(dewordingTemplates), move(otherTemplates)),
+  saver(saver), restorer(restorer), actionSet(move(words), move(dewordingTemplates), move(otherTemplates)),
   deworder(move(deworder)), metrics(move(metrics)),
   ignoredBytes(initIgnoredBytes(r_vm)), ignoredByteRangeset(ignoredBytes, r_vm.getDynamicMemorySize()), rootNode(nullptr)
 {
@@ -576,7 +576,6 @@ const Multiverse::ActionSet &Multiverse::getActionSet () const {
 void Multiverse::doAction(Vm &r_vm, u8string::const_iterator inputBegin, u8string::const_iterator inputEnd, u8string &r_output, const char8_t *deathExceptionMsg) {
   DPRE(r_vm.isAlive());
 
-  r_output.clear(); // XXXX really do this here? not let the caller do it? ...
   r_vm.doAction(inputBegin, inputEnd, r_output);
   if (!r_vm.isAlive()) {
     throw PlainException(deathExceptionMsg);
@@ -593,10 +592,10 @@ void Multiverse::doSaveAction (Vm &r_vm, State &r_state) {
     r_vm.setSaveState(nullptr);
   });
 
-  u8string o;
-  doAction(r_vm, saveActionInput, o, u8("VM died while saving a state"));
+  bool succeeded = saver(r_vm);
+  DPRE(r_vm.isAlive());
 
-  if (r_vm.getSaveCount() == 0) {
+  if (!succeeded) {
     throw PlainException(u8("save action didn't cause saving"));
   }
 }
@@ -607,10 +606,10 @@ void Multiverse::doRestoreAction (Vm &r_vm, const State &state) {
     r_vm.setRestoreState(nullptr);
   });
 
-  u8string o;
-  doAction(r_vm, restoreActionInput, o, u8("VM died while restoring a state"));
+  bool succeeded = restorer(r_vm);
+  DPRE(r_vm.isAlive());
 
-  if (r_vm.getRestoreCount() == 0) {
+  if (!succeeded) {
     throw PlainException(u8("restore action didn't cause restoration"));
   }
 }
