@@ -483,139 +483,95 @@ int main (int argc, char *argv[]) {
     vector<NodeData> nodesByIndex;
     unordered_map<Node *, size_t> nodeIndices;
     bool elideDeadEndNodes = false;
-    u8string line;
-    u8string message;
-    while (true) {
-      system("cls");
+    u8string in(u8(" "));
+    do {
+      u8string message;
 
-      if (nodesByIndex.empty()) {
-        nodeIndices.clear();
-        studyNodes(multiverse, nodesByIndex, nodeIndices);
-        for (unordered_set<Node *> *nodes : {&selectedNodes, &verboseNodes}) {
-          nodes->clear();
-        }
-      }
+      const char8_t *inI = in.data();
+      const char8_t *inEnd = inI + in.size();
+      while (inI != inEnd) {
+        const char8_t *inPartBegin = inI = skipSpaces(inI, inEnd);
+        const char8_t *inPartEnd = inI = skipNonSpaces(inI, inEnd);
+        u8string line(inPartBegin, inPartEnd);
 
-      {
-        FILE *out = stdout;
-        if (outPathName) {
-          out = fopen(outPathName, "wb");
-          if (!out) {
-            throw PlainException(u8("unable to open output file"));
-          }
-        }
-        auto _ = autoinf::finally([&] {
-          if (outPathName) {
-            fclose(out);
-          }
-        });
-
-        printNode(multiverse.getRootNode(), multiverse, selectedNodes, verboseNodes, nodesByIndex, nodeIndices, elideDeadEndNodes, out);
-      }
-
-      if (!message.empty()) {
-        printf("%s\n\n", message.c_str());
-        message.clear();
-      }
-      printf(
-        "_Quit\n"
-        "Show All _Nodes     Hide All _Dead End Nodes\n"
-        "Select _All         _Clear Selection    _Invert Selection\n"
-        "Select by Top Value <n>\n"
-        "_Show Output        _Hide Output\n"
-        "_Process            Co_llapse           _Terminate\n"
-        ">"
-      );
-
-      do {
-        line.clear();
-        readLine(line);
-      } while (line.empty() || line[0] == '#');
-      if (line == u8("Q") || line == u8("q")) {
-        break;
-      } else if (line == u8("N") || line == u8("n")) {
-        elideDeadEndNodes = false;
-      } else if (line == u8("D") || line == u8("d")) {
-        elideDeadEndNodes = true;
-      } else if (line == u8("A") || line == u8("a")) {
-        selectedNodes.clear();
-        for (const auto &d : nodesByIndex) {
-          selectedNodes.insert(d.node);
-        }
-      } else if (line == u8("C") || line == u8("c")) {
-        selectedNodes.clear();
-      } else if (line == u8("I") || line == u8("i")) {
-        decltype(selectedNodes) nextSelectedNodes;
-        for (const auto &d : nodesByIndex) {
-          if (selectedNodes.find(d.node) == selectedNodes.end()) {
-            nextSelectedNodes.insert(d.node);
-          }
-        }
-        selectedNodes = move(nextSelectedNodes);
-      } else if (line[0] == U'V' || line[0] == U'v') {
-        const char8_t *lineEnd = line.data() + line.size();
-        const char8_t *lineI = skipSpaces(line.data() + 1, lineEnd);
-        is n = getNaturalNumber(lineI, lineEnd);
-        if (n > 0) {
-          vector<tuple<size_t, Node *>> nodes;
-          nodes.reserve(nodesByIndex.size());
-
+        if (line == u8("N") || line == u8("n")) {
+          elideDeadEndNodes = false;
+        } else if (line == u8("D") || line == u8("d")) {
+          elideDeadEndNodes = true;
+        } else if (line == u8("A") || line == u8("a")) {
+          selectedNodes.clear();
           for (const auto &d : nodesByIndex) {
-            Node *node = d.node;
-            size_t value = node->getMetricState()->getValue();
-            nodes.emplace_back(value, node);
+            selectedNodes.insert(d.node);
           }
-          sort(nodes.begin(), nodes.end(), [] (const tuple<size_t, Node *> &o0, const tuple<size_t, Node *> &o1) -> bool {
-            return get<0>(o0) > get<0>(o1);
-          });
-
-          auto nodesNetEnd = nodes.begin() + static_cast<ptrdiff_t>(min(static_cast<size_t>(n), nodes.size()) - 1); // XXXX sort out size_t -> ptrdiff_t
-          size_t minValue = get<0>(*nodesNetEnd);
-          ++nodesNetEnd;
-          for (auto nodesEnd = nodes.end(); nodesNetEnd != nodesEnd && get<0>(*nodesNetEnd) == minValue; ++nodesNetEnd);
-          size_t count = static_cast<size_t>(nodesNetEnd - nodes.begin());
-
-          for (auto i = nodes.begin(); i != nodesNetEnd; ++i) {
-            selectedNodes.insert(get<1>(*i));
+        } else if (line == u8("C") || line == u8("c")) {
+          selectedNodes.clear();
+        } else if (line == u8("I") || line == u8("i")) {
+          decltype(selectedNodes) nextSelectedNodes;
+          for (const auto &d : nodesByIndex) {
+            if (selectedNodes.find(d.node) == selectedNodes.end()) {
+              nextSelectedNodes.insert(d.node);
+            }
           }
+          selectedNodes = move(nextSelectedNodes);
+        } else if (line.size() > 2 && (line[0] == U'V' || line[0] == U'v') && line[1] == U'-') {
+          is n = getNaturalNumber(line.data() + 2, line.data() + line.size());
+          if (n > 0) {
+            vector<tuple<size_t, Node *>> nodes;
+            nodes.reserve(nodesByIndex.size());
 
-          char8_t b[1024];
-          sprintf(reinterpret_cast<char *>(b), "Selected %d (of %d) nodes (threshold metric value %d)", count, nodes.size(), minValue);
-          message.append(b);
-        }
-      } else if (line == u8("S") || line == u8("s")) {
-        verboseNodes.insert(selectedNodes.cbegin(), selectedNodes.cend());
-      } else if (line == u8("H") || line == u8("h")) {
-        for (Node *node : selectedNodes) {
-          verboseNodes.erase(node);
-        }
-      } else if (line == u8("P") || line == u8("p")) {
-        Node *t[nodesByIndex.size()];
-        Node **tI = t;
-        for (const auto &d : nodesByIndex) {
-          Node *n = d.node;
-          if (selectedNodes.find(n) != selectedNodes.end()) {
-            *(tI++) = n;
+            for (const auto &d : nodesByIndex) {
+              Node *node = d.node;
+              size_t value = node->getMetricState()->getValue();
+              nodes.emplace_back(value, node);
+            }
+            sort(nodes.begin(), nodes.end(), [] (const tuple<size_t, Node *> &o0, const tuple<size_t, Node *> &o1) -> bool {
+              return get<0>(o0) > get<0>(o1);
+            });
+
+            auto nodesNetEnd = nodes.begin() + static_cast<ptrdiff_t>(min(static_cast<size_t>(n), nodes.size()) - 1); // XXXX sort out size_t -> ptrdiff_t
+            size_t minValue = get<0>(*nodesNetEnd);
+            ++nodesNetEnd;
+            for (auto nodesEnd = nodes.end(); nodesNetEnd != nodesEnd && get<0>(*nodesNetEnd) == minValue; ++nodesNetEnd);
+            size_t count = static_cast<size_t>(nodesNetEnd - nodes.begin());
+
+            for (auto i = nodes.begin(); i != nodesNetEnd; ++i) {
+              selectedNodes.insert(get<1>(*i));
+            }
+
+            char8_t b[1024];
+            sprintf(reinterpret_cast<char *>(b), "Selected %d (of %d) nodes (threshold metric value %d)\n\n", count, nodes.size(), minValue);
+            message.append(b);
           }
-        }
-        multiverse.processNodes(t, tI, vm);
-        nodesByIndex.clear();
-      } else if (line == u8("L") || line == u8("l")) {
-        if (selectedNodes.cbegin() != selectedNodes.cend()) {
-          multiverse.collapseNodes(selectedNodes.cbegin(), selectedNodes.cend(), vm);
-        }
-        nodesByIndex.clear();
-      } else if (line == u8("T") || line == u8("t")) {
-        for (Node *node : selectedNodes) {
-          node->clearState();
-        }
-        nodesByIndex.clear();
-      } else {
-        const char8_t *lineI = line.data();
-        const char8_t *lineEnd = lineI + line.size();
-        while (lineI != lineEnd) {
-          const char8_t *numBegin = lineI = skipSpaces(lineI, lineEnd);
-          const char8_t *numEnd = lineI = skipNonSpaces(lineI, lineEnd);
+        } else if (line == u8("S") || line == u8("s")) {
+          verboseNodes.insert(selectedNodes.cbegin(), selectedNodes.cend());
+        } else if (line == u8("H") || line == u8("h")) {
+          for (Node *node : selectedNodes) {
+            verboseNodes.erase(node);
+          }
+        } else if (line == u8("P") || line == u8("p")) {
+          Node *t[nodesByIndex.size()];
+          Node **tI = t;
+          for (const auto &d : nodesByIndex) {
+            Node *n = d.node;
+            if (selectedNodes.find(n) != selectedNodes.end()) {
+              *(tI++) = n;
+            }
+          }
+          multiverse.processNodes(t, tI, vm);
+          nodesByIndex.clear();
+        } else if (line == u8("L") || line == u8("l")) {
+          if (selectedNodes.cbegin() != selectedNodes.cend()) {
+            multiverse.collapseNodes(selectedNodes.cbegin(), selectedNodes.cend(), vm);
+          }
+          nodesByIndex.clear();
+        } else if (line == u8("T") || line == u8("t")) {
+          for (Node *node : selectedNodes) {
+            node->clearState();
+          }
+          nodesByIndex.clear();
+        } else {
+          const char8_t *numBegin = line.data();
+          const char8_t *numEnd = numBegin + line.size();
           const char8_t *dash = find(numBegin, numEnd, U'-');
 
           const size_t rX = static_cast<size_t>(-1);
@@ -649,8 +605,56 @@ int main (int argc, char *argv[]) {
             }
           }
         }
+
+        if (nodesByIndex.empty()) {
+          selectedNodes.clear();
+          verboseNodes.clear();
+          nodeIndices.clear();
+          studyNodes(multiverse, nodesByIndex, nodeIndices);
+        }
       }
-    }
+
+      if (getenv("TERM")) {
+        printf("\x1B[1J\x1B[;H");
+      } else {
+        system("cls");
+      }
+
+      {
+        FILE *out = stdout;
+        if (outPathName) {
+          out = fopen(outPathName, "wb");
+          if (!out) {
+            throw PlainException(u8("unable to open output file"));
+          }
+        }
+        auto _ = autoinf::finally([&] {
+          if (outPathName) {
+            fclose(out);
+          }
+        });
+
+        printNode(multiverse.getRootNode(), multiverse, selectedNodes, verboseNodes, nodesByIndex, nodeIndices, elideDeadEndNodes, out);
+      }
+
+      if (!message.empty()) {
+        printf("%s", message.c_str());
+      }
+      printf(
+        "Show All _Nodes     Hide All _Dead End Nodes\n"
+        "Select _All         _Clear Selection    _Invert Selection\n"
+        "Select by Top _Value-<n>\n"
+        "_Show Output        _Hide Output\n"
+        "_Process            Co_llapse           _Terminate\n"
+        ">"
+      );
+      fflush(stdout);
+
+      do {
+        in.clear();
+        readLine(in);
+      } while (!in.empty() && in[0] == U'#');
+    } while (in != u8("quit"));
 
     printf("Time spent in VM (over and above init): %f secs\n", vm.getTime());
 
@@ -895,7 +899,7 @@ size_t readLine (char8_t *b, size_t bSize) {
     }
   }
   if (size > 0 && b[size - 1] == '\n') {
-    b[--size] = '\0';
+    --size;
   }
   return size;
 }
@@ -917,6 +921,10 @@ const char8_t *skipNonSpaces (const char8_t *i, const char8_t *end) {
 }
 
 is getNaturalNumber (const char8_t *iBegin, const char8_t *iEnd) {
+  if (iBegin == iEnd || std::isspace(*iBegin)) {
+    return -1;
+  }
+
   char8_t in[iEnd - iBegin + 1];
   copy(iBegin, iEnd, in);
   in[iEnd - iBegin] = U'\0';
