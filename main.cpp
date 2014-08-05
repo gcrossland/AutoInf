@@ -650,10 +650,12 @@ int main (int argc, char *argv[]) {
       );
       fflush(stdout);
 
-      do {
-        in.clear();
-        readLine(in);
-      } while (!in.empty() && in[0] == U'#');
+      in.clear();
+      readLine(in);
+      size_t comment = in.find(U'#');
+      if (comment != u8string::npos) {
+        in.erase(comment);
+      }
     } while (in != u8("quit"));
 
     printf("Time spent in VM (over and above init): %f secs\n", vm.getTime());
