@@ -32,7 +32,209 @@ template<typename Key, typename T, typename Hash, typename KeyEqual, typename Al
   return e == map.end() ? nullptr : &get<1>(*e);
 }
 
+template<typename Key, typename T, typename Compare, typename Allocator, typename Key_> const T *find (const map<Key, T, Compare, Allocator> &map, const Key_ &key) {
+  auto e = map.find(key);
+  return e == map.end() ? nullptr : &get<1>(*e);
+}
 
+
+
+template<typename _OutputIterator> Serialiser<_OutputIterator>::Serialiser (_OutputIterator &&i) : i(move(i)), nextId(NULL_ID + 1) {
+  allocations.emplace(nullptr, tuple<id, void *>(NULL_ID, static_cast<char *>(nullptr) + 1));
+  DA(!!findAllocationStart(nullptr));
+}
+
+template<typename _OutputIterator> constexpr bool Serialiser<_OutputIterator>::isSerialising () const {
+  return true;
+}
+
+template<typename _OutputIterator> void Serialiser<_OutputIterator>::write (iu32 value) {
+  DW(, "writing iu value ",value);
+  setIeu(i, value);
+}
+
+template<typename _OutputIterator> void Serialiser<_OutputIterator>::write (is32 value) {
+  DW(, "writing is value ",value);
+  setIes(i, value);
+}
+
+template<typename _OutputIterator> void Serialiser<_OutputIterator>::write (char8_t value) {
+  DW(, "writing char8_t value ", u8string(1, value).c_str());
+  *(i++) = value;
+}
+
+template<typename _OutputIterator> void Serialiser<_OutputIterator>::write (char8_t *begin, char8_t *end) {
+  DW(, "writing char8_t values ", u8string(begin, end).c_str());
+  copy(begin, end, i);
+}
+
+template<typename _OutputIterator> void Serialiser<_OutputIterator>::process (iu16f &r_value) {
+  write(static_cast<iu32>(r_value));
+}
+
+template<typename _OutputIterator> void Serialiser<_OutputIterator>::process (is16f &r_value) {
+  write(static_cast<is32>(r_value));
+}
+
+template<typename _OutputIterator> void Serialiser<_OutputIterator>::process (iu32f &r_value) {
+  write(static_cast<iu32>(r_value));
+}
+
+template<typename _OutputIterator> void Serialiser<_OutputIterator>::process (is32f &r_value) {
+  write(static_cast<is32>(r_value));
+}
+
+template<typename _OutputIterator> void Serialiser<_OutputIterator>::process (u8string &r_value) {
+  write(r_value.size());
+  write(r_value.data(), r_value.data() + r_value.size());
+}
+
+template<typename _OutputIterator> template<typename _T, typename _SerialisationFunctor, iff(
+  std::is_convertible<_SerialisationFunctor, std::function<void (_T &, Serialiser<_OutputIterator> &)>>::value
+)> void Serialiser<_OutputIterator>::process (vector<_T> &r_value, const _SerialisationFunctor &serialiseElement) {
+  write(r_value.size());
+  for (_T &e : r_value) {
+    serialiseElement(e, *this);
+  }
+}
+
+template<typename _OutputIterator> void Serialiser<_OutputIterator>::process (Bitset &r_value) {
+  // TODO pull out
+  auto p = reinterpret_cast<string<iu> *>(&r_value);
+  write(p->size());
+  for (iu *i = p->data(), *end = i + p->size(); i != end; ++i) {
+    write(*i);
+  }
+}
+
+template<typename _OutputIterator> void Serialiser<_OutputIterator>::process (State &r_value) {
+  // TODO pull out
+  string<zbyte> &v = *reinterpret_cast<string<zbyte> *>(&r_value);
+  this->process(v);
+}
+
+template<typename _OutputIterator> template<typename _Serialisable> void Serialiser<_OutputIterator>::process (_Serialisable &r_value) {
+  r_value.serialise(*this);
+}
+
+template<typename _OutputIterator> typename Serialiser<_OutputIterator>::decltype_allocations::value_type *Serialiser<_OutputIterator>::findAllocationStart (void *ptr) {
+  auto i = allocations.upper_bound(ptr);
+  DA(i != allocations.begin());
+  --i;
+  void *allocationStart = get<0>(*i);
+  void *allocationEnd = get<1>(get<1>(*i));
+  if (!(ptr >= allocationStart && ptr < allocationEnd)) {
+    return nullptr;
+  }
+
+  return &(*i);
+}
+
+template<typename _OutputIterator> template<typename _T, typename _SerialisationFunctor, typename _DeserialisationFunctor, iff(
+  std::is_convertible<_SerialisationFunctor, std::function<std::tuple<void *, size_t> (_T *, Serialiser<_OutputIterator> &)>>::value
+)> void Serialiser<_OutputIterator>::derefAndProcess (_T *&o, const _SerialisationFunctor &serialiseReferent, const _DeserialisationFunctor &) {
+  auto allocationEntry = findAllocationStart(static_cast<void *>(o));
+  if (!allocationEntry) {
+    DW(, "about to add allocation ", nextId, " - nonarray, polymorphic");
+    write(NON_ID);
+    void *ptr;
+    size_t size;
+    tie(ptr, size) = serialiseReferent(o, *this);
+    DPRE(ptr <= static_cast<void *>(o), "allocation pointers must be no greater than that for any superclass");
+
+    DW(, "added allocation ", nextId, " - nonarray, polymorphic, size ", size);
+    allocations.emplace(ptr, tuple<id, void *>(nextId++, static_cast<char *>(ptr) + size));
+    // TODO check that new entries to the allocations set don't overlap?
+  } else {
+    DPRE(!o || get<0>(serialiseReferent(o, *this)) == get<0>(*allocationEntry));
+    write(get<0>(get<1>(*allocationEntry)));
+  }
+}
+
+template<typename _OutputIterator> template<typename _T, typename _SerialisationFunctor, typename _DeserialisationFunctor, iff(
+  std::is_convertible<_SerialisationFunctor, std::function<std::tuple<void *, size_t> (_T *, Serialiser<_OutputIterator> &)>>::value
+)> void Serialiser<_OutputIterator>::derefAndProcess (unique_ptr<_T> &o, const _SerialisationFunctor &serialiseReferent, const _DeserialisationFunctor &deserialiseReferent) {
+  _T *p = o.get();
+  this->derefAndProcess(p, serialiseReferent, deserialiseReferent);
+}
+
+template<typename _OutputIterator> template<typename _T> void Serialiser<_OutputIterator>::derefAndProcess (_T *&o) {
+  void *ptr = static_cast<void *>(o);
+  auto allocation = find(allocations, ptr);
+  if (!allocation) {
+    DW(, "added allocation ", nextId, " - nonarray, nonpolymorphic, size ", sizeof(_T));
+    allocations.emplace(ptr, tuple<id, void *>(nextId++, static_cast<char *>(ptr) + sizeof(_T)));
+
+    write(NON_ID);
+    this->process(*o);
+  } else {
+    write(get<0>(*allocation));
+  }
+}
+
+template<typename _OutputIterator> template<typename _T> void Serialiser<_OutputIterator>::derefAndProcess (unique_ptr<_T> &o) {
+  _T *p = o.get();
+  this->derefAndProcess(p);
+}
+
+template<typename _OutputIterator> template<typename _T> void Serialiser<_OutputIterator>::derefAndProcess (_T *&o, size_t count) {
+  void *ptr = static_cast<void *>(o);
+  auto allocation = find(allocations, ptr);
+  if (!allocation) {
+    DW(, "adding allocation ", nextId, " - array, size ", count, " of ", sizeof(_T));
+    allocations.emplace(ptr, tuple<id, void *>(nextId++, static_cast<char *>(ptr) + count * sizeof(_T)));
+
+    write(NON_ID);
+    write(count);
+    for (_T *i = o, *end = o + count; i != end; ++i) {
+      this->process(*i);
+    }
+  } else {
+    write(get<0>(*allocation));
+  }
+}
+
+template<typename _OutputIterator> template<typename _T> void Serialiser<_OutputIterator>::derefAndProcess (unique_ptr<_T []> &o, size_t count) {
+  _T *p = o.get();
+  this->derefAndProcess(p, count);
+}
+
+template<typename _OutputIterator> template<typename _T, typename _P> void Serialiser<_OutputIterator>::process (_T *&o, _P *parent) {
+  id allocationId;
+  size_t offset;
+  if (!o) {
+    allocationId = NULL_ID;
+    offset = 0;
+  } else {
+    DPRE(!!parent, "parent must be non-null if o is");
+    void *ptr = static_cast<void *>(parent);
+    DPRE(ptr <= static_cast<void *>(o), "parent must be no greater than o");
+    auto allocationEntry = findAllocationStart(ptr);
+    DPRE(!!allocationEntry, "the object occupying the allocation must already have been serialised");
+    void *allocationStart = get<0>(*allocationEntry);
+    DPRE(static_cast<void *>(o) <= get<1>(get<1>(*allocationEntry)), "o must be within parent's allocation");
+    DA(allocationStart <= static_cast<void *>(o));
+    allocationId = get<0>(get<1>(*allocationEntry));
+    offset = static_cast<size_t>(static_cast<char *>(static_cast<void *>(o)) - static_cast<char *>(allocationStart));
+  }
+  write(allocationId);
+  write(offset);
+}
+
+template<typename _OutputIterator> template<typename _T> void Serialiser<_OutputIterator>::process (_T *&o) {
+  this->process(o, o);
+}
+
+template<typename _OutputIterator> template<typename _T> void Serialiser<_OutputIterator>::process (unique_ptr<_T> &o) {
+  _T *p = o.get();
+  this->process(p);
+}
+
+template<typename _Serialiser> void Signature::serialise (_Serialiser &s) {
+  DS();
+  s.process(b);
+  s.process(h);
+}
 
 template<typename ..._Ts> Multiverse::ActionTemplate::ActionTemplate (_Ts &&...ts) {
   DS();
@@ -54,6 +256,19 @@ template<typename ..._Ts> void Multiverse::ActionTemplate::init (u8string &&segm
   segments.push_back(move(segment));
   words.push_back(word);
   init(forward<_Ts>(ts)...);
+}
+
+template<typename _Serialiser> void Multiverse::Node::serialise (_Serialiser &s) {
+  DS();
+  s.process(signature);
+  s.derefAndProcess(state);
+  s.process(metricState);
+  s.process(children, [] (tuple<ActionId, u8string, Node *> &o, _Serialiser &s) {
+    DS();
+    s.process(get<0>(o));
+    s.process(get<1>(o));
+    s.derefAndProcess(get<2>(o));
+  });
 }
 
 template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd, Vm &r_vm) {

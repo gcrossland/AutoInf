@@ -24,6 +24,43 @@ template<typename _I> _I operator+ (_I i, size_t o) {
   return i + static_cast<ptrdiff_t>(o);
 }
 
+
+
+FileOutputIterator::FileOutputIterator (FILE *h) : h(h) {
+}
+
+FileOutputIterator::FileOutputIterator (FileOutputIterator &&o) : h(o.h) {
+  o.h = nullptr;
+}
+
+FileOutputIterator &FileOutputIterator::operator= (FileOutputIterator &&o) {
+  if (this != &o) {
+    this->h = o.h;
+    o.h = nullptr;
+  }
+  return *this;
+}
+
+FileOutputIterator &FileOutputIterator::operator= (iu8f v) {
+  int r = fputc(v, h);
+  if (r == EOF) {
+    throw PlainException(u8("write failed"));
+  }
+  return *this;
+}
+
+FileOutputIterator &FileOutputIterator::operator* () {
+  return *this;
+}
+
+FileOutputIterator &FileOutputIterator::operator++ () {
+  return *this;
+}
+
+FileOutputIterator &FileOutputIterator::operator++ (int) {
+  return *this;
+}
+
 Signature::Signature () : h(0) {
 }
 
@@ -730,6 +767,39 @@ Multiverse::Node *Multiverse::collapseNode (
 
     return node;
   }
+}
+
+void Multiverse::save (const char *pathName) {
+  DS();
+  FILE *h = fopen(pathName, "wb");
+  if (h == nullptr) {
+    throw PlainException(u8("failed to close save file"));
+  }
+  auto _ = finally([&] () {
+    // TODO autocloser
+    int r = fclose(h);
+    if (r == EOF) {
+      // TODO throw PlainException(u8("failed to close save file"));
+    }
+  });
+
+  auto s = Serialiser<FileOutputIterator>(FileOutputIterator(h));
+
+  DA(s.isSerialising());
+  for (auto nodeEntry : nodes) {
+    Node *node = get<1>(nodeEntry);
+    Metric::State *state = node->getMetricState();
+    if (state) {
+      s.derefAndProcess(state, [&] (Metric::State *state, Serialiser<FileOutputIterator> &s) -> tuple<void *, size_t> {
+        return metric->serialiseReferent(state, s);
+      }, nullptr);
+    }
+  }
+  Metric::State *state = nullptr;
+  s.derefAndProcess(state);
+
+  s.process(ignoredBytes);
+  s.derefAndProcess(rootNode);
 }
 
 /* -----------------------------------------------------------------------------

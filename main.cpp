@@ -1,6 +1,7 @@
 #include "header.hpp"
 #include <cstring>
 #include <unordered_set>
+#include <typeinfo>
 
 using autofrotz::Vm;
 using autoinf::Multiverse;
@@ -28,6 +29,9 @@ using std::tuple;
 using std::sort;
 using std::min;
 using std::find;
+using autoinf::Serialiser;
+using autoinf::FileOutputIterator;
+using std::type_info;
 
 /* -----------------------------------------------------------------------------
 ----------------------------------------------------------------------------- */
@@ -46,12 +50,18 @@ class WordUsageMetric : public virtual Metric {
     pub State () : value(NON_VALUE) {
     }
 
+    pub void serialise (Serialiser<FileOutputIterator> &s) {
+      DS();
+      s.process(interestingChildActionWords);
+      s.process(value);
+    }
+
     State (const State &) = delete;
     State &operator= (const State &) = delete;
     State (State &&) = delete;
     State &operator= (State &&) = delete;
 
-    pub size_t getValue () {
+    pub size_t getValue () override {
       return value;
     }
 
@@ -59,6 +69,24 @@ class WordUsageMetric : public virtual Metric {
   };
 
   pub WordUsageMetric () {
+  }
+
+  pub tuple<void *, size_t> serialiseReferent (Metric::State *state, Serialiser<FileOutputIterator> &s) override {
+    DC();
+    tuple<void *, size_t> r;
+    iu type;
+
+    auto &t = typeid(*state);
+    if (t == typeid(State)) {
+      r = tuple<void *, size_t>(dynamic_cast<State *>(state), sizeof(State));
+      type = 0;
+    } else {
+      DPRE(false);
+    }
+
+    s.process(type);
+    s.process(*state);
+    return r;
   }
 
   prv void updateInterestingChildActionWords (const Multiverse::ActionSet &actionSet, const Node &node, Bitset &r_words) {
@@ -74,14 +102,14 @@ class WordUsageMetric : public virtual Metric {
     r_words.compact();
   }
 
-  pub unique_ptr<Metric::State> nodeCreated (const Multiverse &multiverse, ActionId parentActionId, const u8string &output, const Signature &signature) {
+  pub unique_ptr<Metric::State> nodeCreated (const Multiverse &multiverse, ActionId parentActionId, const u8string &output, const Signature &signature) override {
     char b[10];
     sprintf(b, "&%08X", signature.hash());
     DW(, "DDDD created new node with sig of hash ",b);
     return unique_ptr<Metric::State>(new State());
   }
 
-  pub void nodeProcessed (const Multiverse &multiverse, Node &r_node) {
+  pub void nodeProcessed (const Multiverse &multiverse, Node &r_node) override {
     const Multiverse::ActionSet &actionSet = multiverse.getActionSet();
 
     updateInterestingChildActionWords(actionSet, r_node, dynamic_cast<State *>(r_node.getMetricState())->interestingChildActionWords);
@@ -152,11 +180,11 @@ class WordUsageMetric : public virtual Metric {
     calculateNodeValue(&r_rootNode, 0, nodesSize, wordCounts);
   }
 
-  pub void nodesProcessed (const Multiverse &multiverse, Node &r_rootNode, unordered_map<reference_wrapper<const Signature>, Node *, autoinf::Hasher<Signature>> &r_nodes) {
+  pub void nodesProcessed (const Multiverse &multiverse, Node &r_rootNode, unordered_map<reference_wrapper<const Signature>, Node *, autoinf::Hasher<Signature>> &r_nodes) override {
     nodesChanged(false, multiverse, r_rootNode, r_nodes);
   }
 
-  pub void nodesCollapsed (const Multiverse &multiverse, Node &r_rootNode, unordered_map<reference_wrapper<const Signature>, Node *, autoinf::Hasher<Signature>> &r_nodes) {
+  pub void nodesCollapsed (const Multiverse &multiverse, Node &r_rootNode, unordered_map<reference_wrapper<const Signature>, Node *, autoinf::Hasher<Signature>> &r_nodes) override {
     nodesChanged(true, multiverse, r_rootNode, r_nodes);
   }
 };
@@ -569,6 +597,12 @@ int main (int argc, char *argv[]) {
             node->clearState();
           }
           nodesByIndex.clear();
+        } else if (line.size() > 2 && (line[0] == U'E' || line[0] == U'e') && line[1] == U'-') {
+          u8string name(line.data() + 2, line.data() + line.size());
+          multiverse.save(reinterpret_cast<const char *>(name.c_str()));
+        } else if (line.size() > 2 && (line[0] == U'O' || line[0] == U'o') && line[1] == U'-') {
+          u8string name(line.data() + 2, line.data() + line.size());
+          // TODO open()
         } else {
           const char8_t *numBegin = line.data();
           const char8_t *numEnd = numBegin + line.size();
@@ -646,6 +680,7 @@ int main (int argc, char *argv[]) {
         "Select by Top _Value-<n>\n"
         "_Show Output        _Hide Output\n"
         "_Process            Co_llapse           _Terminate\n"
+        "Sav_e As-<name>     _Open File-<name>\n"
         ">"
       );
       fflush(stdout);

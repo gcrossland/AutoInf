@@ -5,7 +5,6 @@
 #include <deque>
 #include <future>
 #include <utility>
-#include <sstream>
 
 #endif
 
@@ -42,5 +41,8 @@ using std::reference_wrapper;
 using bitset::Bitset;
 using std::forward;
 using std::function;
+using std::tie;
+using std::map;
+using core::setIes;
 
 }

@@ -10,6 +10,7 @@
 #include <vector>
 #include <unordered_map>
 #include <functional>
+#include <map>
 
 namespace autoinf {
 
@@ -34,6 +35,79 @@ template<typename _T> class Hasher {
   }
 };
 
+
+
+// TODO proper checking (in debug mode) output iterator framework
+class FileOutputIterator : public std::iterator<std::output_iterator_tag, void, void, void, void> {
+  prv FILE *h;
+
+  pub explicit FileOutputIterator (FILE *h);
+  FileOutputIterator (const FileOutputIterator &) = default;
+  FileOutputIterator &operator= (const FileOutputIterator &) = default;
+  pub FileOutputIterator (FileOutputIterator &&o);
+  pub FileOutputIterator &operator= (FileOutputIterator &&o);
+
+  pub FileOutputIterator &operator= (iu8f v);
+  pub FileOutputIterator &operator* ();
+  pub FileOutputIterator &operator++ ();
+  pub FileOutputIterator &operator++ (int);
+};
+
+template<typename _OutputIterator> class Serialiser {
+  prv typedef size_t id;
+  prv static constexpr id NON_ID = 0;
+  prv static constexpr id NULL_ID = 1;
+
+  prv _OutputIterator i;
+  prv std::map<void *, std::tuple<id, void *>> allocations;
+  prv id nextId;
+
+  pub explicit Serialiser (_OutputIterator &&i);
+  Serialiser (const Serialiser &) = delete;
+  Serialiser &operator= (const Serialiser &) = delete;
+  pub Serialiser (Serialiser &&) = default;
+  pub Serialiser &operator= (Serialiser &&) = default;
+
+  pub constexpr bool isSerialising () const;
+
+  prv void write (iu32 value);
+  prv void write (is32 value);
+  prv void write (char8_t value);
+  prv void write (char8_t *begin, char8_t *end);
+
+  pub void process (iu16f &r_value);
+  pub void process (is16f &r_value);
+  pub void process (iu32f &r_value);
+  pub void process (is32f &r_value);
+  pub void process (core::u8string &r_value);
+  pub template<typename _T, typename _SerialisationFunctor, iff(
+    std::is_convertible<_SerialisationFunctor, std::function<void (_T &, Serialiser<_OutputIterator> &)>>::value
+  )> void process (std::vector<_T> &r_value, const _SerialisationFunctor &serialiseElement);
+  pub void process (bitset::Bitset &r_value);
+  pub void process (autofrotz::State &r_value);
+  pub template<typename _Serialisable> void process (_Serialisable &r_value);
+  prv typedef decltype(allocations) decltype_allocations;
+  prv typename decltype_allocations::value_type *findAllocationStart (void *ptr);
+  // (serialising a ptr to a nonarray object allocation (or such a ptr cast to a superclass), which may or may not have been seen before)
+  pub template<typename _T, typename _SerialisationFunctor, typename _DeserialisationFunctor, iff(
+    std::is_convertible<_SerialisationFunctor, std::function<std::tuple<void *, size_t> (_T *, Serialiser<_OutputIterator> &)>>::value
+  )> void derefAndProcess (_T *&o, const _SerialisationFunctor &serialiseReferent, const _DeserialisationFunctor &);
+  pub template<typename _T, typename _SerialisationFunctor, typename _DeserialisationFunctor, iff(
+    std::is_convertible<_SerialisationFunctor, std::function<std::tuple<void *, size_t> (_T *, Serialiser<_OutputIterator> &)>>::value
+  )> void derefAndProcess (std::unique_ptr<_T> &o, const _SerialisationFunctor &serialiseReferent, const _DeserialisationFunctor &);
+  // (a variant for when _T isn't polymorphic)
+  pub template<typename _T> void derefAndProcess (_T *&o);
+  pub template<typename _T> void derefAndProcess (std::unique_ptr<_T> &o);
+  // (serialising a ptr to an array object allocation, which may or may not have been seen before)
+  pub template<typename _T> void derefAndProcess (_T *&o, size_t count);
+  pub template<typename _T> void derefAndProcess (std::unique_ptr<_T []> &o, size_t count);
+  // (ptr into a nonarray or array object allocation, which must already have been seen)
+  pub template<typename _T, typename _P> void process (_T *&o, _P *parent);
+  // (ditto, but with parent = o)
+  pub template<typename _T> void process (_T *&o);
+  pub template<typename _T> void process (std::unique_ptr<_T> &o);
+};
+
 // XXXX move out?
 class Signature {
   pub class Iterator;
@@ -47,6 +121,7 @@ class Signature {
   pub Signature &operator= (const Signature &) = default;
   pub Signature (Signature &&) = default;
   pub Signature &operator= (Signature &&) = default;
+  pub template<typename _Serialiser> void serialise (_Serialiser &s);
 
   pub size_t hash () const noexcept;
   friend bool operator== (const Signature &l, const Signature &r) noexcept;
@@ -193,6 +268,7 @@ class Multiverse {
   pub class Metric {
     pub class State {
       prt State ();
+      pub virtual void serialise (Serialiser<FileOutputIterator> &s) = 0;
       pub virtual ~State ();
 
       pub virtual size_t getValue () = 0;
@@ -200,6 +276,8 @@ class Multiverse {
 
     prt Metric ();
     pub virtual ~Metric ();
+
+    pub virtual std::tuple<void *, size_t> serialiseReferent (State *state, Serialiser<FileOutputIterator> &s) = 0;
 
     pub virtual std::unique_ptr<State> nodeCreated (const Multiverse &multiverse, ActionId parentActionId, const core::u8string &output, const Signature &signature) = 0;
     pub virtual void nodeProcessed (const Multiverse &multiverse, Node &r_node) = 0;
@@ -231,6 +309,7 @@ class Multiverse {
     Node &operator= (const Node &) = delete;
     Node (Node &&) = delete;
     Node &operator= (Node &&) = delete;
+    pub template<typename _Serialiser> void serialise (_Serialiser &s);
 
     pub const Signature &getSignature () const;
     pub Signature setSignature (Signature &&signature);
@@ -295,7 +374,7 @@ class Multiverse {
   pub Node *getNode (const NodePath &nodePath) const;
   pub Node *getRootNode () const;
   pub template<typename _I> void processNodes (_I nodesBegin, _I nodesEnd, autofrotz::Vm &r_vm);
-  pub template<typename _I> bitset::Bitset createExtraIgnoredBytes (const Signature &firstSignature, _I otherSignatureIsBegin, _I otherSignatureIsEnd, const autofrotz::Vm &vm);
+  prv template<typename _I> bitset::Bitset createExtraIgnoredBytes (const Signature &firstSignature, _I otherSignatureIsBegin, _I otherSignatureIsEnd, const autofrotz::Vm &vm);
   pub template<typename _I> void collapseNodes (_I nodesBegin, _I nodesEnd, const autofrotz::Vm &vm);
   prv static Node *collapseNode (
     Node *node, const Rangeset &extraIgnoredByteRangeset,
@@ -303,6 +382,7 @@ class Multiverse {
     std::unordered_map<Node *, Node *> &r_nodeCollapseTargets,
     std::unordered_map<Node *, Signature> &r_survivingNodePrevSignatures
   );
+  pub void save (const char *pathName);
 };
 
 /* -----------------------------------------------------------------------------
