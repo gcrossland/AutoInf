@@ -32,6 +32,8 @@ using std::find;
 using autoinf::Serialiser;
 using autoinf::FileOutputIterator;
 using std::type_info;
+using autoinf::Deserialiser;
+using autoinf::FileInputIterator;
 
 /* -----------------------------------------------------------------------------
 ----------------------------------------------------------------------------- */
@@ -42,7 +44,7 @@ void terminator () {
 }
 
 class WordUsageMetric : public virtual Metric {
-  pub class State : public virtual Metric::State {
+  pub class State : public Metric::State {
     prv Bitset interestingChildActionWords;
     prv size_t value;
     pub static constexpr size_t NON_VALUE = static_cast<size_t>(-1);
@@ -50,7 +52,7 @@ class WordUsageMetric : public virtual Metric {
     pub State () : value(NON_VALUE) {
     }
 
-    pub void serialise (Serialiser<FileOutputIterator> &s) {
+    prt template<typename _Serialiser> void serialise (_Serialiser &s) {
       DS();
       s.process(interestingChildActionWords);
       s.process(value);
@@ -71,22 +73,22 @@ class WordUsageMetric : public virtual Metric {
   pub WordUsageMetric () {
   }
 
-  pub tuple<void *, size_t> serialiseReferent (Metric::State *state, Serialiser<FileOutputIterator> &s) override {
-    DC();
-    tuple<void *, size_t> r;
-    iu type;
+  pub tuple<void *, size_t> deduceStateType (Metric::State *state) override {
+    DPRE(!!dynamic_cast<State *>(state));
+    return tuple<void *, size_t>(static_cast<State *>(state), sizeof(State));
+  }
 
-    auto &t = typeid(*state);
-    if (t == typeid(State)) {
-      r = tuple<void *, size_t>(dynamic_cast<State *>(state), sizeof(State));
-      type = 0;
-    } else {
-      DPRE(false);
-    }
+  pub tuple<Metric::State *, void *, size_t> constructState () override {
+    State *state = new State();
+    return tuple<Metric::State *, void *, size_t>(state, static_cast<void *>(state), sizeof(*state));
+  }
 
-    s.process(type);
-    s.process(*state);
-    return r;
+  pub void serialiseState (Metric::State *state, Serialiser<FileOutputIterator> &s) override {
+    static_cast<State *>(state)->serialise(s);
+  }
+
+  pub void serialiseState (Metric::State *state, Deserialiser<FileInputIterator> &s) override {
+    static_cast<State *>(state)->serialise(s);
   }
 
   prv void updateInterestingChildActionWords (const Multiverse::ActionSet &actionSet, const Node &node, Bitset &r_words) {
@@ -112,11 +114,11 @@ class WordUsageMetric : public virtual Metric {
   pub void nodeProcessed (const Multiverse &multiverse, Node &r_node) override {
     const Multiverse::ActionSet &actionSet = multiverse.getActionSet();
 
-    updateInterestingChildActionWords(actionSet, r_node, dynamic_cast<State *>(r_node.getMetricState())->interestingChildActionWords);
+    updateInterestingChildActionWords(actionSet, r_node, static_cast<State *>(r_node.getMetricState())->interestingChildActionWords);
   }
 
   prv void calculateNodeValue (Node *node, size_t parentNodeValue, size_t nodesSize, const size_t *wordCounts) {
-    State *state = dynamic_cast<State *>(node->getMetricState());
+    State *state = static_cast<State *>(node->getMetricState());
     if (state->value != State::NON_VALUE) {
       return;
     }
@@ -158,7 +160,7 @@ class WordUsageMetric : public virtual Metric {
 
     for (auto &entry : r_nodes) {
       Node *node = get<1>(entry);
-      State *state = dynamic_cast<State *>(node->getMetricState());
+      State *state = static_cast<State *>(node->getMetricState());
       state->value = State::NON_VALUE;
       if (node->getState()) {
         continue;
@@ -602,7 +604,8 @@ int main (int argc, char *argv[]) {
           multiverse.save(reinterpret_cast<const char *>(name.c_str()));
         } else if (line.size() > 2 && (line[0] == U'O' || line[0] == U'o') && line[1] == U'-') {
           u8string name(line.data() + 2, line.data() + line.size());
-          // TODO open()
+          multiverse.load(reinterpret_cast<const char *>(name.c_str()), vm);
+          nodesByIndex.clear();
         } else {
           const char8_t *numBegin = line.data();
           const char8_t *numEnd = numBegin + line.size();

@@ -61,6 +61,61 @@ FileOutputIterator &FileOutputIterator::operator++ (int) {
   return *this;
 }
 
+FileInputIterator::FileInputIterator (FILE *h) : h(h) {
+  advance();
+}
+
+FileInputIterator::FileInputIterator () : h(nullptr), v(42) {
+}
+
+FileInputIterator::FileInputIterator (iu8f v) : h(nullptr), v(v) {
+}
+
+FileInputIterator::FileInputIterator (FileInputIterator &&o) : h(o.h), v(o.v) {
+  o.h = nullptr;
+}
+
+FileInputIterator &FileInputIterator::operator= (FileInputIterator &&o) {
+  if (this != &o) {
+    this->h = o.h;
+    this->v = o.v;
+    o.h = nullptr;
+  }
+  return *this;
+}
+
+void FileInputIterator::advance () {
+  DPRE(!!h, "this must not be an end iterator");
+  int r = fgetc(h);
+  if (r == EOF) {
+    h = nullptr;
+  }
+  v = static_cast<iu8f>(r);
+}
+
+const iu8f &FileInputIterator::operator* () const noexcept {
+  return v;
+}
+
+FileInputIterator &FileInputIterator::operator++ () {
+  advance();
+  return *this;
+}
+
+FileInputIterator FileInputIterator::operator++ (int) {
+  FileInputIterator v(this->v);
+  ++(*this);
+  return v;
+}
+
+bool operator== (const FileInputIterator &l, const FileInputIterator &r) noexcept {
+  return l.h == r.h;
+}
+
+bool operator!= (const FileInputIterator &l, const FileInputIterator &r) noexcept {
+  return !(l == r);
+}
+
 Signature::Signature () : h(0) {
 }
 
@@ -99,7 +154,7 @@ void Signature::Writer::flushZeroBytes () {
   } else {
     iu8f b[1 + numeric_limits<decltype(zeroByteCount)>::max_ie_octets] = {ESCAPE,};
     iu8f *bEnd = b + 1;
-    setIeu(bEnd, zeroByteCount);
+    writeIeu(bEnd, zeroByteCount);
     signature.b.append(b, bEnd);
   }
   zeroByteCount = 0;
@@ -153,7 +208,7 @@ void Signature::Iterator::advance () noexcept {
     currentByte = b;
     zeroByteCount = 0;
   } else {
-    auto v = getValidIeu<decltype(zeroByteCount)>(i);
+    auto v = readValidIeu<decltype(zeroByteCount)>(i);
     DA(v != 1 && v != 2);
     if (v == 0) {
       currentByte = ESCAPE;
@@ -773,13 +828,13 @@ void Multiverse::save (const char *pathName) {
   DS();
   FILE *h = fopen(pathName, "wb");
   if (h == nullptr) {
-    throw PlainException(u8("failed to close save file"));
+    throw PlainException(u8("failed to open file"));
   }
   auto _ = finally([&] () {
     // TODO autocloser
     int r = fclose(h);
     if (r == EOF) {
-      // TODO throw PlainException(u8("failed to close save file"));
+      // TODO throw PlainException(u8("failed to finish writing to file"));
     }
   });
 
@@ -790,16 +845,92 @@ void Multiverse::save (const char *pathName) {
     Node *node = get<1>(nodeEntry);
     Metric::State *state = node->getMetricState();
     if (state) {
-      s.derefAndProcess(state, [&] (Metric::State *state, Serialiser<FileOutputIterator> &s) -> tuple<void *, size_t> {
-        return metric->serialiseReferent(state, s);
-      }, nullptr);
+      derefAndProcessMetricState(state, s);
     }
   }
   Metric::State *state = nullptr;
-  s.derefAndProcess(state);
+  derefAndProcessMetricState(state, s);
 
   s.process(ignoredBytes);
   s.derefAndProcess(rootNode);
+}
+
+void Multiverse::load (const char *pathName, const Vm &vm) {
+  DS();
+  FILE *h = fopen(pathName, "rb");
+  if (h == nullptr) {
+    throw PlainException(u8("failed to open file"));
+  }
+  auto _ = finally([&] () {
+    fclose(h);
+  });
+
+  auto s = Deserialiser<FileInputIterator>(FileInputIterator(h), FileInputIterator());
+
+  ignoredBytes.clear();
+  ignoredByteRangeset.clear();
+  rootNode = nullptr;
+  for (const auto &e : nodes) {
+    delete get<1>(e);
+  }
+  nodes.clear();
+
+  vector<Metric::State *> metricStates;
+  try {
+    DA(!s.isSerialising());
+    while (true) {
+      metricStates.emplace_back(nullptr);
+      Metric::State *&state = metricStates.back();
+      derefAndProcessMetricState(state, s);
+      if (!state) {
+        break;
+      }
+    }
+
+    s.process(ignoredBytes);
+    s.derefAndProcess(rootNode);
+
+    ignoredByteRangeset = Rangeset(ignoredBytes, vm.getDynamicMemorySize());
+    unordered_set<Node *> seenNodes;
+    rootNode->forEach([&] (Node *node) -> bool {
+      if (contains(seenNodes, node)) {
+        return false;
+      }
+      seenNodes.emplace(node);
+
+      nodes.emplace(ref(node->getSignature()), node);
+      return true;
+    });
+    // TODO validate result
+  } catch (...) {
+    throw 42;
+/*
+    unordered_set<Node *> seenNodes;
+    rootNode->forEach([&] (Node *node) -> bool {
+      if (contains(seenNodes, node)) {
+        return false;
+      }
+      seenNodes.emplace(node);
+
+      node->metricState.reset();
+      return true;
+    });
+    rootNode = nullptr;
+    nodes.clear();
+    for (Node *node : seenNodes) {
+      delete node;
+    }
+
+    if (!metricStates.back()) {
+      metricStates.pop_back();
+    }
+    DA(!!metricStates.back());
+    for (Metric::State *state : metricStates) {
+      delete state;
+    }
+*/
+    throw;
+  }
 }
 
 /* -----------------------------------------------------------------------------
