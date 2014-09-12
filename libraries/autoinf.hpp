@@ -103,23 +103,24 @@ template<typename _OutputIterator> class Serialiser : public SerialiserBase {
   pub void process (iu32f &r_value);
   pub void process (is32f &r_value);
   pub void process (core::u8string &r_value);
-  pub template<typename _T, typename _SerialisationFunctor, iff(
-    std::is_convertible<_SerialisationFunctor, std::function<void (_T &, Serialiser<_OutputIterator> &)>>::value
-  )> void process (std::vector<_T> &r_value, const _SerialisationFunctor &serialiseElement);
+  // TODO do we really want custom walking code for each vector? surely we should just call process() for each member
+  pub template<typename _T, typename _WalkingFunctor, iff(
+    std::is_convertible<_WalkingFunctor, std::function<void (_T &, Serialiser<_OutputIterator> &)>>::value
+  )> void process (std::vector<_T> &r_value, const _WalkingFunctor &walkElement);
   pub void process (bitset::Bitset &r_value);
   pub void process (autofrotz::State &r_value);
-  pub template<typename _Serialisable> void process (_Serialisable &r_value);
+  pub template<typename _Walkable> void process (_Walkable &r_value);
   prv typedef decltype(allocations) decltype_allocations;
   prv typename decltype_allocations::value_type *findAllocationStart (void *ptr);
   // (serialising a ptr to a nonarray object allocation (or such a ptr cast to a superclass), which may or may not have been seen before)
-  pub template<typename _T, typename _TypeDeductionFunctor, typename _ConstructionFunctor, typename _SerialisationFunctor, iff(
+  pub template<typename _T, typename _TypeDeductionFunctor, typename _ConstructionFunctor, typename _WalkingFunctor, iff(
     std::is_convertible<_TypeDeductionFunctor, std::function<std::tuple<SubtypeId, void *, size_t> (_T *)>>::value &&
-    std::is_convertible<_SerialisationFunctor, std::function<void (_T *, void *, SubtypeId, Serialiser<_OutputIterator> &)>>::value
-  )> void derefAndProcess (_T *&o, const _TypeDeductionFunctor &deduceReferentType, const _ConstructionFunctor &, const _SerialisationFunctor &serialiseReferent);
-  pub template<typename _T, typename _TypeDeductionFunctor, typename _ConstructionFunctor, typename _SerialisationFunctor, iff(
+    std::is_convertible<_WalkingFunctor, std::function<void (_T *, void *, SubtypeId, Serialiser<_OutputIterator> &)>>::value
+  )> void derefAndProcess (_T *&o, const _TypeDeductionFunctor &deduceReferentType, const _ConstructionFunctor &, const _WalkingFunctor &walkReferent);
+  pub template<typename _T, typename _TypeDeductionFunctor, typename _ConstructionFunctor, typename _WalkingFunctor, iff(
     std::is_convertible<_TypeDeductionFunctor, std::function<std::tuple<SubtypeId, void *, size_t> (_T *)>>::value &&
-    std::is_convertible<_SerialisationFunctor, std::function<void (_T *, void *, SubtypeId, Serialiser<_OutputIterator> &)>>::value
-  )> void derefAndProcess (std::unique_ptr<_T> &o, const _TypeDeductionFunctor &deduceReferentType, const _ConstructionFunctor &, const _SerialisationFunctor &serialiseReferent);
+    std::is_convertible<_WalkingFunctor, std::function<void (_T *, void *, SubtypeId, Serialiser<_OutputIterator> &)>>::value
+  )> void derefAndProcess (std::unique_ptr<_T> &o, const _TypeDeductionFunctor &deduceReferentType, const _ConstructionFunctor &, const _WalkingFunctor &walkReferent);
   // (a variant for when _T isn't polymorphic)
   pub template<typename _T> void derefAndProcess (_T *&o);
   pub template<typename _T> void derefAndProcess (std::unique_ptr<_T> &o);
@@ -156,23 +157,23 @@ template<typename _InputIterator> class Deserialiser : public SerialiserBase {
   pub void process (iu32f &r_value);
   pub void process (is32f &r_value);
   pub void process (core::u8string &r_value);
-  pub template<typename _T, typename _SerialisationFunctor, iff(
-    std::is_convertible<_SerialisationFunctor, std::function<void (_T &, Deserialiser<_InputIterator> &)>>::value
-  )> void process (std::vector<_T> &r_value, const _SerialisationFunctor &serialiseElement);
+  pub template<typename _T, typename _WalkingFunctor, iff(
+    std::is_convertible<_WalkingFunctor, std::function<void (_T &, Deserialiser<_InputIterator> &)>>::value
+  )> void process (std::vector<_T> &r_value, const _WalkingFunctor &walkElement);
   prv template<typename _T, iff(std::is_constructible<_T, Deserialiser<_InputIterator>>::value)> void emplaceBack (std::vector<_T> &r_value);
   prv template<typename _T, iff(!std::is_constructible<_T, Deserialiser<_InputIterator>>::value)> void emplaceBack (std::vector<_T> &r_value);
   pub void process (bitset::Bitset &r_value);
   pub void process (autofrotz::State &r_value);
-  pub template<typename _Serialisable> void process (_Serialisable &r_value);
+  pub template<typename _Walkable> void process (_Walkable &r_value);
   prv id readAllocationId ();
-  pub template<typename _T, typename _TypeDeductionFunctor, typename _ConstructionFunctor, typename _SerialisationFunctor, iff(
+  pub template<typename _T, typename _TypeDeductionFunctor, typename _ConstructionFunctor, typename _WalkingFunctor, iff(
     std::is_convertible<_ConstructionFunctor, std::function<std::tuple<_T *, void *, size_t> (SubtypeId)>>::value &&
-    std::is_convertible<_SerialisationFunctor, std::function<void (_T *, void *, SubtypeId, Deserialiser<_InputIterator> &)>>::value
-  )> void derefAndProcess (_T *&o, const _TypeDeductionFunctor &, const _ConstructionFunctor &constructReferent, const _SerialisationFunctor &serialiseReferent);
-  pub template<typename _T, typename _TypeDeductionFunctor, typename _ConstructionFunctor, typename _SerialisationFunctor, iff(
+    std::is_convertible<_WalkingFunctor, std::function<void (_T *, void *, SubtypeId, Deserialiser<_InputIterator> &)>>::value
+  )> void derefAndProcess (_T *&o, const _TypeDeductionFunctor &, const _ConstructionFunctor &constructReferent, const _WalkingFunctor &walkReferent);
+  pub template<typename _T, typename _TypeDeductionFunctor, typename _ConstructionFunctor, typename _WalkingFunctor, iff(
     std::is_convertible<_ConstructionFunctor, std::function<std::tuple<_T *, void *, size_t> (SubtypeId)>>::value &&
-    std::is_convertible<_SerialisationFunctor, std::function<void (_T *, void *, SubtypeId, Deserialiser<_InputIterator> &)>>::value
-  )> void derefAndProcess (std::unique_ptr<_T> &o, const _TypeDeductionFunctor &, const _ConstructionFunctor &constructReferent, const _SerialisationFunctor &serialiseReferent);
+    std::is_convertible<_WalkingFunctor, std::function<void (_T *, void *, SubtypeId, Deserialiser<_InputIterator> &)>>::value
+  )> void derefAndProcess (std::unique_ptr<_T> &o, const _TypeDeductionFunctor &, const _ConstructionFunctor &constructReferent, const _WalkingFunctor &walkReferent);
   pub template<typename _T> void derefAndProcess (_T *&o);
   prv template<typename _T, iff(std::is_constructible<_T, Deserialiser<_InputIterator>>::value)> _T *construct ();
   prv template<typename _T, iff(!std::is_constructible<_T, Deserialiser<_InputIterator>>::value)> _T *construct ();
@@ -198,7 +199,7 @@ class Signature {
   pub Signature (Signature &&) = default;
   pub Signature &operator= (Signature &&) = default;
   pub template<typename _InputIterator> explicit Signature (const Deserialiser<_InputIterator> &);
-  pub template<typename _Serialiser> void serialise (_Serialiser &s);
+  pub template<typename _Walker> void beWalked (_Walker &w);
 
   pub size_t hash () const noexcept;
   friend bool operator== (const Signature &l, const Signature &r) noexcept;
@@ -355,8 +356,8 @@ class Multiverse {
 
     pub virtual std::tuple<void *, size_t> deduceStateType (State *state) = 0;
     pub virtual std::tuple<State *, void *, size_t> constructState () = 0;
-    pub virtual void serialiseState (State *state, Serialiser<FileOutputIterator> &s) = 0;
-    pub virtual void serialiseState (State *state, Deserialiser<FileInputIterator> &s) = 0;
+    pub virtual void walkState (State *state, Serialiser<FileOutputIterator> &s) = 0;
+    pub virtual void walkState (State *state, Deserialiser<FileInputIterator> &s) = 0;
 
     pub virtual std::unique_ptr<State> nodeCreated (const Multiverse &multiverse, ActionId parentActionId, const core::u8string &output, const Signature &signature) = 0;
     pub virtual void nodeProcessed (const Multiverse &multiverse, Node &r_node) = 0;
@@ -389,7 +390,7 @@ class Multiverse {
     Node (Node &&) = delete;
     Node &operator= (Node &&) = delete;
     pub template<typename _InputIterator> explicit Node (const Deserialiser<_InputIterator> &);
-    pub template<typename _Serialiser> void serialise (_Serialiser &s);
+    pub template<typename _Walker> void beWalked (_Walker &w);
 
     pub const Signature &getSignature () const;
     pub Signature setSignature (Signature &&signature);
@@ -466,7 +467,7 @@ class Multiverse {
   );
   pub void save (const char *pathName);
   pub void load (const char *pathName, const autofrotz::Vm &vm);
-  prv template<typename _Serialiser> void derefAndProcessMetricState (Metric::State *&state, _Serialiser &s);
+  prv template<typename _Walker> void derefAndProcessMetricState (Metric::State *&state, _Walker &w);
 };
 
 /* -----------------------------------------------------------------------------

@@ -52,10 +52,10 @@ class WordUsageMetric : public virtual Metric {
     pub State () : value(NON_VALUE) {
     }
 
-    prt template<typename _Serialiser> void serialise (_Serialiser &s) {
+    prt template<typename _Walker> void beWalked (_Walker &w) {
       DS();
-      s.process(interestingChildActionWords);
-      s.process(value);
+      w.process(interestingChildActionWords);
+      w.process(value);
     }
 
     State (const State &) = delete;
@@ -83,12 +83,12 @@ class WordUsageMetric : public virtual Metric {
     return tuple<Metric::State *, void *, size_t>(state, static_cast<void *>(state), sizeof(*state));
   }
 
-  pub void serialiseState (Metric::State *state, Serialiser<FileOutputIterator> &s) override {
-    static_cast<State *>(state)->serialise(s);
+  pub void walkState (Metric::State *state, Serialiser<FileOutputIterator> &s) override {
+    static_cast<State *>(state)->beWalked(s);
   }
 
-  pub void serialiseState (Metric::State *state, Deserialiser<FileInputIterator> &s) override {
-    static_cast<State *>(state)->serialise(s);
+  pub void walkState (Metric::State *state, Deserialiser<FileInputIterator> &s) override {
+    static_cast<State *>(state)->beWalked(s);
   }
 
   prv void updateInterestingChildActionWords (const Multiverse::ActionSet &actionSet, const Node &node, Bitset &r_words) {

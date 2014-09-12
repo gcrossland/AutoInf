@@ -94,12 +94,12 @@ template<typename _OutputIterator> void Serialiser<_OutputIterator>::process (u8
   write(r_value.data(), r_value.data() + r_value.size());
 }
 
-template<typename _OutputIterator> template<typename _T, typename _SerialisationFunctor, iff(
-  std::is_convertible<_SerialisationFunctor, std::function<void (_T &, Serialiser<_OutputIterator> &)>>::value
-)> void Serialiser<_OutputIterator>::process (vector<_T> &r_value, const _SerialisationFunctor &serialiseElement) {
+template<typename _OutputIterator> template<typename _T, typename _WalkingFunctor, iff(
+  std::is_convertible<_WalkingFunctor, std::function<void (_T &, Serialiser<_OutputIterator> &)>>::value
+)> void Serialiser<_OutputIterator>::process (vector<_T> &r_value, const _WalkingFunctor &walkElement) {
   write(r_value.size());
   for (_T &e : r_value) {
-    serialiseElement(e, *this);
+    walkElement(e, *this);
   }
 }
 
@@ -118,8 +118,8 @@ template<typename _OutputIterator> void Serialiser<_OutputIterator>::process (St
   this->process(v);
 }
 
-template<typename _OutputIterator> template<typename _Serialisable> void Serialiser<_OutputIterator>::process (_Serialisable &r_value) {
-  r_value.serialise(*this);
+template<typename _OutputIterator> template<typename _Walkable> void Serialiser<_OutputIterator>::process (_Walkable &r_value) {
+  r_value.beWalked(*this);
 }
 
 template<typename _OutputIterator> typename Serialiser<_OutputIterator>::decltype_allocations::value_type *Serialiser<_OutputIterator>::findAllocationStart (void *ptr) {
@@ -135,10 +135,10 @@ template<typename _OutputIterator> typename Serialiser<_OutputIterator>::decltyp
   return &(*i);
 }
 
-template<typename _OutputIterator> template<typename _T, typename _TypeDeductionFunctor, typename _ConstructionFunctor, typename _SerialisationFunctor, iff(
+template<typename _OutputIterator> template<typename _T, typename _TypeDeductionFunctor, typename _ConstructionFunctor, typename _WalkingFunctor, iff(
   std::is_convertible<_TypeDeductionFunctor, std::function<std::tuple<SerialiserBase::SubtypeId, void *, size_t> (_T *)>>::value &&
-  std::is_convertible<_SerialisationFunctor, std::function<void (_T *, void *, SerialiserBase::SubtypeId, Serialiser<_OutputIterator> &)>>::value
-)> void Serialiser<_OutputIterator>::derefAndProcess (_T *&o, const _TypeDeductionFunctor &deduceReferentType, const _ConstructionFunctor &, const _SerialisationFunctor &serialiseReferent) {
+  std::is_convertible<_WalkingFunctor, std::function<void (_T *, void *, SerialiserBase::SubtypeId, Serialiser<_OutputIterator> &)>>::value
+)> void Serialiser<_OutputIterator>::derefAndProcess (_T *&o, const _TypeDeductionFunctor &deduceReferentType, const _ConstructionFunctor &, const _WalkingFunctor &walkReferent) {
   void *ptr = o;
 
   auto allocationEntry = findAllocationStart(ptr);
@@ -155,7 +155,7 @@ template<typename _OutputIterator> template<typename _T, typename _TypeDeduction
 
     write(NON_ID);
     write(type);
-    serialiseReferent(o, allocationStart, type, *this);
+    walkReferent(o, allocationStart, type, *this);
   } else {
     write(get<0>(get<1>(*allocationEntry)));
     void *allocationStart = get<0>(*allocationEntry);
@@ -164,12 +164,12 @@ template<typename _OutputIterator> template<typename _T, typename _TypeDeduction
   }
 }
 
-template<typename _OutputIterator> template<typename _T, typename _TypeDeductionFunctor, typename _ConstructionFunctor, typename _SerialisationFunctor, iff(
+template<typename _OutputIterator> template<typename _T, typename _TypeDeductionFunctor, typename _ConstructionFunctor, typename _WalkingFunctor, iff(
   std::is_convertible<_TypeDeductionFunctor, std::function<std::tuple<SerialiserBase::SubtypeId, void *, size_t> (_T *)>>::value &&
-  std::is_convertible<_SerialisationFunctor, std::function<void (_T *, void *, SerialiserBase::SubtypeId, Serialiser<_OutputIterator> &)>>::value
-)> void Serialiser<_OutputIterator>::derefAndProcess (unique_ptr<_T> &o, const _TypeDeductionFunctor &deduceReferentType, const _ConstructionFunctor &constructReferent, const _SerialisationFunctor &serialiseReferent) {
+  std::is_convertible<_WalkingFunctor, std::function<void (_T *, void *, SerialiserBase::SubtypeId, Serialiser<_OutputIterator> &)>>::value
+)> void Serialiser<_OutputIterator>::derefAndProcess (unique_ptr<_T> &o, const _TypeDeductionFunctor &deduceReferentType, const _ConstructionFunctor &constructReferent, const _WalkingFunctor &walkReferent) {
   _T *p = o.get();
-  this->derefAndProcess(p, deduceReferentType, constructReferent, serialiseReferent);
+  this->derefAndProcess(p, deduceReferentType, constructReferent, walkReferent);
 }
 
 template<typename _OutputIterator> template<typename _T> void Serialiser<_OutputIterator>::derefAndProcess (_T *&o) {
@@ -314,22 +314,22 @@ template<typename _InputIterator> void Deserialiser<_InputIterator>::process (u8
   readChar8s(r_value.data(), size);
 }
 
-template<typename _InputIterator> template<typename _T, typename _SerialisationFunctor, iff(
-  std::is_convertible<_SerialisationFunctor, std::function<void (_T &, Deserialiser<_InputIterator> &)>>::value
-)> void Deserialiser<_InputIterator>::process (vector<_T> &r_value, const _SerialisationFunctor &serialiseElement) {
+template<typename _InputIterator> template<typename _T, typename _WalkingFunctor, iff(
+  std::is_convertible<_WalkingFunctor, std::function<void (_T &, Deserialiser<_InputIterator> &)>>::value
+)> void Deserialiser<_InputIterator>::process (vector<_T> &r_value, const _WalkingFunctor &walkElement) {
   size_t size = readIu<size_t>();
   r_value.clear();
   r_value.reserve(size);
   for (size_t i = 0; i != size; ++i) {
     emplaceBack(r_value);
-    serialiseElement(r_value[i], *this);
+    walkElement(r_value[i], *this);
   }
 }
 
 template<typename _InputIterator> template<typename _T, iff(
   std::is_constructible<_T, Deserialiser<_InputIterator>>::value
 )> void Deserialiser<_InputIterator>::emplaceBack (vector<_T> &r_value) {
-  DW(, "emplacing_back a ",typeid(_T).name()," object with the custom serialisation constructor");
+  DW(, "emplacing_back a ",typeid(_T).name()," object with the custom deserialisation constructor");
   r_value.emplace_back(*this);
 }
 
@@ -356,8 +356,8 @@ template<typename _InputIterator> void Deserialiser<_InputIterator>::process (St
   this->process(v);
 }
 
-template<typename _InputIterator> template<typename _Serialisable> void Deserialiser<_InputIterator>::process (_Serialisable &r_value) {
-  r_value.serialise(*this);
+template<typename _InputIterator> template<typename _Walkable> void Deserialiser<_InputIterator>::process (_Walkable &r_value) {
+  r_value.beWalked(*this);
 }
 
 template<typename _InputIterator> SerialiserBase::id Deserialiser<_InputIterator>::readAllocationId () {
@@ -368,10 +368,10 @@ template<typename _InputIterator> SerialiserBase::id Deserialiser<_InputIterator
   return allocationId;
 }
 
-template<typename _InputIterator> template<typename _T, typename _TypeDeductionFunctor, typename _ConstructionFunctor, typename _SerialisationFunctor, iff(
+template<typename _InputIterator> template<typename _T, typename _TypeDeductionFunctor, typename _ConstructionFunctor, typename _WalkingFunctor, iff(
   std::is_convertible<_ConstructionFunctor, std::function<std::tuple<_T *, void *, size_t> (SerialiserBase::SubtypeId)>>::value &&
-  std::is_convertible<_SerialisationFunctor, std::function<void (_T *, void *, SerialiserBase::SubtypeId, Deserialiser<_InputIterator> &)>>::value
-)> void Deserialiser<_InputIterator>::derefAndProcess (_T *&o, const _TypeDeductionFunctor &, const _ConstructionFunctor &constructReferent, const _SerialisationFunctor &serialiseReferent) {
+  std::is_convertible<_WalkingFunctor, std::function<void (_T *, void *, SerialiserBase::SubtypeId, Deserialiser<_InputIterator> &)>>::value
+)> void Deserialiser<_InputIterator>::derefAndProcess (_T *&o, const _TypeDeductionFunctor &, const _ConstructionFunctor &constructReferent, const _WalkingFunctor &walkReferent) {
   DPRE(!o, "o must be null");
   id allocationId = readAllocationId();
   if (allocationId == NON_ID) {
@@ -383,22 +383,22 @@ template<typename _InputIterator> template<typename _T, typename _TypeDeductionF
     DW(, "added allocation ", allocations.size(), " - nonarray, polymorphic, size ", size);
     allocations.emplace_back(allocationStart);
 
-    serialiseReferent(o, allocationStart, type, *this);
+    walkReferent(o, allocationStart, type, *this);
   } else {
     size_t offset = readIu<size_t>();
     o = static_cast<_T *>(static_cast<void *>(static_cast<char *>(allocations[allocationId]) + offset));
   }
 }
 
-template<typename _InputIterator> template<typename _T, typename _TypeDeductionFunctor, typename _ConstructionFunctor, typename _SerialisationFunctor, iff(
+template<typename _InputIterator> template<typename _T, typename _TypeDeductionFunctor, typename _ConstructionFunctor, typename _WalkingFunctor, iff(
   std::is_convertible<_ConstructionFunctor, std::function<std::tuple<_T *, void *, size_t> (SerialiserBase::SubtypeId)>>::value &&
-  std::is_convertible<_SerialisationFunctor, std::function<void (_T *, void *, SerialiserBase::SubtypeId, Deserialiser<_InputIterator> &)>>::value
-)> void Deserialiser<_InputIterator>::derefAndProcess (unique_ptr<_T> &o, const _TypeDeductionFunctor &deduceReferentType, const _ConstructionFunctor &constructReferent, const _SerialisationFunctor &serialiseReferent) {
+  std::is_convertible<_WalkingFunctor, std::function<void (_T *, void *, SerialiserBase::SubtypeId, Deserialiser<_InputIterator> &)>>::value
+)> void Deserialiser<_InputIterator>::derefAndProcess (unique_ptr<_T> &o, const _TypeDeductionFunctor &deduceReferentType, const _ConstructionFunctor &constructReferent, const _WalkingFunctor &walkReferent) {
   _T *p = nullptr;
   auto _ = finally([&] () {
     o.reset(p);
   });
-  this->derefAndProcess(p, deduceReferentType, constructReferent, serialiseReferent);
+  this->derefAndProcess(p, deduceReferentType, constructReferent, walkReferent);
 }
 
 template<typename _InputIterator> template<typename _T> void Deserialiser<_InputIterator>::derefAndProcess (_T *&o) {
@@ -418,7 +418,7 @@ template<typename _InputIterator> template<typename _T> void Deserialiser<_Input
 template<typename _InputIterator> template<typename _T, iff(
   std::is_constructible<_T, Deserialiser<_InputIterator>>::value
 )> _T *Deserialiser<_InputIterator>::construct () {
-  DW(, "constructing a ",typeid(_T).name()," object with the custom serialisation constructor");
+  DW(, "constructing a ",typeid(_T).name()," object with the custom deserialisation constructor");
   return new _T(*this);
 }
 
@@ -480,10 +480,10 @@ template<typename _InputIterator> template<typename _T> void Deserialiser<_Input
 template<typename _InputIterator> Signature::Signature (const Deserialiser<_InputIterator> &) : Signature() {
 }
 
-template<typename _Serialiser> void Signature::serialise (_Serialiser &s) {
+template<typename _Walker> void Signature::beWalked (_Walker &w) {
   DS();
-  s.process(b);
-  s.process(h);
+  w.process(b);
+  w.process(h);
   // TODO validate result
 }
 
@@ -512,16 +512,16 @@ template<typename ..._Ts> void Multiverse::ActionTemplate::init (u8string &&segm
 template<typename _InputIterator> Multiverse::Node::Node (const Deserialiser<_InputIterator> &) {
 }
 
-template<typename _Serialiser> void Multiverse::Node::serialise (_Serialiser &s) {
+template<typename _Walker> void Multiverse::Node::beWalked (_Walker &w) {
   DS();
-  s.process(signature);
-  s.derefAndProcess(state);
-  s.process(metricState);
-  s.process(children, [] (tuple<ActionId, u8string, Node *> &o, _Serialiser &s) {
+  w.process(signature);
+  w.derefAndProcess(state);
+  w.process(metricState);
+  w.process(children, [] (tuple<ActionId, u8string, Node *> &o, _Walker &w) {
     DS();
-    s.process(get<0>(o));
-    s.process(get<1>(o));
-    s.derefAndProcess(get<2>(o));
+    w.process(get<0>(o));
+    w.process(get<1>(o));
+    w.derefAndProcess(get<2>(o));
   });
   // TODO validate result
 }
@@ -763,8 +763,8 @@ template<typename _I> void Multiverse::collapseNodes (_I nodesBegin, _I nodesEnd
   metric.get()->nodesCollapsed(*this, *rootNode, nodes);
 }
 
-template<typename _Serialiser> void Multiverse::derefAndProcessMetricState (Metric::State *&state, _Serialiser &s) {
-  s.derefAndProcess(state, [&] (Metric::State *state) -> tuple<SerialiserBase::SubtypeId, void *, size_t> {
+template<typename _Walker> void Multiverse::derefAndProcessMetricState (Metric::State *&state, _Walker &w) {
+  w.derefAndProcess(state, [&] (Metric::State *state) -> tuple<SerialiserBase::SubtypeId, void *, size_t> {
     auto r = metric->deduceStateType(state);
     return tuple<SerialiserBase::SubtypeId, void *, size_t>(0, get<0>(r), get<1>(r));
   }, [&] (SerialiserBase::SubtypeId type) -> tuple<Metric::State *, void *, size_t> {
@@ -772,8 +772,8 @@ template<typename _Serialiser> void Multiverse::derefAndProcessMetricState (Metr
       throw PlainException(u8("invalid metric state type found"));
     }
     return metric->constructState();
-  }, [&] (Metric::State *state, void *, SerialiserBase::SubtypeId, _Serialiser &s) {
-    metric->serialiseState(state, s);
+  }, [&] (Metric::State *state, void *, SerialiserBase::SubtypeId, _Walker &w) {
+    metric->walkState(state, w);
   });
 }
 
