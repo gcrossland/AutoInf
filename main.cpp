@@ -875,7 +875,7 @@ void printNodeAsNonleaf (
     fprintf(out, " / unprocessed\n");
   } else {
     size_t c = node->getChildrenSize();
-    fprintf(out, " %u %s\n", c, c == 1 ? "child" : "children");
+    fprintf(out, " / %u %s\n", c, c == 1 ? "child" : "children");
   }
   printNodeOutput(output, r_prefix, out);
 
