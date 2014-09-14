@@ -194,6 +194,7 @@ class Signature {
   prv size_t h;
 
   pub Signature ();
+  pub explicit Signature (size_t sizeHint);
   pub Signature (const Signature &) = default;
   pub Signature &operator= (const Signature &) = default;
   pub Signature (Signature &&) = default;
@@ -202,6 +203,7 @@ class Signature {
   pub template<typename _Walker> void beWalked (_Walker &w);
 
   pub size_t hash () const noexcept;
+  pub size_t getSizeHint () const noexcept;
   friend bool operator== (const Signature &l, const Signature &r) noexcept;
   pub Iterator begin () const;
   pub Iterator end () const;

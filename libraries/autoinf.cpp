@@ -119,8 +119,15 @@ bool operator!= (const FileInputIterator &l, const FileInputIterator &r) noexcep
 Signature::Signature () : h(0) {
 }
 
+Signature::Signature (size_t sizeHint) : b(sizeHint), h(0) {
+}
+
 size_t Signature::hash () const noexcept {
   return h;
+}
+
+size_t Signature::getSizeHint () const noexcept {
+  return b.size();
 }
 
 bool operator== (const Signature &l, const Signature &r) noexcept {
@@ -741,7 +748,7 @@ Signature Multiverse::createSignature (const Vm &vm, const Rangeset &ignoredByte
 Signature Multiverse::recreateSignature (const Signature &oldSignature, const Rangeset &extraIgnoredByteRangeset) {
   DS();
 
-  Signature signature; // XXXX init size? what units?
+  Signature signature(oldSignature.getSizeHint());
 
   auto i = oldSignature.begin();
   Signature::Writer writer(signature);
