@@ -545,12 +545,11 @@ int main (int argc, char *argv[]) {
           selectedNodes = move(nextSelectedNodes);
         } else if (line.size() > 2 && (line[0] == U'V' || line[0] == U'v') && line[1] == U'-') {
           is n = getNaturalNumber(line.data() + 2, line.data() + line.size());
-          if (n > 0) {
+          if (n > 0 && !selectedNodes.empty()) {
             vector<tuple<size_t, Node *>> nodes;
-            nodes.reserve(nodesByIndex.size());
+            nodes.reserve(selectedNodes.size());
 
-            for (const auto &d : nodesByIndex) {
-              Node *node = d.node;
+            for (Node *node : selectedNodes) {
               size_t value = node->getMetricState()->getValue();
               nodes.emplace_back(value, node);
             }
@@ -564,12 +563,16 @@ int main (int argc, char *argv[]) {
             for (auto nodesEnd = nodes.end(); nodesNetEnd != nodesEnd && get<0>(*nodesNetEnd) == minValue; ++nodesNetEnd);
             size_t count = static_cast<size_t>(nodesNetEnd - nodes.begin());
 
+            selectedNodes.clear();
+            size_t unprocessedCount = 0;
             for (auto i = nodes.begin(); i != nodesNetEnd; ++i) {
-              selectedNodes.insert(get<1>(*i));
+              Node *node = get<1>(*i);
+              unprocessedCount += !!node->getState();
+              selectedNodes.insert(node);
             }
 
             char8_t b[1024];
-            sprintf(reinterpret_cast<char *>(b), "Selected %d (of %d) nodes (threshold metric value %d)\n\n", count, nodes.size(), minValue);
+            sprintf(reinterpret_cast<char *>(b), "Selected %d (%d unprocessed) (of %d) nodes (threshold metric value %d)\n\n", count, unprocessedCount, nodes.size(), minValue);
             message.append(b);
           }
         } else if (line == u8("S") || line == u8("s")) {
@@ -680,7 +683,7 @@ int main (int argc, char *argv[]) {
       printf(
         "Show All _Nodes     Hide All _Dead End Nodes\n"
         "Select _All         _Clear Selection    _Invert Selection\n"
-        "Select by Top _Value-<n>\n"
+        "Shrink Selection by Top _Value-<n>\n"
         "_Show Output        _Hide Output\n"
         "_Process            Co_llapse           _Terminate\n"
         "Sav_e As-<name>     _Open File-<name>\n"
