@@ -533,6 +533,12 @@ int main (int argc, char *argv[]) {
           for (const auto &d : nodesByIndex) {
             selectedNodes.insert(d.node);
           }
+        } else if (line == u8("U") || line == u8("u")) {
+          for (const auto &d : nodesByIndex) {
+            if (d.node->getState()) {
+              selectedNodes.insert(d.node);
+            }
+          }
         } else if (line == u8("C") || line == u8("c")) {
           selectedNodes.clear();
         } else if (line == u8("I") || line == u8("i")) {
@@ -681,12 +687,13 @@ int main (int argc, char *argv[]) {
         printf("%s", message.c_str());
       }
       printf(
-        "Show All _Nodes     Hide All _Dead End Nodes\n"
-        "Select _All         _Clear Selection    _Invert Selection\n"
-        "Shrink Selection by Top _Value-<n>\n"
-        "_Show Output        _Hide Output\n"
-        "_Process            Co_llapse           _Terminate\n"
-        "Sav_e As-<name>     _Open File-<name>\n"
+        "Show All _Nodes         Hide _Dead End Nodes\n"
+        "Select _All             Select _Unprocesseds\n"
+        "_Clear Selection        _Invert Selection\n"
+        "Shrink Selection to Highest _Valued-<n>\n"
+        "_Show Output            _Hide Output\n"
+        "_Process                Co_llapse               _Terminate\n"
+        "Sav_e As-<name>         _Open File-<name>\n"
         ">"
       );
       fflush(stdout);
