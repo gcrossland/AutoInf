@@ -350,7 +350,7 @@ class Multiverse {
       prt State ();
       pub virtual ~State ();
 
-      pub virtual size_t getValue () = 0;
+      pub virtual size_t getValue (size_t i) = 0;
     };
 
     prt Metric ();
@@ -361,10 +361,12 @@ class Multiverse {
     pub virtual void walkState (State *state, Serialiser<FileOutputIterator> &s) = 0;
     pub virtual void walkState (State *state, Deserialiser<FileInputIterator> &s) = 0;
 
-    pub virtual std::unique_ptr<State> nodeCreated (const Multiverse &multiverse, ActionId parentActionId, const core::u8string &output, const Signature &signature) = 0;
+    pub virtual std::unique_ptr<State> nodeCreated (const Multiverse &multiverse, ActionId parentActionId, const core::u8string &output, const Signature &signature, const autofrotz::Vm &vm) = 0;
     pub virtual void nodeProcessed (const Multiverse &multiverse, Node &r_node) = 0;
     pub virtual void nodesProcessed (const Multiverse &multiverse, Node &r_rootNode, std::unordered_map<std::reference_wrapper<const Signature>, Node *, Hasher<Signature>> &r_nodes) = 0;
     pub virtual void nodesCollapsed (const Multiverse &multiverse, Node &r_rootNode, std::unordered_map<std::reference_wrapper<const Signature>, Node *, Hasher<Signature>> &r_nodes) = 0;
+
+    pub virtual size_t getValueCount () const = 0;
   };
 
   prv struct RangesetPart {
@@ -450,6 +452,7 @@ class Multiverse {
   pub ~Multiverse () noexcept;
 
   pub const ActionSet &getActionSet () const;
+  pub const Metric *getMetric () const;
   pub static void doAction (autofrotz::Vm &r_vm, core::u8string::const_iterator inputBegin, core::u8string::const_iterator inputEnd, core::u8string &r_output, const char8_t *deathExceptionMsg);
   pub static void doAction (autofrotz::Vm &r_vm, const core::u8string &input, core::u8string &r_output, const char8_t *deathExceptionMsg);
   prv void doSaveAction (autofrotz::Vm &r_vm, autofrotz::State &r_state);

@@ -628,7 +628,7 @@ Multiverse::Multiverse (
   ignoredByteRangeset = Rangeset(ignoredBytes, r_vm.getDynamicMemorySize());
   signature = recreateSignature(signature, ignoredByteRangeset);
 
-  unique_ptr<Metric::State> metricState(this->metric.get()->nodeCreated(*this, NON_ID, r_initialOutput, signature));
+  unique_ptr<Metric::State> metricState(this->metric->nodeCreated(*this, NON_ID, r_initialOutput, signature, r_vm));
   unique_ptr<Node> node(new Node(move(signature), move(state), move(metricState)));
   rootNode = node.get();
   nodes.emplace(ref(rootNode->getSignature()), rootNode);
@@ -670,6 +670,10 @@ Multiverse::~Multiverse () noexcept {
 
 const Multiverse::ActionSet &Multiverse::getActionSet () const {
   return actionSet;
+}
+
+const Multiverse::Metric *Multiverse::getMetric () const {
+  return metric.get();
 }
 
 void Multiverse::doAction(Vm &r_vm, u8string::const_iterator inputBegin, u8string::const_iterator inputEnd, u8string &r_output, const char8_t *deathExceptionMsg) {

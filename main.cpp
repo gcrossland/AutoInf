@@ -34,6 +34,8 @@ using autoinf::FileOutputIterator;
 using std::type_info;
 using autoinf::Deserialiser;
 using autoinf::FileInputIterator;
+using autofrotz::zword;
+using autofrotz::zbyte;
 
 /* -----------------------------------------------------------------------------
 ----------------------------------------------------------------------------- */
@@ -46,16 +48,18 @@ void terminator () {
 class WordUsageMetric : public virtual Metric {
   pub class State : public Metric::State {
     prv Bitset interestingChildActionWords;
-    prv size_t value;
+    prv size_t wordValue;
+    prv size_t score;
     pub static constexpr size_t NON_VALUE = static_cast<size_t>(-1);
 
-    pub State () : value(NON_VALUE) {
+    pub State () : wordValue(NON_VALUE), score(0) {
     }
 
     prt template<typename _Walker> void beWalked (_Walker &w) {
       DS();
       w.process(interestingChildActionWords);
-      w.process(value);
+      w.process(wordValue);
+      w.process(score);
     }
 
     State (const State &) = delete;
@@ -63,14 +67,17 @@ class WordUsageMetric : public virtual Metric {
     State (State &&) = delete;
     State &operator= (State &&) = delete;
 
-    pub size_t getValue () override {
-      return value;
+    pub size_t getValue (size_t i) override {
+      DPRE(i < 2);
+      return i == 0 ? wordValue : score;
     }
 
     friend class WordUsageMetric;
   };
 
-  pub WordUsageMetric () {
+  pub const zword scoreAddr;
+
+  pub WordUsageMetric (zword scoreAddr) : scoreAddr(scoreAddr) {
   }
 
   pub tuple<void *, size_t> deduceStateType (Metric::State *state) override {
@@ -104,11 +111,17 @@ class WordUsageMetric : public virtual Metric {
     r_words.compact();
   }
 
-  pub unique_ptr<Metric::State> nodeCreated (const Multiverse &multiverse, ActionId parentActionId, const u8string &output, const Signature &signature) override {
+  pub unique_ptr<Metric::State> nodeCreated (const Multiverse &multiverse, ActionId parentActionId, const u8string &output, const Signature &signature, const Vm &vm) override {
     char b[10];
     sprintf(b, "&%08X", signature.hash());
     DW(, "DDDD created new node with sig of hash ",b);
-    return unique_ptr<Metric::State>(new State());
+    unique_ptr<State> state(new State());
+
+    DPRE((static_cast<iu>(scoreAddr) + 1) < vm.getDynamicMemorySize() + 0);
+    const zbyte *m = vm.getDynamicMemory();
+    state->score = static_cast<zword>(static_cast<zword>(m[scoreAddr] << 8) | m[scoreAddr + 1]);
+
+    return unique_ptr<Metric::State>(move(state));
   }
 
   pub void nodeProcessed (const Multiverse &multiverse, Node &r_node) override {
@@ -117,14 +130,14 @@ class WordUsageMetric : public virtual Metric {
     updateInterestingChildActionWords(actionSet, r_node, static_cast<State *>(r_node.getMetricState())->interestingChildActionWords);
   }
 
-  prv void calculateNodeValue (Node *node, size_t parentNodeValue, size_t nodesSize, const size_t *wordCounts) {
+  prv void calculateNodeWordValue (Node *node, size_t parentNodeValue, size_t nodesSize, const size_t *wordCounts) {
     State *state = static_cast<State *>(node->getMetricState());
-    if (state->value != State::NON_VALUE) {
+    if (state->wordValue != State::NON_VALUE) {
       return;
     }
     char b[10];
     sprintf(b, "&%08X", node->getSignature().hash());
-    DW(, "DDDD calculating node value for node with sig of hash ",b);
+    DW(, "DDDD calculating node word value for node with sig of hash ",b);
 
     size_t value;
     if (node->getState()) {
@@ -137,13 +150,13 @@ class WordUsageMetric : public virtual Metric {
         value += nodesSize / wordCounts[i];
       }
     }
-    DW(, "       final local value is ", value);
-    DW(, "       (parent value is ", parentNodeValue,")");
+    DW(, "       final local word value is ", value);
+    DW(, "       (parent word value is ", parentNodeValue,")");
     value += parentNodeValue;
-    state->value = value;
+    state->wordValue = value;
 
     for (size_t i = 0, end = node->getChildrenSize(); i != end; ++i) {
-      calculateNodeValue(get<2>(node->getChild(i)), value, nodesSize, wordCounts);
+      calculateNodeWordValue(get<2>(node->getChild(i)), value, nodesSize, wordCounts);
     }
   }
 
@@ -161,7 +174,7 @@ class WordUsageMetric : public virtual Metric {
     for (auto &entry : r_nodes) {
       Node *node = get<1>(entry);
       State *state = static_cast<State *>(node->getMetricState());
-      state->value = State::NON_VALUE;
+      state->wordValue = State::NON_VALUE;
       if (node->getState()) {
         continue;
       }
@@ -179,7 +192,7 @@ class WordUsageMetric : public virtual Metric {
     }
 
     // XXXX walk in a bredth first fashion (like prime parent)?
-    calculateNodeValue(&r_rootNode, 0, nodesSize, wordCounts);
+    calculateNodeWordValue(&r_rootNode, 0, nodesSize, wordCounts);
   }
 
   pub void nodesProcessed (const Multiverse &multiverse, Node &r_rootNode, unordered_map<reference_wrapper<const Signature>, Node *, autoinf::Hasher<Signature>> &r_nodes) override {
@@ -188,6 +201,10 @@ class WordUsageMetric : public virtual Metric {
 
   pub void nodesCollapsed (const Multiverse &multiverse, Node &r_rootNode, unordered_map<reference_wrapper<const Signature>, Node *, autoinf::Hasher<Signature>> &r_nodes) override {
     nodesChanged(true, multiverse, r_rootNode, r_nodes);
+  }
+
+  pub size_t getValueCount () const override {
+    return 2;
   }
 };
 
@@ -251,7 +268,7 @@ int main (int argc, char *argv[]) {
       [] (const Vm &vm, const u8string &output) -> bool {
         return output.find(u8("You can't see")) != std::string::npos;
       },
-      unique_ptr<Metric>(new WordUsageMetric())
+      unique_ptr<Metric>(new WordUsageMetric(0x08C8))
     );
     /*
     Vm vm("advent/advent.z5", 70, height, undoDepth, true, output);
@@ -504,7 +521,7 @@ int main (int argc, char *argv[]) {
           output.find(u8("That's not something you need to refer to in the course of this game.")) != u8string::npos
         ;
       },
-      unique_ptr<Metric>(new WordUsageMetric())
+      unique_ptr<Metric>(new WordUsageMetric(one of 0x3BEB or 0x3C0B or 0x3C0D))
     );
     */
 
@@ -549,37 +566,41 @@ int main (int argc, char *argv[]) {
             }
           }
           selectedNodes = move(nextSelectedNodes);
-        } else if (line.size() > 2 && (line[0] == U'V' || line[0] == U'v') && line[1] == U'-') {
-          is n = getNaturalNumber(line.data() + 2, line.data() + line.size());
-          if (n > 0 && !selectedNodes.empty()) {
-            vector<tuple<size_t, Node *>> nodes;
-            nodes.reserve(selectedNodes.size());
+        } else if (line.size() > 3 && (line[0] == U'V' || line[0] == U'v') && line[1] == U'-') {
+          char8_t valueName = line[2];
+          if (valueName >= 'a' && valueName <= 'z') {
+            size_t valueIndex = static_cast<size_t>(valueName - 'a');
+            is n = getNaturalNumber(line.data() + 3, line.data() + line.size());
+            if (n > 0 && !selectedNodes.empty()) {
+              vector<tuple<size_t, Node *>> nodes;
+              nodes.reserve(selectedNodes.size());
 
-            for (Node *node : selectedNodes) {
-              size_t value = node->getMetricState()->getValue();
-              nodes.emplace_back(value, node);
+              for (Node *node : selectedNodes) {
+                size_t value = node->getMetricState()->getValue(valueIndex);
+                nodes.emplace_back(value, node);
+              }
+              sort(nodes.begin(), nodes.end(), [] (const tuple<size_t, Node *> &o0, const tuple<size_t, Node *> &o1) -> bool {
+                return get<0>(o0) > get<0>(o1);
+              });
+
+              auto nodesNetEnd = nodes.begin() + static_cast<ptrdiff_t>(min(static_cast<size_t>(n), nodes.size()) - 1); // XXXX sort out size_t -> ptrdiff_t
+              size_t minValue = get<0>(*nodesNetEnd);
+              ++nodesNetEnd;
+              for (auto nodesEnd = nodes.end(); nodesNetEnd != nodesEnd && get<0>(*nodesNetEnd) == minValue; ++nodesNetEnd);
+              size_t count = static_cast<size_t>(nodesNetEnd - nodes.begin());
+
+              selectedNodes.clear();
+              size_t unprocessedCount = 0;
+              for (auto i = nodes.begin(); i != nodesNetEnd; ++i) {
+                Node *node = get<1>(*i);
+                unprocessedCount += !!node->getState();
+                selectedNodes.insert(node);
+              }
+
+              char8_t b[1024];
+              sprintf(reinterpret_cast<char *>(b), "Selected %d (%d unprocessed) (of %d) nodes (threshold metric value %d)\n\n", count, unprocessedCount, nodes.size(), minValue);
+              message.append(b);
             }
-            sort(nodes.begin(), nodes.end(), [] (const tuple<size_t, Node *> &o0, const tuple<size_t, Node *> &o1) -> bool {
-              return get<0>(o0) > get<0>(o1);
-            });
-
-            auto nodesNetEnd = nodes.begin() + static_cast<ptrdiff_t>(min(static_cast<size_t>(n), nodes.size()) - 1); // XXXX sort out size_t -> ptrdiff_t
-            size_t minValue = get<0>(*nodesNetEnd);
-            ++nodesNetEnd;
-            for (auto nodesEnd = nodes.end(); nodesNetEnd != nodesEnd && get<0>(*nodesNetEnd) == minValue; ++nodesNetEnd);
-            size_t count = static_cast<size_t>(nodesNetEnd - nodes.begin());
-
-            selectedNodes.clear();
-            size_t unprocessedCount = 0;
-            for (auto i = nodes.begin(); i != nodesNetEnd; ++i) {
-              Node *node = get<1>(*i);
-              unprocessedCount += !!node->getState();
-              selectedNodes.insert(node);
-            }
-
-            char8_t b[1024];
-            sprintf(reinterpret_cast<char *>(b), "Selected %d (%d unprocessed) (of %d) nodes (threshold metric value %d)\n\n", count, unprocessedCount, nodes.size(), minValue);
-            message.append(b);
           }
         } else if (line == u8("S") || line == u8("s")) {
           verboseNodes.insert(selectedNodes.cbegin(), selectedNodes.cend());
@@ -841,7 +862,12 @@ void printNodeHeader (
 
   fprintf(out, "%s", renderActionInput(actionId, multiverse).c_str());
   fprintf(out, " [sig of hash &%08X]", node->getSignature().hash());
-  fprintf(out, " metric value %d", node->getMetricState()->getValue());
+  fprintf(out, " metric values {");
+  Metric::State *state = node->getMetricState();
+  for (size_t i = 0, end = multiverse.getMetric()->getValueCount(); i != end; ++i) {
+    fprintf(out, "%s%d", i == 0 ? "" : ", ", state->getValue(i));
+  }
+  fprintf(out, "}");
 }
 
 void printNodeOutput (const u8string *output, const u8string &prefix, FILE *out) {

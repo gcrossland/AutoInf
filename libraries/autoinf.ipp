@@ -536,7 +536,7 @@ template<typename _F, iff(std::is_convertible<_F, std::function<bool (Multiverse
 }
 
 template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd, Vm &r_vm) {
-  typedef tuple<Node *, ActionId, u8string, Signature, State> result;
+  typedef tuple<Node *, ActionId, u8string, Signature, State, unique_ptr<Metric::State>> result;
   DS();
 
   deque<result> resultQueue;
@@ -549,7 +549,7 @@ template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd,
       DS();
       DW(, "adding done result to queue");
       unique_lock<mutex> l(resultQueueLock);
-      resultQueue.emplace_back(nullptr, 0, u8string(), Signature(), State());
+      resultQueue.emplace_back(nullptr, 0, u8string(), Signature(), State(), nullptr);
       resultQueueCondVar.notify_one();
       DW(, "done adding done result to queue");
     });
@@ -601,6 +601,8 @@ template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd,
           continue;
         }
 
+        unique_ptr<Metric::State> metricState = metric->nodeCreated(*this, id, output, signature, r_vm);
+
         DW(, "output from the action is **", output.c_str(), "**");
         try {
           // XXXX better response from doSaveAction on 'can't save'?
@@ -611,7 +613,7 @@ template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd,
         {
           DW(, "adding the result to queue");
           unique_lock<mutex> l(resultQueueLock);
-          resultQueue.emplace_back(parentNode, id, output, move(signature), postState);
+          resultQueue.emplace_back(parentNode, id, output, move(signature), postState, move(metricState));
           resultQueueCondVar.notify_one();
           DW(, "done adding the result to queue");
         }
@@ -640,7 +642,7 @@ template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd,
     if (prevParentNode && parentNode != prevParentNode) {
       prevParentNode->batchOfChildChangesCompleted();
       prevParentNode->clearState();
-      metric.get()->nodeProcessed(*this, *prevParentNode);
+      metric->nodeProcessed(*this, *prevParentNode);
     }
     prevParentNode = parentNode;
     if (!parentNode) {
@@ -652,6 +654,7 @@ template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd,
     u8string &resultOutput = get<2>(rs);
     Signature &resultSignature = get<3>(rs);
     State &resultState = get<4>(rs);
+    unique_ptr<Metric::State> &resultMetricState = get<5>(rs);
     DW(, "M the child is for the action of id ",parentActionId,"; the sig is of hash ", resultSignature.hash());
     DA(!(resultSignature == parentNode->getSignature()));
 
@@ -659,8 +662,7 @@ template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd,
     auto v = find(nodes, resultSignature);
     if (!v) {
       DW(, "M this is a new node for this multiverse!");
-      unique_ptr<Metric::State> metricState(metric.get()->nodeCreated(*this, parentActionId, resultOutput, resultSignature));
-      unique_ptr<Node> n(new Node(move(resultSignature), move(resultState), move(metricState)));
+      unique_ptr<Node> n(new Node(move(resultSignature), move(resultState), move(resultMetricState)));
       resultNode = n.get();
       nodes.emplace(ref(resultNode->getSignature()), resultNode);
       n.release();
@@ -674,7 +676,7 @@ template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd,
 
   dispatcherFuture.get();
 
-  metric.get()->nodesProcessed(*this, *rootNode, nodes);
+  metric->nodesProcessed(*this, *rootNode, nodes);
 }
 
 template<typename _I> Bitset Multiverse::createExtraIgnoredBytes (const Signature &firstSignature, _I otherSignatureIsBegin, _I otherSignatureIsEnd, const Vm &vm) {
@@ -760,7 +762,7 @@ template<typename _I> void Multiverse::collapseNodes (_I nodesBegin, _I nodesEnd
   DW(, dc, " old nodes were deleted");
   nodes = move(survivingNodes);
 
-  metric.get()->nodesCollapsed(*this, *rootNode, nodes);
+  metric->nodesCollapsed(*this, *rootNode, nodes);
 }
 
 template<typename _Walker> void Multiverse::derefAndProcessMetricState (Metric::State *&state, _Walker &w) {
