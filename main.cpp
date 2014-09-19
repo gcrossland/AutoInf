@@ -609,15 +609,15 @@ int main (int argc, char *argv[]) {
             verboseNodes.erase(node);
           }
         } else if (line == u8("P") || line == u8("p")) {
-          Node *t[nodesByIndex.size()];
-          Node **tI = t;
+          vector<Node *> t;
+          t.reserve(selectedNodes.size());
           for (const auto &d : nodesByIndex) {
             Node *n = d.node;
             if (selectedNodes.find(n) != selectedNodes.end()) {
-              *(tI++) = n;
+              t.emplace_back(n);
             }
           }
-          multiverse.processNodes(t, tI, vm);
+          multiverse.processNodes(t.begin(), t.end(), vm);
           nodesByIndex.clear();
         } else if (line == u8("L") || line == u8("l")) {
           if (selectedNodes.cbegin() != selectedNodes.cend()) {
