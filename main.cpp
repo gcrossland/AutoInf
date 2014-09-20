@@ -530,6 +530,7 @@ int main (int argc, char *argv[]) {
     vector<NodeData> nodesByIndex;
     unordered_map<Node *, size_t> nodeIndices;
     bool elideDeadEndNodes = false;
+    size_t maxDepth = numeric_limits<size_t>::max();
     u8string in(u8(" "));
     do {
       u8string message;
@@ -545,6 +546,13 @@ int main (int argc, char *argv[]) {
           elideDeadEndNodes = false;
         } else if (line == u8("D") || line == u8("d")) {
           elideDeadEndNodes = true;
+        } else if (line == u8("W") || line == u8("w")) {
+          maxDepth = numeric_limits<size_t>::max();
+        } else if (line.size() > 2 && (line[0] == U'W' || line[0] == U'w') && line[1] == U'-') {
+          is n = getNaturalNumber(line.data() + 2, line.data() + line.size());
+          if (n >= 0) {
+            maxDepth = static_cast<iu>(n);
+          }
         } else if (line == u8("A") || line == u8("a")) {
           selectedNodes.clear();
           for (const auto &d : nodesByIndex) {
@@ -701,14 +709,14 @@ int main (int argc, char *argv[]) {
           }
         });
 
-        printNode(multiverse.getRootNode(), multiverse, selectedNodes, verboseNodes, nodesByIndex, nodeIndices, elideDeadEndNodes, out);
+        printNode(multiverse.getRootNode(), multiverse, selectedNodes, verboseNodes, nodesByIndex, nodeIndices, elideDeadEndNodes, maxDepth, out);
       }
 
       if (!message.empty()) {
         printf("%s", message.c_str());
       }
       printf(
-        "Show All _Nodes         Hide _Dead End Nodes\n"
+        "Show All _Nodes         Hide _Dead End Nodes    Sho_w Nodes n Deep[-<n>]\n"
         "Select _All             Select _Unprocesseds\n"
         "_Clear Selection        _Invert Selection\n"
         "Shrink Selection to Highest _Valued-<n>\n"
@@ -830,10 +838,11 @@ void markDeadEndNodes (vector<NodeData> &nodesByIndex, const unordered_map<Node 
 void printNode (
   Node *rootNode,
   const Multiverse &multiverse, const unordered_set<Node *> &selectedNodes, const unordered_set<Node *> &verboseNodes,
-  const vector<NodeData> &nodesByIndex, const unordered_map<Node *, size_t> &nodeIndices, bool elideDeadEndNodes, FILE *out
+  const vector<NodeData> &nodesByIndex, const unordered_map<Node *, size_t> &nodeIndices, bool elideDeadEndNodes, size_t maxDepth,
+  FILE *out
 ) {
   u8string prefix;
-  printNodeAsNonleaf(nullptr, rootNode, nullptr, Multiverse::NON_ID, multiverse, selectedNodes, verboseNodes, nodesByIndex, nodeIndices, elideDeadEndNodes, prefix, out);
+  printNodeAsNonleaf(0, nullptr, rootNode, nullptr, Multiverse::NON_ID, multiverse, selectedNodes, verboseNodes, nodesByIndex, nodeIndices, elideDeadEndNodes, maxDepth, prefix, out);
 }
 
 u8string renderActionInput (ActionId actionId, const Multiverse &multiverse) {
@@ -892,9 +901,10 @@ void printNodeOutput (const u8string *output, const u8string &prefix, FILE *out)
 }
 
 void printNodeAsLeaf (
-  const u8string *output, Node *node, Node *parentNode, ActionId actionId,
+  size_t depth, const u8string *output, Node *node, Node *parentNode, ActionId actionId,
   const Multiverse &multiverse, const unordered_set<Node *> &selectedNodes, const unordered_set<Node *> &verboseNodes,
-  const vector<NodeData> &nodesByIndex, const unordered_map<Node *, size_t> &nodeIndices, bool elideDeadEndNodes, u8string &r_prefix, FILE *out
+  const vector<NodeData> &nodesByIndex, const unordered_map<Node *, size_t> &nodeIndices, bool elideDeadEndNodes, size_t maxDepth,
+  u8string &r_prefix, FILE *out
 ) {
   printNodeHeader(U'{', U'}', node, actionId, multiverse, selectedNodes, nodeIndices, out);
   fprintf(out, " / (elsewhere)\n");
@@ -902,9 +912,10 @@ void printNodeAsLeaf (
 }
 
 void printNodeAsNonleaf (
-  const u8string *output, Node *node, Node *parentNode, ActionId actionId,
+  size_t depth, const u8string *output, Node *node, Node *parentNode, ActionId actionId,
   const Multiverse &multiverse, const unordered_set<Node *> &selectedNodes, const unordered_set<Node *> &verboseNodes,
-  const vector<NodeData> &nodesByIndex, const unordered_map<Node *, size_t> &nodeIndices, bool elideDeadEndNodes, u8string &r_prefix, FILE *out
+  const vector<NodeData> &nodesByIndex, const unordered_map<Node *, size_t> &nodeIndices, bool elideDeadEndNodes, size_t maxDepth,
+  u8string &r_prefix, FILE *out
 ) {
   printNodeHeader(U'(', U')', node, actionId, multiverse, selectedNodes, nodeIndices, out);
   if (node->getState()) {
@@ -914,6 +925,12 @@ void printNodeAsNonleaf (
     fprintf(out, " / %u %s\n", c, c == 1 ? "child" : "children");
   }
   printNodeOutput(output, r_prefix, out);
+
+  DA(depth <= maxDepth);
+  if (depth == maxDepth) {
+    return;
+  }
+  ++depth;
 
   enum {
     NONE,
@@ -960,7 +977,7 @@ void printNodeAsNonleaf (
 
     fprintf(out, "%s%c-> ", r_prefix.c_str(), last ? '+' : '|');
     r_prefix.append(last ? u8("    ") : u8("|   "));
-    (fmts[i] == LEAF ? printNodeAsLeaf : printNodeAsNonleaf)(verboseNodes.find(childNode) != verboseNodes.end() ? &childOuput : nullptr, childNode, node, childActionId, multiverse, selectedNodes, verboseNodes, nodesByIndex, nodeIndices, elideDeadEndNodes, r_prefix, out);
+    (fmts[i] == LEAF ? printNodeAsLeaf : printNodeAsNonleaf)(depth, verboseNodes.find(childNode) != verboseNodes.end() ? &childOuput : nullptr, childNode, node, childActionId, multiverse, selectedNodes, verboseNodes, nodesByIndex, nodeIndices, elideDeadEndNodes, maxDepth, r_prefix, out);
     r_prefix.resize(r_prefix.size() - 4);
   }
 }
