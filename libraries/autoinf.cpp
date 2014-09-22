@@ -563,28 +563,6 @@ void Multiverse::Node::changeChild (size_t i, Node *node) {
   get<2>(children[i]) = node;
 }
 
-Multiverse::NodePath::NodePath () {
-}
-
-void Multiverse::NodePath::append (ActionId child) {
-  path.push_back(child);
-}
-
-void Multiverse::NodePath::pop () {
-  path.pop_back();
-}
-
-Multiverse::Node *Multiverse::NodePath::resolve (Node *node) const {
-  for (const ActionId &child : path) {
-    auto r = node->getChildByActionId(child);
-    if (!r) {
-      return nullptr;
-    }
-    node = get<2>(*r);
-  }
-  return node;
-}
-
 Multiverse::Multiverse (
   Vm &r_vm, const u8string &initialInput, u8string &r_initialOutput, function<bool (Vm &r_vm)> &&saver, function<bool (Vm &r_vm)> &&restorer,
   const vector<vector<u8string>> &equivalentActionInputsSet,
@@ -766,10 +744,6 @@ Signature Multiverse::recreateSignature (const Signature &oldSignature, const Ra
   writer.close();
 
   return signature;
-}
-
-Multiverse::Node *Multiverse::getNode (const NodePath &nodePath) const {
-  return nodePath.resolve(rootNode);
 }
 
 Multiverse::Node *Multiverse::getRootNode () const {

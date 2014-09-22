@@ -413,20 +413,6 @@ class Multiverse {
     pub template<typename _F, iff(std::is_convertible<_F, std::function<bool (Node *)>>::value)> void forEach (const _F &f);
   };
 
-  pub class NodePath {
-    prv std::vector<ActionId> path;
-
-    pub NodePath ();
-    pub NodePath (const NodePath &) = default;
-    pub NodePath &operator= (const NodePath &) = default;
-    pub NodePath (NodePath &&) = default;
-    pub NodePath &operator= (NodePath &&) = default;
-
-    pub void append (ActionId child);
-    pub void pop ();
-    pub Node *resolve (Node *node) const;
-  };
-
   prv const std::function<bool (autofrotz::Vm &r_vm)> saver;
   prv const std::function<bool (autofrotz::Vm &r_vm)> restorer;
   prv const ActionSet actionSet;
@@ -459,7 +445,6 @@ class Multiverse {
   prv void doRestoreAction (autofrotz::Vm &r_vm, const autofrotz::State &state);
   prv static Signature createSignature (const autofrotz::Vm &vm, const Rangeset &ignoredByteRangeset);
   prv static Signature recreateSignature (const Signature &oldSignature, const Rangeset &extraIgnoredByteRangeset);
-  pub Node *getNode (const NodePath &nodePath) const;
   pub Node *getRootNode () const;
   pub template<typename _I> void processNodes (_I nodesBegin, _I nodesEnd, autofrotz::Vm &r_vm);
   prv template<typename _I> bitset::Bitset createExtraIgnoredBytes (const Signature &firstSignature, _I otherSignatureIsBegin, _I otherSignatureIsEnd, const autofrotz::Vm &vm);
