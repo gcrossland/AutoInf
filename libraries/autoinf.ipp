@@ -502,18 +502,18 @@ template<typename ..._Ts> Multiverse::ActionTemplate::ActionTemplate (_Ts &&...t
   }
 }
 
-template<typename ..._Ts> void Multiverse::ActionTemplate::init (u8string &&segment, ActionWord::CategorySet word, _Ts &&...ts)
-{
+template<typename ..._Ts> void Multiverse::ActionTemplate::init (u8string &&segment, ActionWord::CategorySet word, _Ts &&...ts) {
   segments.push_back(move(segment));
   words.push_back(word);
   init(forward<_Ts>(ts)...);
 }
 
-template<typename _InputIterator> Multiverse::Node::Node (const Deserialiser<_InputIterator> &) {
+template<typename _InputIterator> Multiverse::Node::Node (const Deserialiser<_InputIterator> &) : primeParentNode(nullptr), primeParentNodeInvalid(false) {
 }
 
 template<typename _Walker> void Multiverse::Node::beWalked (_Walker &w) {
   DS();
+  w.derefAndProcess(primeParentNode);
   w.process(signature);
   w.derefAndProcess(state);
   w.process(metricState);
@@ -640,9 +640,8 @@ template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd,
 
     Node *parentNode = get<0>(rs);
     if (prevParentNode && parentNode != prevParentNode) {
-      prevParentNode->batchOfChildChangesCompleted();
       prevParentNode->clearState();
-      metric->nodeProcessed(*this, *prevParentNode);
+      prevParentNode->childrenUpdated(*this);
     }
     prevParentNode = parentNode;
     if (!parentNode) {
@@ -662,7 +661,7 @@ template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd,
     auto v = find(nodes, resultSignature);
     if (!v) {
       DW(, "M this is a new node for this multiverse!");
-      unique_ptr<Node> n(new Node(move(resultSignature), move(resultState), move(resultMetricState)));
+      unique_ptr<Node> n(new Node(Node::UNPARENTED, move(resultSignature), move(resultState), move(resultMetricState)));
       resultNode = n.get();
       nodes.emplace(ref(resultNode->getSignature()), resultNode);
       n.release();
@@ -671,12 +670,12 @@ template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd,
       resultNode = *v;
       DA(resultSignature == resultNode->getSignature());
     }
-    parentNode->addChild(parentActionId, move(resultOutput), resultNode);
+    parentNode->addChild(parentActionId, move(resultOutput), resultNode, *this);
   }
 
   dispatcherFuture.get();
 
-  metric->nodesProcessed(*this, *rootNode, nodes);
+  metric->nodesProcessed(*this, rootNode, nodes);
 }
 
 template<typename _I> Bitset Multiverse::createExtraIgnoredBytes (const Signature &firstSignature, _I otherSignatureIsBegin, _I otherSignatureIsEnd, const Vm &vm) {
@@ -762,7 +761,9 @@ template<typename _I> void Multiverse::collapseNodes (_I nodesBegin, _I nodesEnd
   DW(, dc, " old nodes were deleted");
   nodes = move(survivingNodes);
 
-  metric->nodesCollapsed(*this, *rootNode, nodes);
+  Node::rebuildPrimeParents(rootNode, *this);
+
+  metric->nodesCollapsed(*this, rootNode, nodes);
 }
 
 template<typename _Walker> void Multiverse::derefAndProcessMetricState (Metric::State *&state, _Walker &w) {

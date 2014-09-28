@@ -362,9 +362,10 @@ class Multiverse {
     pub virtual void walkState (State *state, Deserialiser<FileInputIterator> &s) = 0;
 
     pub virtual std::unique_ptr<State> nodeCreated (const Multiverse &multiverse, ActionId parentActionId, const core::u8string &output, const Signature &signature, const autofrotz::Vm &vm) = 0;
-    pub virtual void nodeProcessed (const Multiverse &multiverse, Node &r_node) = 0;
-    pub virtual void nodesProcessed (const Multiverse &multiverse, Node &r_rootNode, std::unordered_map<std::reference_wrapper<const Signature>, Node *, Hasher<Signature>> &r_nodes) = 0;
-    pub virtual void nodesCollapsed (const Multiverse &multiverse, Node &r_rootNode, std::unordered_map<std::reference_wrapper<const Signature>, Node *, Hasher<Signature>> &r_nodes) = 0;
+    pub virtual void subtreePrimeAncestorsUpdated (const Multiverse &multiverse, const Node *node) = 0;
+    pub virtual void nodeChildrenUpdated (const Multiverse &multiverse, const Node *node) = 0;
+    pub virtual void nodesProcessed (const Multiverse &multiverse, const Node *rootNode, const std::unordered_map<std::reference_wrapper<const Signature>, Node *, Hasher<Signature>> &nodes) = 0;
+    pub virtual void nodesCollapsed (const Multiverse &multiverse, const Node *rootNode, const std::unordered_map<std::reference_wrapper<const Signature>, Node *, Hasher<Signature>> &nodes) = 0;
 
     pub virtual size_t getValueCount () const = 0;
   };
@@ -383,12 +384,16 @@ class Multiverse {
   };
 
   pub class Node {
+    pub static Node *const UNPARENTED;
+
+    prv Node *primeParentNode;
+    prv bool primeParentNodeInvalid;
     prv Signature signature;
     prv std::unique_ptr<autofrotz::State> state;
     prv std::unique_ptr<Metric::State> metricState;
     prv std::vector<std::tuple<ActionId, core::u8string, Node *>> children;
 
-    pub Node (Signature &&signature, autofrotz::State &&state, std::unique_ptr<Metric::State> &&metricState);
+    pub Node (Node *primeParentNode, Signature &&signature, autofrotz::State &&state, std::unique_ptr<Metric::State> &&metricState);
     Node (const Node &) = delete;
     Node &operator= (const Node &) = delete;
     Node (Node &&) = delete;
@@ -396,19 +401,23 @@ class Multiverse {
     pub template<typename _InputIterator> explicit Node (const Deserialiser<_InputIterator> &);
     pub template<typename _Walker> void beWalked (_Walker &w);
 
+    pub Node *getPrimeParentNode () const;
+    pub size_t getPrimeParentArcChildIndex () const;
     pub const Signature &getSignature () const;
     pub Signature setSignature (Signature &&signature);
     pub const autofrotz::State *getState () const;
     pub void clearState ();
     pub Metric::State *getMetricState () const;
-    pub void addChild (ActionId actionId, core::u8string &&output, Node *node);
-    pub void batchOfChildChangesCompleted ();
     pub size_t getChildrenSize () const;
     pub const std::tuple<ActionId, core::u8string, Node *> &getChild (size_t i) const;
-    pub const std::tuple<ActionId, core::u8string, Node *> *getChildByActionId (ActionId id) const;
-    // XXXX get index by action id?
+    pub size_t getChildIndex (ActionId id) const;
+    pub void addChild (ActionId actionId, core::u8string &&output, Node *node, const Multiverse &multiverse);
+    prv bool updatePrimeParent (Node *newParentNode);
     pub void removeChild (size_t i);
     pub void changeChild (size_t i, Node *node);
+    pub void childrenUpdated (const Multiverse &multiverse);
+    pub void invalidatePrimeParent ();
+    pub static void rebuildPrimeParents (Node *rootNode, const Multiverse &multiverse);
 
     pub template<typename _F, iff(std::is_convertible<_F, std::function<bool (Node *)>>::value)> void forEach (const _F &f);
   };
@@ -449,7 +458,7 @@ class Multiverse {
   pub template<typename _I> void processNodes (_I nodesBegin, _I nodesEnd, autofrotz::Vm &r_vm);
   prv template<typename _I> bitset::Bitset createExtraIgnoredBytes (const Signature &firstSignature, _I otherSignatureIsBegin, _I otherSignatureIsEnd, const autofrotz::Vm &vm);
   pub template<typename _I> void collapseNodes (_I nodesBegin, _I nodesEnd, const autofrotz::Vm &vm);
-  prv static Node *collapseNode (
+  prv Node *collapseNode (
     Node *node, const Rangeset &extraIgnoredByteRangeset,
     std::unordered_map<std::reference_wrapper<const Signature>, Node *, Hasher<Signature>> &r_survivingNodes,
     std::unordered_map<Node *, Node *> &r_nodeCollapseTargets,

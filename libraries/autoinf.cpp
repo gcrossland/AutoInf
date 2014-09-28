@@ -116,6 +116,9 @@ bool operator!= (const FileInputIterator &l, const FileInputIterator &r) noexcep
   return !(l == r);
 }
 
+constexpr SerialiserBase::id SerialiserBase::NON_ID;
+constexpr SerialiserBase::id SerialiserBase::NULL_ID;
+
 Signature::Signature () : h(0) {
 }
 
@@ -490,13 +493,32 @@ Multiverse::Rangeset::Rangeset (const Bitset &bitset, iu16 rangesEnd) : vector()
   }), " bits are set");
 }
 
-Multiverse::Node::Node (Signature &&signature, State &&state, unique_ptr<Metric::State> &&metricState) :
-  signature(move(signature)), state(), metricState(move(metricState)), children()
+Multiverse::Node *const Multiverse::Node::UNPARENTED = static_cast<Node *>(nullptr) + 1;
+
+Multiverse::Node::Node (Node *primeParentNode, Signature &&signature, State &&state, unique_ptr<Metric::State> &&metricState) :
+  primeParentNode(primeParentNode), primeParentNodeInvalid(false), signature(move(signature)), state(), metricState(move(metricState)), children()
 {
   if (!state.isEmpty()) {
     this->state.reset(new State(move(state)));
   }
   DW(, "created new Node with sig of hash ", this->signature.hash());
+}
+
+Multiverse::Node *Multiverse::Node::getPrimeParentNode () const {
+  DPRE(!primeParentNodeInvalid);
+  DPRE(primeParentNode != UNPARENTED);
+  return primeParentNode;
+}
+
+size_t Multiverse::Node::getPrimeParentArcChildIndex () const {
+  auto &children = getPrimeParentNode()->children;
+  for (size_t i = 0, end = children.size(); i != end; ++i) {
+    if (get<2>(children[i]) == this) {
+      return i;
+    }
+  }
+  DA(false);
+  return 0;
 }
 
 const Signature &Multiverse::Node::getSignature () const {
@@ -522,7 +544,22 @@ Multiverse::Metric::State *Multiverse::Node::getMetricState () const {
   return metricState.get();
 }
 
-void Multiverse::Node::addChild (ActionId actionId, u8string &&output, Node *node) {
+size_t Multiverse::Node::getChildrenSize () const {
+  return children.size();
+}
+
+const tuple<Multiverse::ActionId, u8string, Multiverse::Node *> &Multiverse::Node::getChild (size_t i) const {
+  return children[i];
+}
+
+size_t Multiverse::Node::getChildIndex (ActionId id) const {
+  auto i = lower_bound(children.begin(), children.end(), id, [] (const tuple<ActionId, u8string, Node *> &elmt, const ActionId &target) {
+    return get<0>(elmt) < target;
+  });
+  return (i == children.end() || get<0>(*i) != id) ? numeric_limits<size_t>::max() : static_cast<size_t>(i - children.begin());
+}
+
+void Multiverse::Node::addChild (ActionId actionId, u8string &&output, Node *node, const Multiverse &multiverse) {
   DW(, "adding to Node with sig of hash ", signature.hash(), " child of action id ", actionId, ":");
   DW(, "  output is **", output.c_str(), "**");
   DW(, "  dest. Node has sig of hash ", node->getSignature().hash());
@@ -530,37 +567,174 @@ void Multiverse::Node::addChild (ActionId actionId, u8string &&output, Node *nod
   DPRE(children.empty() || get<0>(children.back()) < actionId, "children must be added in order of actionId");
 
   children.emplace_back(actionId, move(output), node);
-}
 
-void Multiverse::Node::batchOfChildChangesCompleted () {
-  DW(, "finished changing all ", children.size(), " children on Node with sig of hash ", signature.hash());
-  children.shrink_to_fit();
-}
-
-size_t Multiverse::Node::getChildrenSize () const {
-  return children.size();
-}
-
-const tuple<Multiverse::ActionId, u8string, Multiverse::Node *> &Multiverse::Node::getChild(size_t i) const {
-  return children[i];
-}
-
-const tuple<Multiverse::ActionId, u8string, Multiverse::Node *> *Multiverse::Node::getChildByActionId (ActionId id) const {
-  auto i = lower_bound(children.begin(), children.end(), id, [] (const tuple<ActionId, u8string, Node *> &elmt, const ActionId &target) {
-    return get<0>(elmt) < target;
-  });
-  if (i == children.end() || get<0>(*i) != id) {
-    return nullptr;
+  bool primeParentChanged = node->updatePrimeParent(this);
+  if (primeParentChanged) {
+    multiverse.metric->subtreePrimeAncestorsUpdated(multiverse, node);
   }
-  return &(*i);
+}
+
+bool Multiverse::Node::updatePrimeParent (Node *newParentNode) {
+  DS();
+  DW(, "checking if Node with sig of hash ", signature.hash(), " needs its prime parent updated");
+  DPRE(!!newParentNode);
+  DPRE(!primeParentNodeInvalid);
+
+  bool changed = false;
+
+  if (primeParentNode == newParentNode) {
+    DW(, "  same parent");
+  } else if (!primeParentNode) {
+    DW(, "  this Node is already the root!");
+  } else if (primeParentNode == UNPARENTED) {
+    DW(, "  this Node is unparented");
+    changed = true;
+  } else {
+    Node *n0 = primeParentNode;
+    Node *n1 = newParentNode;
+    while (true) {
+      DW(, "  going up the graph...");
+      Node *prevN0 = n0;
+      n0 = n0->primeParentNode;
+      DPRE(!n0 || !n0->primeParentNodeInvalid);
+      Node *prevN1 = n1;
+      n1 = n1->primeParentNode;
+      DPRE(!n1 || !n1->primeParentNodeInvalid);
+
+      if (!n0) {
+        DW(, "  gone above the root node on the old prime parent's side");
+        break;
+      } else if (!n1) {
+        DW(, "  gone above the root node on the new prime parent's side");
+        changed = true;
+        break;
+      } else if (n0 == n1) {
+        DW(, "  reached the same node from both sides");
+        for (size_t i = 0;; ++i) {
+          DA(i != n0->getChildrenSize());
+          Node *c = get<2>(n0->getChild(i));
+          if (c == prevN0) {
+            DW(, "  old prime parent's side is hit first");
+            break;
+          } else if (c == prevN1) {
+            DW(, "  new prime parent's side is hit first");
+            changed = true;
+            break;
+          }
+        }
+        break;
+      }
+    }
+  }
+
+  if (changed) {
+    primeParentNode = newParentNode;
+
+    DW(, "  updating children (that have a different parent)...");
+    unordered_set<Node *> seenNodes(children.size());
+    for (auto &e : children) {
+      Node *childNode = get<2>(e);
+      if (contains(seenNodes, childNode)) {
+        continue;
+      }
+      seenNodes.emplace(childNode);
+
+      childNode->updatePrimeParent(this);
+    }
+  }
+
+  return changed;
 }
 
 void Multiverse::Node::removeChild (size_t i) {
+  DPRE(!primeParentNodeInvalid);
   children.erase(children.begin() + i);
 }
 
 void Multiverse::Node::changeChild (size_t i, Node *node) {
+  DPRE(!primeParentNodeInvalid);
   get<2>(children[i]) = node;
+}
+
+void Multiverse::Node::childrenUpdated (const Multiverse &multiverse) {
+  DW(, "finished updating children (new count ", children.size(), ") on Node with sig of hash ", signature.hash());
+  DPRE(!primeParentNodeInvalid);
+  children.shrink_to_fit();
+  // DODGY might be part-way through collapsing nodes -> model tree is in some intermediate state (prime parent might be out of date etc.)
+  multiverse.metric->nodeChildrenUpdated(multiverse, this);
+}
+
+void Multiverse::Node::invalidatePrimeParent () {
+  DA(!primeParentNodeInvalid);
+  primeParentNodeInvalid = true;
+}
+
+void Multiverse::Node::rebuildPrimeParents (Node *rootNode, const Multiverse &multiverse) {
+  DS();
+  DW(, "number of surviving nodes is ", multiverse.nodes.size());
+  #ifndef NDEBUG
+  unordered_set<Node *> seenNodes;
+  rootNode->forEach([&] (Node *node) -> bool {
+    if (contains(seenNodes, node)) {
+      return false;
+    }
+    seenNodes.emplace(node);
+
+    DA(node->primeParentNodeInvalid);
+    return true;
+  });
+  DW(, "number of walked nodes is ", seenNodes.size());
+  #endif
+
+  vector<Node *> reparentedNodes;
+
+  {
+    DW(, "walking the tree by bredth:");
+    vector<Node *> nodes0, nodes1;
+    vector<Node *> *nodesAtThisDepth = &nodes0, *nodesAtNextDepth = &nodes1;
+    unordered_set<Node *> nodes2, nodes3;
+    unordered_set<Node *> *enshadowedNodesAtThisDepth = &nodes2, *enshadowedNodesAtNextDepth = &nodes3;
+    nodesAtThisDepth->emplace_back(rootNode);
+    DA(rootNode->primeParentNode == nullptr);
+    rootNode->primeParentNodeInvalid = false;
+    do {
+      DW(, "  count of nodes at this level: ", nodesAtThisDepth->size());
+      for (Node *node : *nodesAtThisDepth) {
+        bool enshadowed = contains(*enshadowedNodesAtThisDepth, node);
+
+        for (auto &e : node->children) {
+          Node *childNode = get<2>(e);
+          if (!childNode->primeParentNodeInvalid) {
+            continue;
+          }
+          childNode->primeParentNodeInvalid = false;
+
+          DA(childNode->primeParentNode != UNPARENTED);
+          if (childNode->primeParentNode != node) {
+            childNode->primeParentNode = node;
+            if (!enshadowed) {
+              reparentedNodes.emplace_back(childNode);
+              enshadowedNodesAtNextDepth->emplace(childNode);
+            }
+          }
+
+          nodesAtNextDepth->emplace_back(childNode);
+          if (enshadowed) {
+            enshadowedNodesAtNextDepth->emplace(childNode);
+          }
+        }
+      }
+      nodesAtThisDepth->clear();
+      swap(nodesAtThisDepth, nodesAtNextDepth);
+      enshadowedNodesAtThisDepth->clear();
+      swap(enshadowedNodesAtThisDepth, enshadowedNodesAtNextDepth);
+    } while (!nodesAtThisDepth->empty());
+    DW(, "number of reparented nodes is ", reparentedNodes.size());
+  }
+
+  for (Node *node : reparentedNodes) {
+    multiverse.metric->subtreePrimeAncestorsUpdated(multiverse, node);
+  }
 }
 
 Multiverse::Multiverse (
@@ -607,9 +781,10 @@ Multiverse::Multiverse (
   signature = recreateSignature(signature, ignoredByteRangeset);
 
   unique_ptr<Metric::State> metricState(this->metric->nodeCreated(*this, NON_ID, r_initialOutput, signature, r_vm));
-  unique_ptr<Node> node(new Node(move(signature), move(state), move(metricState)));
+  unique_ptr<Node> node(new Node(nullptr, move(signature), move(state), move(metricState)));
   rootNode = node.get();
   nodes.emplace(ref(rootNode->getSignature()), rootNode);
+  this->metric->subtreePrimeAncestorsUpdated(*this, rootNode);
   node.release();
 }
 
@@ -787,6 +962,7 @@ Multiverse::Node *Multiverse::collapseNode (
     r_survivingNodes.emplace(ref(node->getSignature()), node);
     r_nodeCollapseTargets.emplace(node, node);
 
+    bool mutated = false;
     for (size_t size = node->getChildrenSize(), i = 0; i != size; ++i) {
       auto &child = node->getChild(i);
       Node *childNode = get<2>(child);
@@ -794,16 +970,20 @@ Multiverse::Node *Multiverse::collapseNode (
       Node *childTargetNode = collapseNode(childNode, extraIgnoredByteRangeset, r_survivingNodes, r_nodeCollapseTargets, r_survivingNodePrevSignatures);
       if (childTargetNode == node) {
         node->removeChild(i);
+        mutated = true;
         --i;
         --size;
         // XXXX preserve action id -> output string, old target node for undo
       } else if (childTargetNode != childNode) {
         node->changeChild(i, childTargetNode);
+        mutated = true;
         // XXXX preserve action id -> old target node for undo
       }
     }
-
-    node->batchOfChildChangesCompleted();
+    if (mutated) {
+      node->childrenUpdated(*this);
+    }
+    node->invalidatePrimeParent();
 
     return node;
   }
