@@ -440,7 +440,14 @@ void runCommandLine (Vm &vm, Multiverse &multiverse, const char *outPathName, co
       char8_t valueName = line[2];
       if (valueName >= 'a' && valueName <= 'z') {
         size_t valueIndex = static_cast<size_t>(valueName - 'a');
-        is n = getNaturalNumber(line.data() + 3, line.data() + line.size());
+        const char8_t *numBegin = line.data() + 3;
+        const char8_t *numEnd = line.data() + line.size();
+        bool undershoot = false;
+        if (*(numEnd - 1) == U'-') {
+          --numEnd;
+          undershoot = true;
+        }
+        is n = getNaturalNumber(numBegin, numEnd);
         if (n > 0 && !selectedNodes.empty()) {
           vector<tuple<size_t, Node *>> nodes;
           nodes.reserve(selectedNodes.size());
@@ -453,15 +460,19 @@ void runCommandLine (Vm &vm, Multiverse &multiverse, const char *outPathName, co
             return get<0>(o0) > get<0>(o1);
           });
 
-          auto nodesNetEnd = nodes.begin() + static_cast<ptrdiff_t>(min(static_cast<size_t>(n), nodes.size()) - 1); // XXXX sort out size_t -> ptrdiff_t
-          size_t minValue = get<0>(*nodesNetEnd);
-          ++nodesNetEnd;
-          for (auto nodesEnd = nodes.end(); nodesNetEnd != nodesEnd && get<0>(*nodesNetEnd) == minValue; ++nodesNetEnd);
-          size_t count = static_cast<size_t>(nodesNetEnd - nodes.begin());
+          size_t count = min(static_cast<size_t>(n + undershoot), nodes.size()) - 1;
+          size_t minValue = get<0>(nodes[count]);
+          if (undershoot) {
+            for (; count != static_cast<size_t>(-1) && get<0>(nodes[count]) == minValue; --count);
+            ++count;
+          } else {
+            ++count;
+            for (auto end = nodes.size(); count != end && get<0>(nodes[count]) == minValue; ++count);
+          }
 
           selectedNodes.clear();
           size_t unprocessedCount = 0;
-          for (auto i = nodes.begin(); i != nodesNetEnd; ++i) {
+          for (auto i = nodes.begin(), end = i + static_cast<ptrdiff_t>(count); i != end; ++i) { // XXXX sort out size_t -> ptrdiff_t
             Node *node = get<1>(*i);
             unprocessedCount += !!node->getState();
             selectedNodes.insert(node);
