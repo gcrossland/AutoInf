@@ -36,6 +36,10 @@ using autoinf::Deserialiser;
 using autoinf::FileInputIterator;
 using autofrotz::zword;
 using autofrotz::zbyte;
+using std::hash;
+using autoinf::find;
+using autoinf::contains;
+using std::fill;
 
 /* -----------------------------------------------------------------------------
 ----------------------------------------------------------------------------- */
@@ -45,21 +49,42 @@ void terminator () {
   core::dieHard();
 }
 
-class WordUsageMetric : public virtual Metric {
+static const vector<size_t> newLocationVisitageModifiers = {20, 13, 8, 5};
+
+class TestMetric : public virtual Metric {
   pub class State : public Metric::State {
+    prv size_t scoreValue;
+
     prv Bitset interestingChildActionWords;
     prv size_t wordValue;
-    prv size_t score;
+
+    prv size_t locationHash;
+    prv size_t visitageValue;
+
+    pub size_t index;
+    pub ActionId primeParentChildIndex;
+    pub bool allChildrenAreNonPrime;
+
     pub static constexpr size_t NON_VALUE = static_cast<size_t>(-1);
 
-    pub State () : wordValue(NON_VALUE), score(0) {
+    pub State () :
+      scoreValue(NON_VALUE),
+      wordValue(NON_VALUE - 1),
+      locationHash(NON_VALUE), visitageValue(NON_VALUE),
+      index(NON_VALUE - 1), primeParentChildIndex(Multiverse::NON_ID), allChildrenAreNonPrime(false)
+    {
     }
 
     prt template<typename _Walker> void beWalked (_Walker &w) {
       DS();
+      w.process(scoreValue);
       w.process(interestingChildActionWords);
       w.process(wordValue);
-      w.process(score);
+      w.process(locationHash);
+      w.process(visitageValue);
+      w.process(index);
+      w.process(primeParentChildIndex);
+      w.process(allChildrenAreNonPrime);
     }
 
     State (const State &) = delete;
@@ -68,16 +93,19 @@ class WordUsageMetric : public virtual Metric {
     State &operator= (State &&) = delete;
 
     pub size_t getValue (size_t i) override {
-      DPRE(i < 2);
-      return i == 0 ? wordValue : score;
+      DPRE(i < 3);
+      return i == 0 ? scoreValue : i == 1 ? wordValue : visitageValue;
     }
 
-    friend class WordUsageMetric;
+    friend class TestMetric;
   };
 
-  pub const zword scoreAddr;
+  prv static constexpr size_t initialVisitageValue = 100000;
+  prv static constexpr const vector<size_t> &newLocationVisitageModifiers = ::newLocationVisitageModifiers;
+  prv static constexpr ptrdiff_t oldLocationVisitageModifier = -200;
+  prv const zword scoreAddr;
 
-  pub WordUsageMetric (zword scoreAddr) : scoreAddr(scoreAddr) {
+  pub TestMetric (zword scoreAddr) : scoreAddr(scoreAddr) {
   }
 
   pub tuple<void *, size_t> deduceStateType (Metric::State *state) override {
@@ -98,90 +126,186 @@ class WordUsageMetric : public virtual Metric {
     static_cast<State *>(state)->beWalked(s);
   }
 
-  prv void updateInterestingChildActionWords (const Multiverse::ActionSet &actionSet, const Node &node, Bitset &r_words) {
-    DPRE(!node.getState());
+  pub unique_ptr<Metric::State> nodeCreated (const Multiverse &multiverse, ActionId parentActionId, const u8string &output, const Signature &signature, const Vm &vm) override {
+    DW(, "DDDD created new node with sig of hash ", signature.hash());
+    State *state = new State();
+    unique_ptr<Metric::State> state_(state);
 
-    r_words.clear();
-    for (size_t i = 0, end = node.getChildrenSize(); i != end; ++i) {
-      auto action = actionSet.get(get<0>(node.getChild(i)));
-      for (size_t i = 0, end = action.getWordCount(); i != end; ++i) {
-        r_words.setBit(action.getWord(i));
-      }
-    }
-    r_words.compact();
+    setScoreValue(state, vm);
+    setVisitageData(state, output);
+
+    return state_;
   }
 
-  pub unique_ptr<Metric::State> nodeCreated (const Multiverse &multiverse, ActionId parentActionId, const u8string &output, const Signature &signature, const Vm &vm) override {
-    char b[10];
-    sprintf(b, "&%08X", signature.hash());
-    DW(, "DDDD created new node with sig of hash ",b);
-    unique_ptr<State> state(new State());
-
+  prv void setScoreValue (State *state, const Vm &vm) {
     DPRE((static_cast<iu>(scoreAddr) + 1) < vm.getDynamicMemorySize() + 0);
     const zbyte *m = vm.getDynamicMemory();
-    state->score = static_cast<zword>(static_cast<zword>(m[scoreAddr] << 8) | m[scoreAddr + 1]);
-
-    return unique_ptr<Metric::State>(move(state));
+    state->scoreValue = static_cast<zword>(static_cast<zword>(m[scoreAddr] << 8) | m[scoreAddr + 1]);
+    DW(, "DDDD game score is ",state->scoreValue);
   }
 
-  pub void nodeProcessed (const Multiverse &multiverse, Node &r_node) override {
-    const Multiverse::ActionSet &actionSet = multiverse.getActionSet();
-
-    updateInterestingChildActionWords(actionSet, r_node, static_cast<State *>(r_node.getMetricState())->interestingChildActionWords);
-  }
-
-  prv void calculateNodeWordValue (Node *node, size_t parentNodeValue, size_t nodesSize, const size_t *wordCounts) {
-    State *state = static_cast<State *>(node->getMetricState());
-    if (state->wordValue != State::NON_VALUE) {
-      return;
+  prv void setVisitageData (State *state, const u8string &output) {
+    const char8_t *outI = output.data();
+    const char8_t *outEnd = outI + output.size();
+    const char8_t *locationBegin = outI = skipSpaces(outI, outEnd);
+    while (true) {
+      outI = skipNonSpaces(outI, outEnd);
+      if (outI == outEnd) {
+        break;
+      }
+      const char8_t *i = outI + 1;
+      if (i == outEnd || *i == ' ') {
+        break;
+      }
+      outI = i;
     }
-    char b[10];
-    sprintf(b, "&%08X", node->getSignature().hash());
-    DW(, "DDDD calculating node word value for node with sig of hash ",b);
+    const char8_t *locationEnd = outI;
+    DW(, "DDDD location string is ", u8string(locationBegin, locationEnd).c_str());
 
-    size_t value;
-    if (node->getState()) {
-      value = 0;
+    state->locationHash = autoinf::hashImpl(locationBegin, locationEnd);
+    DW(, "DDDD location hash is ", state->locationHash);
+    DA(state->visitageValue == State::NON_VALUE);
+  }
+
+  pub void subtreePrimeAncestorsUpdated (const Multiverse &multiverse, const Node *node) override {
+    State *state = static_cast<State *>(node->getMetricState());
+
+    setVisitageValueRecursively(node, state, getVisitageChain(node->getPrimeParentNode()));
+  }
+
+  prv tuple<unordered_set<size_t>, size_t, vector<size_t>::const_iterator, size_t> getVisitageChain (const Node *node) {
+    if (!node) {
+      DW(, "DDDD   reached the root; starting visitage value work");
+      tuple<unordered_set<size_t>, size_t, vector<size_t>::const_iterator, size_t> r;
+      auto &locationHash = get<1>(r);
+      auto &visitageModifiersI = get<2>(r);
+      auto &visitageValue = get<3>(r);
+
+      locationHash = State::NON_VALUE;
+      visitageModifiersI = newLocationVisitageModifiers.begin();
+      visitageValue = initialVisitageValue;
+
+      return r;
+    }
+
+    DW(, "DDDD   looking at node with sig of hash ",node->getSignature().hash());
+    State *state = static_cast<State *>(node->getMetricState());
+
+    tuple<unordered_set<size_t>, size_t, vector<size_t>::const_iterator, size_t> r = getVisitageChain(node->getPrimeParentNode());
+    incrementVisitageChain(state, r);
+    DPRE(state->visitageValue == get<3>(r));
+
+    return r;
+  }
+
+  prv void incrementVisitageChain (State *state, tuple<unordered_set<size_t>, size_t, vector<size_t>::const_iterator, size_t> &r_chain) {
+    auto &r_visitedLocationHashes = get<0>(r_chain);
+    auto &r_locationHash = get<1>(r_chain);
+    auto &r_newLocationVisitageModifiersI = get<2>(r_chain);
+    auto &r_visitageValue = get<3>(r_chain);
+
+    if (state->locationHash == r_locationHash) {
+      DW(, "DDDD   location didn't change");
+      if (r_newLocationVisitageModifiersI != newLocationVisitageModifiers.end()) {
+        r_visitageValue += *r_newLocationVisitageModifiersI++;
+      }
     } else {
-      Bitset &words = state->interestingChildActionWords;
-      value = 0;
-      for (size_t i = words.getNextSetBit(0); i != Bitset::NON_INDEX; i = words.getNextSetBit(i + 1)) {
-        DW(, "       action word of id ", i);
-        value += nodesSize / wordCounts[i];
+      r_locationHash = state->locationHash;
+      if (contains(r_visitedLocationHashes, r_locationHash)) {
+        DW(, "DDDD   location changed to one we've visted");
+        r_newLocationVisitageModifiersI = newLocationVisitageModifiers.end();
+        size_t t = -oldLocationVisitageModifier;
+        r_visitageValue = r_visitageValue < t ? 0 : r_visitageValue - t;
+      } else {
+        DW(, "DDDD   location changed to one we've not visted");
+        r_visitedLocationHashes.emplace(r_locationHash);
+        r_newLocationVisitageModifiersI = newLocationVisitageModifiers.begin();
+        DA(!newLocationVisitageModifiers.empty());
+        r_visitageValue += *r_newLocationVisitageModifiersI++;
       }
     }
-    DW(, "       final local word value is ", value);
-    DW(, "       (parent word value is ", parentNodeValue,")");
-    value += parentNodeValue;
-    state->wordValue = value;
+  }
+
+  prv void setVisitageValueRecursively (const Node *node, State *state, tuple<unordered_set<size_t>, size_t, vector<size_t>::const_iterator, size_t> chain) {
+    setVisitageValue(node, state, chain);
 
     for (size_t i = 0, end = node->getChildrenSize(); i != end; ++i) {
-      calculateNodeWordValue(get<2>(node->getChild(i)), value, nodesSize, wordCounts);
+      Node *childNode = get<2>(node->getChild(i));
+      if (childNode->getPrimeParentNode() == node) {
+        State *childState = static_cast<State *>(childNode->getMetricState());
+        DA((childNode->getPrimeParentArcChildIndex() == i) != (childState->visitageValue == State::NON_VALUE));
+        childState->visitageValue = State::NON_VALUE;
+      }
+    }
+    for (size_t i = 0, end = node->getChildrenSize(); i != end; ++i) {
+      Node *childNode = get<2>(node->getChild(i));
+      if (childNode->getPrimeParentNode() == node) {
+        State *childState = static_cast<State *>(childNode->getMetricState());
+        DA((childNode->getPrimeParentArcChildIndex() == i) == (childState->visitageValue == State::NON_VALUE));
+        if (childState->visitageValue == State::NON_VALUE) {
+          setVisitageValueRecursively(childNode, childState, chain);
+          DA(childState->visitageValue != State::NON_VALUE);
+        }
+      }
     }
   }
 
-  prv void nodesChanged (bool updateWords, const Multiverse &multiverse, Node &r_rootNode, unordered_map<reference_wrapper<const Signature>, Node *, autoinf::Hasher<Signature>> &r_nodes) {
+  prv void setVisitageValue (const Node *node, State *state, tuple<unordered_set<size_t>, size_t, vector<size_t>::const_iterator, size_t> &r_chain) {
+    auto &r_visitageValue = get<3>(r_chain);
+    DA(!node->getPrimeParentNode() || static_cast<State *>(node->getPrimeParentNode()->getMetricState())->visitageValue == r_visitageValue);
+
+    incrementVisitageChain(state, r_chain);
+    state->visitageValue = r_visitageValue;
+  }
+
+  pub void nodeChildrenUpdated (const Multiverse &multiverse, const Node *node) override {
+    State *state = static_cast<State *>(node->getMetricState());
+
+    setWordData(node, state, multiverse.getActionSet());
+  }
+
+  prv void setWordData (const Node *node, State *state, const Multiverse::ActionSet &actionSet) {
+    DA(!node->getState());
+    Bitset &words = state->interestingChildActionWords;
+    words.clear();
+    for (size_t i = 0, end = node->getChildrenSize(); i != end; ++i) {
+      auto action = actionSet.get(get<0>(node->getChild(i)));
+      for (size_t i = 0, end = action.getWordCount(); i != end; ++i) {
+        words.setBit(action.getWord(i));
+      }
+    }
+    words.compact();
+  }
+
+  pub void nodesProcessed (const Multiverse &multiverse, const Node *rootNode, const unordered_map<reference_wrapper<const Signature>, Node *, autoinf::Hasher<Signature>> &nodes) override {
+    const Multiverse::ActionSet &actionSet = multiverse.getActionSet();
+
+    unique_ptr<size_t []> stats = getWordStats(nodes, [] (const Node *node, State *state) {
+      DA(state->wordValue != State::NON_VALUE);
+      state->wordValue = State::NON_VALUE;
+    }, actionSet);
+    setWordValueRecursively(rootNode, static_cast<State *>(rootNode->getMetricState()), nodes.size(), stats.get(), 0);
+
+    #ifndef NDEBUG
+    for (auto &entry : nodes) {
+      getVisitageChain(get<1>(entry));
+    }
+    #endif
+  }
+
+  prv template<typename F> unique_ptr<size_t []> getWordStats (const unordered_map<reference_wrapper<const Signature>, Node *, autoinf::Hasher<Signature>> &nodes, const F &nodeFunctor, const Multiverse::ActionSet &actionSet) {
     DS();
     DW(, "DDDD nodes have changed!");
-    const Multiverse::ActionSet &actionSet = multiverse.getActionSet();
-    size_t nodesSize = r_nodes.size();
+    unique_ptr<size_t []> wordCounts(new size_t[actionSet.getWordsSize()]);
+    fill(wordCounts.get(), wordCounts.get() + actionSet.getWordsSize(), 0);
 
-    size_t wordCounts[actionSet.getWordsSize()];
-    for (auto &c : wordCounts) {
-      c = 0;
-    }
-
-    for (auto &entry : r_nodes) {
+    for (auto &entry : nodes) {
       Node *node = get<1>(entry);
       State *state = static_cast<State *>(node->getMetricState());
-      state->wordValue = State::NON_VALUE;
-      if (node->getState()) {
-        continue;
-      }
+
+      nodeFunctor(node, state);
+
       Bitset &words = state->interestingChildActionWords;
-      if (updateWords) {
-        updateInterestingChildActionWords(actionSet, *node, words);
-      }
       for (size_t i = words.getNextSetBit(0); i != Bitset::NON_INDEX; i = words.getNextSetBit(i + 1)) {
         ++wordCounts[i];
       }
@@ -191,20 +315,46 @@ class WordUsageMetric : public virtual Metric {
       DW(, "DDDD   ",actionSet.getWord(i).c_str()," - ",wordCounts[i]);
     }
 
-    // XXXX walk in a bredth first fashion (like prime parent)?
-    calculateNodeWordValue(&r_rootNode, 0, nodesSize, wordCounts);
+    return wordCounts;
   }
 
-  pub void nodesProcessed (const Multiverse &multiverse, Node &r_rootNode, unordered_map<reference_wrapper<const Signature>, Node *, autoinf::Hasher<Signature>> &r_nodes) override {
-    nodesChanged(false, multiverse, r_rootNode, r_nodes);
+  prv void setWordValueRecursively (const Node *node, State *state, size_t nodesSize, const size_t *stats, size_t wordValue) {
+    setWordValue(node, state, nodesSize, stats, wordValue);
+
+    for (size_t i = 0, end = node->getChildrenSize(); i != end; ++i) {
+      Node *childNode = get<2>(node->getChild(i));
+      if (childNode->getPrimeParentNode() == node) {
+        State *childState = static_cast<State *>(childNode->getMetricState());
+        DA((childNode->getPrimeParentArcChildIndex() == i) == (childState->wordValue == State::NON_VALUE));
+        if (childState->wordValue == State::NON_VALUE) {
+          setWordValueRecursively(childNode, childState, nodesSize, stats, wordValue);
+        }
+      }
+    }
   }
 
-  pub void nodesCollapsed (const Multiverse &multiverse, Node &r_rootNode, unordered_map<reference_wrapper<const Signature>, Node *, autoinf::Hasher<Signature>> &r_nodes) override {
-    nodesChanged(true, multiverse, r_rootNode, r_nodes);
+  prv void setWordValue (const Node *node, State *state, size_t nodesSize, const size_t *stats, size_t &r_wordValue) {
+    DA(state->wordValue == State::NON_VALUE);
+    DW(, "DDDD calculating node word value for node with sig of hash ", node->getSignature().hash());
+    DA((!node->getPrimeParentNode() && r_wordValue == 0) || r_wordValue == static_cast<State *>(node->getPrimeParentNode()->getMetricState())->wordValue);
+
+    size_t value = r_wordValue;
+    Bitset &words = state->interestingChildActionWords;
+    for (size_t i = words.getNextSetBit(0); i != Bitset::NON_INDEX; i = words.getNextSetBit(i + 1)) {
+      DW(, "       action word of id ", i);
+      value += nodesSize / stats[i];
+    }
+    DW(, "       final local word value is ", value - r_wordValue);
+    DW(, "       (parent word value is ", r_wordValue,")");
+    state->wordValue = r_wordValue = value;
+  }
+
+  pub void nodesCollapsed (const Multiverse &multiverse, const Node *rootNode, const unordered_map<reference_wrapper<const Signature>, Node *, autoinf::Hasher<Signature>> &nodes) override {
+    nodesProcessed(multiverse, rootNode, nodes);
   }
 
   pub size_t getValueCount () const override {
-    return 2;
+    return 3;
   }
 };
 
@@ -268,7 +418,7 @@ int main (int argc, char *argv[]) {
       [] (const Vm &vm, const u8string &output) -> bool {
         return output.find(u8("You can't see")) != std::string::npos;
       },
-      unique_ptr<Metric>(new WordUsageMetric(0x08C8))
+      unique_ptr<Metric>(new TestMetric(0x08C8))
     );
     /*
     Vm vm("advent/advent.z5", 70, height, undoDepth, true, output);
@@ -521,14 +671,13 @@ int main (int argc, char *argv[]) {
           output.find(u8("That's not something you need to refer to in the course of this game.")) != u8string::npos
         ;
       },
-      unique_ptr<Metric>(new WordUsageMetric(one of 0x3BEB or 0x3C0B or 0x3C0D))
+      unique_ptr<Metric>(new TestMetric(one of 0x3BEB or 0x3C0B or 0x3C0D))
     );
     */
 
     unordered_set<Node *> selectedNodes;
     unordered_set<Node *> verboseNodes;
-    vector<NodeData> nodesByIndex;
-    unordered_map<Node *, size_t> nodeIndices;
+    vector<Node *> nodesByIndex;
     bool elideDeadEndNodes = false;
     size_t maxDepth = numeric_limits<size_t>::max();
     u8string in(u8(" "));
@@ -555,22 +704,22 @@ int main (int argc, char *argv[]) {
           }
         } else if (line == u8("A") || line == u8("a")) {
           selectedNodes.clear();
-          for (const auto &d : nodesByIndex) {
-            selectedNodes.insert(d.node);
+          for (const auto &node : nodesByIndex) {
+            selectedNodes.insert(node);
           }
         } else if (line == u8("U") || line == u8("u")) {
-          for (const auto &d : nodesByIndex) {
-            if (d.node->getState()) {
-              selectedNodes.insert(d.node);
+          for (const auto &node : nodesByIndex) {
+            if (node->getState()) {
+              selectedNodes.insert(node);
             }
           }
         } else if (line == u8("C") || line == u8("c")) {
           selectedNodes.clear();
         } else if (line == u8("I") || line == u8("i")) {
           decltype(selectedNodes) nextSelectedNodes;
-          for (const auto &d : nodesByIndex) {
-            if (selectedNodes.find(d.node) == selectedNodes.end()) {
-              nextSelectedNodes.insert(d.node);
+          for (const auto &node : nodesByIndex) {
+            if (!contains(selectedNodes, node)) {
+              nextSelectedNodes.insert(node);
             }
           }
           selectedNodes = move(nextSelectedNodes);
@@ -619,9 +768,8 @@ int main (int argc, char *argv[]) {
         } else if (line == u8("P") || line == u8("p")) {
           vector<Node *> t;
           t.reserve(selectedNodes.size());
-          for (const auto &d : nodesByIndex) {
-            Node *n = d.node;
-            if (selectedNodes.find(n) != selectedNodes.end()) {
+          for (const auto &n : nodesByIndex) {
+            if (contains(selectedNodes, n)) {
               t.emplace_back(n);
             }
           }
@@ -670,7 +818,7 @@ int main (int argc, char *argv[]) {
 
           if (r0 != rX && r1 != rX) {
             for (size_t i = r0; i != r1; ++i) {
-              Node *node = nodesByIndex[i].node;
+              Node *node = nodesByIndex[i];
               auto pos = selectedNodes.find(node);
               if (pos == selectedNodes.end()) {
                 selectedNodes.insert(node);
@@ -684,8 +832,7 @@ int main (int argc, char *argv[]) {
         if (nodesByIndex.empty()) {
           selectedNodes.clear();
           verboseNodes.clear();
-          nodeIndices.clear();
-          studyNodes(multiverse, nodesByIndex, nodeIndices);
+          studyNodes(multiverse, nodesByIndex);
         }
       }
 
@@ -709,7 +856,7 @@ int main (int argc, char *argv[]) {
           }
         });
 
-        printNode(multiverse.getRootNode(), multiverse, selectedNodes, verboseNodes, nodesByIndex, nodeIndices, elideDeadEndNodes, maxDepth, out);
+        printNode(multiverse.getRootNode(), multiverse, selectedNodes, verboseNodes, nodesByIndex, elideDeadEndNodes, maxDepth, out);
       }
 
       if (!message.empty()) {
@@ -744,85 +891,111 @@ int main (int argc, char *argv[]) {
   }
 }
 
-void studyNodes (const Multiverse &multiverse, vector<NodeData> &r_nodesByIndex, unordered_map<Node *, size_t> &r_nodeIndices) {
+void studyNodes (const Multiverse &multiverse, vector<Node *> &r_nodesByIndex) {
   DPRE(r_nodesByIndex.empty(), "");
-  DPRE(r_nodeIndices.empty(), "");
   DS();
+
+  Node *rootNode = multiverse.getRootNode();
+
+  #ifndef NDEBUG
+  unordered_set<Node *> seenNodes;
+  rootNode->forEach([&] (Node *node) -> bool {
+    if (contains(seenNodes, node)) {
+      return false;
+    }
+    seenNodes.emplace(node);
+
+    TestMetric::State *state = static_cast<TestMetric::State *>(node->getMetricState());
+    DA(state->index != TestMetric::State::NON_VALUE);
+    return true;
+  });
+  #endif
+
+  rootNode->forEach([&] (Node *node) -> bool {
+    TestMetric::State *state = static_cast<TestMetric::State *>(node->getMetricState());
+
+    if (state->index == TestMetric::State::NON_VALUE) {
+      return false;
+    }
+
+    state->index = TestMetric::State::NON_VALUE;
+    return true;
+  });
 
   iu depth = 0;
   size_t s0;
   size_t s1 = 0;
-  Node *rootNode = multiverse.getRootNode();
   do {
     DW(, "studying nodes at depth ",depth);
     s0 = s1;
-    studyNode(0, depth, rootNode, nullptr, Multiverse::NON_ID, r_nodesByIndex, r_nodeIndices);
+    studyNode(0, depth, rootNode, nullptr, Multiverse::NON_ID, r_nodesByIndex);
     s1 = r_nodesByIndex.size();
     DW(, "after studying nodes at depth ",depth,", we know about ",s1," nodes");
     ++depth;
   } while (s0 != s1);
 
-  markDeadEndNodes(r_nodesByIndex, r_nodeIndices);
+  markDeadEndNodes(r_nodesByIndex);
 }
 
-void studyNode (
-  iu depth, iu targetDepth, Node *node, Node *parentNode, ActionId actionId,
-  vector<NodeData> &r_nodesByIndex, unordered_map<Node *, size_t> &r_nodeIndices
-) {
+void studyNode (iu depth, iu targetDepth, Node *node, Node *parentNode, ActionId childIndex, vector<Node *> &r_nodesByIndex) {
   DS();
   DW(, "looking at node with sig of hash ",node->getSignature().hash());
+  DA(node->getPrimeParentNode() == parentNode);
+  DA(!node->getPrimeParentNode() || node->getPrimeParentArcChildIndex() == childIndex);
+  TestMetric::State *state = static_cast<TestMetric::State *>(node->getMetricState());
+
   DPRE(targetDepth >= depth, "");
   if (depth != targetDepth) {
     DW(, " not yet at the right depth");
-    DPRE(find(r_nodeIndices, node) != nullptr, "");
+    DPRE(state->index != TestMetric::State::NON_VALUE);
     for (size_t i = 0, end = node->getChildrenSize(); i != end; ++i) {
       DW(, " looking at child ",i);
-      auto &child = node->getChild(i);
-      ActionId childActionId = get<0>(child);
-      Node *childNode = get<2>(child);
+      Node *childNode = get<2>(node->getChild(i));
+      TestMetric::State *childState = static_cast<TestMetric::State *>(childNode->getMetricState());
 
-      auto c = find(r_nodeIndices, childNode);
       bool skip = true;
-      if (!c) {
+      if (childState->index == TestMetric::State::NON_VALUE) {
+        DA(depth == targetDepth - 1);
+        DA(childNode->getPrimeParentNode() == node);
         skip = false;
       } else {
-        const NodeData &childNodeData = r_nodesByIndex[*c];
-        if (childNodeData.primeParent.node == node && childNodeData.primeParent.actionId == childActionId) {
+        if (childNode->getPrimeParentNode() == node && childState->primeParentChildIndex == i) {
           skip = false;
         }
       }
       if (!skip) {
-        studyNode(depth + 1, targetDepth, childNode, node, childActionId, r_nodesByIndex, r_nodeIndices);
+        studyNode(depth + 1, targetDepth, childNode, node, i, r_nodesByIndex);
       }
+      DA(childState->index != TestMetric::State::NON_VALUE);
     }
 
     return;
   }
 
   DW(, " this node is at the right depth");
-  DPRE(find(r_nodeIndices, node) == nullptr, "");
-  size_t nodeIndex = r_nodesByIndex.size();
-  r_nodesByIndex.push_back(NodeData{node, {parentNode, actionId}, false});
-  r_nodeIndices.emplace(node, nodeIndex);
+  DPRE(state->index == TestMetric::State::NON_VALUE);
+  state->index = r_nodesByIndex.size();
+  state->primeParentChildIndex = childIndex;
+  r_nodesByIndex.emplace_back(node);
   return;
 }
 
-void markDeadEndNodes (vector<NodeData> &nodesByIndex, const unordered_map<Node *, size_t> &nodeIndices) {
+void markDeadEndNodes (const vector<Node *> &nodesByIndex) {
   for (auto i = nodesByIndex.rbegin(), end = nodesByIndex.rend(); i != end; ++i) {
-    NodeData &nodeData = *i;
-    Node *node = nodeData.node;
+    Node *node = *i;
+    TestMetric::State *state = static_cast<TestMetric::State *>(node->getMetricState());
+
     if (node->getState()) {
+      DA(!state->allChildrenAreNonPrime);
       continue;
     }
 
     bool interesting = false;
     for (size_t i = 0, end = node->getChildrenSize(); i != end; ++i) {
-      auto &child = node->getChild(i);
-      ActionId childActionId = get<0>(child);
-      Node *childNode = get<2>(child);
+      Node *childNode = get<2>(node->getChild(i));
+      TestMetric::State *childState = static_cast<TestMetric::State *>(childNode->getMetricState());
 
-      NodeData &childNodeData = nodesByIndex[*find(nodeIndices, childNode)];
-      if (childNodeData.primeParent.node == node && childNodeData.primeParent.actionId == childActionId && !childNodeData.allChildrenAreNonPrime) {
+      if (childNode->getPrimeParentNode() == node && !childState->allChildrenAreNonPrime) {
         interesting = true;
         break;
       }
@@ -831,18 +1004,17 @@ void markDeadEndNodes (vector<NodeData> &nodesByIndex, const unordered_map<Node 
       continue;
     }
 
-    nodeData.allChildrenAreNonPrime = true;
+    state->allChildrenAreNonPrime = true;
   }
 }
 
 void printNode (
   Node *rootNode,
   const Multiverse &multiverse, const unordered_set<Node *> &selectedNodes, const unordered_set<Node *> &verboseNodes,
-  const vector<NodeData> &nodesByIndex, const unordered_map<Node *, size_t> &nodeIndices, bool elideDeadEndNodes, size_t maxDepth,
-  FILE *out
+  const vector<Node *> &nodesByIndex, bool elideDeadEndNodes, size_t maxDepth, FILE *out
 ) {
   u8string prefix;
-  printNodeAsNonleaf(0, nullptr, rootNode, nullptr, Multiverse::NON_ID, multiverse, selectedNodes, verboseNodes, nodesByIndex, nodeIndices, elideDeadEndNodes, maxDepth, prefix, out);
+  printNodeAsNonleaf(0, nullptr, rootNode, nullptr, Multiverse::NON_ID, multiverse, selectedNodes, verboseNodes, nodesByIndex, elideDeadEndNodes, maxDepth, prefix, out);
 }
 
 u8string renderActionInput (ActionId actionId, const Multiverse &multiverse) {
@@ -858,21 +1030,20 @@ u8string renderActionInput (ActionId actionId, const Multiverse &multiverse) {
 
 void printNodeHeader (
   char8_t nodeIndexRenderingPrefix, char8_t nodeIndexRenderingSuffix, Node *node, ActionId actionId,
-  const Multiverse &multiverse, const unordered_set<Node *> &selectedNodes,
-  const unordered_map<Node *, size_t> &nodeIndices, FILE *out
+  const Multiverse &multiverse, const unordered_set<Node *> &selectedNodes, FILE *out
 ) {
-  // XXXX 'map contains' fn as well? also 'find an entry known to be present'? just subclass unordered_*<> (as we will soon do for basic_string) ???
-  bool selected = selectedNodes.find(node) != selectedNodes.end();
+  TestMetric::State *state = static_cast<TestMetric::State *>(node->getMetricState());
+
+  bool selected = contains(selectedNodes, node);
   if (selected) {
     fprintf(out, "* ");
   }
 
-  fprintf(out, "%c%u%c ", nodeIndexRenderingPrefix, *find(nodeIndices, node), nodeIndexRenderingSuffix);
+  fprintf(out, "%c%u%c ", nodeIndexRenderingPrefix, state->index, nodeIndexRenderingSuffix);
 
   fprintf(out, "%s", renderActionInput(actionId, multiverse).c_str());
   fprintf(out, " [sig of hash &%08X]", node->getSignature().hash());
   fprintf(out, " metric values {");
-  Metric::State *state = node->getMetricState();
   for (size_t i = 0, end = multiverse.getMetric()->getValueCount(); i != end; ++i) {
     fprintf(out, "%s%d", i == 0 ? "" : ", ", state->getValue(i));
   }
@@ -903,10 +1074,9 @@ void printNodeOutput (const u8string *output, const u8string &prefix, FILE *out)
 void printNodeAsLeaf (
   size_t depth, const u8string *output, Node *node, Node *parentNode, ActionId actionId,
   const Multiverse &multiverse, const unordered_set<Node *> &selectedNodes, const unordered_set<Node *> &verboseNodes,
-  const vector<NodeData> &nodesByIndex, const unordered_map<Node *, size_t> &nodeIndices, bool elideDeadEndNodes, size_t maxDepth,
-  u8string &r_prefix, FILE *out
+  const vector<Node *> &nodesByIndex, bool elideDeadEndNodes, size_t maxDepth, u8string &r_prefix, FILE *out
 ) {
-  printNodeHeader(U'{', U'}', node, actionId, multiverse, selectedNodes, nodeIndices, out);
+  printNodeHeader(U'{', U'}', node, actionId, multiverse, selectedNodes, out);
   fprintf(out, " / (elsewhere)\n");
   printNodeOutput(output, r_prefix, out);
 }
@@ -914,10 +1084,9 @@ void printNodeAsLeaf (
 void printNodeAsNonleaf (
   size_t depth, const u8string *output, Node *node, Node *parentNode, ActionId actionId,
   const Multiverse &multiverse, const unordered_set<Node *> &selectedNodes, const unordered_set<Node *> &verboseNodes,
-  const vector<NodeData> &nodesByIndex, const unordered_map<Node *, size_t> &nodeIndices, bool elideDeadEndNodes, size_t maxDepth,
-  u8string &r_prefix, FILE *out
+  const vector<Node *> &nodesByIndex, bool elideDeadEndNodes, size_t maxDepth, u8string &r_prefix, FILE *out
 ) {
-  printNodeHeader(U'(', U')', node, actionId, multiverse, selectedNodes, nodeIndices, out);
+  printNodeHeader(U'(', U')', node, actionId, multiverse, selectedNodes, out);
   if (node->getState()) {
     fprintf(out, " / unprocessed\n");
   } else {
@@ -942,18 +1111,18 @@ void printNodeAsNonleaf (
     auto &child = node->getChild(i);
     ActionId childActionId = get<0>(child);
     Node *childNode = get<2>(child);
-    DA(node->getChildByActionId(childActionId) == &child);
-    const NodeData &childNodeData = nodesByIndex[*find(nodeIndices, childNode)];
+    DA(&node->getChild(node->getChildIndex(childActionId)) == &child);
+    TestMetric::State *childState = static_cast<TestMetric::State *>(childNode->getMetricState());
 
     auto fmt = NONE;
     if (elideDeadEndNodes) {
-      if (childNodeData.primeParent.node != node || childNodeData.primeParent.actionId != childActionId || childNodeData.allChildrenAreNonPrime) {
+      if (!(childNode->getPrimeParentNode() == node && childState->primeParentChildIndex == i && !childState->allChildrenAreNonPrime)) {
         fmt = NONE;
       } else {
         fmt = NONLEAF;
       }
     } else {
-      if (childNodeData.primeParent.node != node || childNodeData.primeParent.actionId != childActionId) {
+      if (!(childNode->getPrimeParentNode() == node && childState->primeParentChildIndex == i)) {
         fmt = LEAF;
       } else {
         fmt = NONLEAF;
@@ -977,7 +1146,7 @@ void printNodeAsNonleaf (
 
     fprintf(out, "%s%c-> ", r_prefix.c_str(), last ? '+' : '|');
     r_prefix.append(last ? u8("    ") : u8("|   "));
-    (fmts[i] == LEAF ? printNodeAsLeaf : printNodeAsNonleaf)(depth, verboseNodes.find(childNode) != verboseNodes.end() ? &childOuput : nullptr, childNode, node, childActionId, multiverse, selectedNodes, verboseNodes, nodesByIndex, nodeIndices, elideDeadEndNodes, maxDepth, r_prefix, out);
+    (fmts[i] == LEAF ? printNodeAsLeaf : printNodeAsNonleaf)(depth, contains(verboseNodes, childNode) ? &childOuput : nullptr, childNode, node, childActionId, multiverse, selectedNodes, verboseNodes, nodesByIndex, elideDeadEndNodes, maxDepth, r_prefix, out);
     r_prefix.resize(r_prefix.size() - 4);
   }
 }

@@ -9,38 +9,26 @@
 ----------------------------------------------------------------------------- */
 int main (int argc, char *argv[]);
 
-struct NodeData {
-  autoinf::Multiverse::Node *node;
-  struct {
-    autoinf::Multiverse::Node *node;
-    autoinf::Multiverse::ActionId actionId;
-  } primeParent;
-  bool allChildrenAreNonPrime;
-};
-
-void studyNodes (const autoinf::Multiverse &multiverse, std::vector<NodeData> &r_nodesByIndex, std::unordered_map<autoinf::Multiverse::Node *, size_t> &r_nodeIndices);
+void studyNodes (const autoinf::Multiverse &multiverse, std::vector<autoinf::Multiverse::Node *> &r_nodesByIndex);
 void studyNode (
-  iu depth, iu targetDepth, autoinf::Multiverse::Node *node, autoinf::Multiverse::Node *parentNode, autoinf::Multiverse::ActionId actionId,
-  std::vector<NodeData> &r_nodesByIndex, std::unordered_map<autoinf::Multiverse::Node *, size_t> &r_nodeIndices
+  iu depth, iu targetDepth, autoinf::Multiverse::Node *node, autoinf::Multiverse::Node *parentNode, autoinf::Multiverse::ActionId childIndex,
+  std::vector<autoinf::Multiverse::Node *> &r_nodesByIndex
 );
-void markDeadEndNodes (std::vector<NodeData> &nodesByIndex, const std::unordered_map<autoinf::Multiverse::Node *, size_t> &nodeIndices);
+void markDeadEndNodes (const std::vector<autoinf::Multiverse::Node *> &nodesByIndex);
 void printNode (
   autoinf::Multiverse::Node *rootNode,
   const autoinf::Multiverse &multiverse, const std::unordered_set<autoinf::Multiverse::Node *> &selectedNodes, const std::unordered_set<autoinf::Multiverse::Node *> &verboseNodes,
-  const std::vector<NodeData> &nodesByIndex, const std::unordered_map<autoinf::Multiverse::Node *, size_t> &nodeIndices, bool elideDeadEndNodes, size_t maxDepth,
-  FILE *out
+  const std::vector<autoinf::Multiverse::Node *> &nodesByIndex, bool elideDeadEndNodes, size_t maxDepth, FILE *out
 );
 void printNodeAsLeaf (
   size_t depth, const core::u8string *output, autoinf::Multiverse::Node *node, autoinf::Multiverse::Node *parentNode, autoinf::Multiverse::ActionId actionId,
   const autoinf::Multiverse &multiverse, const std::unordered_set<autoinf::Multiverse::Node *> &selectedNodes, const std::unordered_set<autoinf::Multiverse::Node *> &verboseNodes,
-  const std::vector<NodeData> &nodesByIndex, const std::unordered_map<autoinf::Multiverse::Node *, size_t> &nodeIndices, bool elideDeadEndNodes, size_t maxDepth,
-  core::u8string &r_prefix, FILE *out
+  const std::vector<autoinf::Multiverse::Node *> &nodesByIndex, bool elideDeadEndNodes, size_t maxDepth, core::u8string &r_prefix, FILE *out
 );
 void printNodeAsNonleaf (
   size_t depth, const core::u8string *output, autoinf::Multiverse::Node *node, autoinf::Multiverse::Node *parentNode, autoinf::Multiverse::ActionId actionId,
   const autoinf::Multiverse &multiverse, const std::unordered_set<autoinf::Multiverse::Node *> &selectedNodes, const std::unordered_set<autoinf::Multiverse::Node *> &verboseNodes,
-  const std::vector<NodeData> &nodesByIndex, const std::unordered_map<autoinf::Multiverse::Node *, size_t> &nodeIndices, bool elideDeadEndNodes, size_t maxDepth,
-  core::u8string &r_prefix, FILE *out
+  const std::vector<autoinf::Multiverse::Node *> &nodesByIndex, bool elideDeadEndNodes, size_t maxDepth, core::u8string &r_prefix, FILE *out
 );
 
 void readLine (core::u8string &r_out);

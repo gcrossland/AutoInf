@@ -1,7 +1,7 @@
 /** @file */
 /* -----------------------------------------------------------------------------
    AutoInf Core Engine Library
-   © Geoff Crossland 2006, 2013, 2014
+   © Geoff Crossland 2006, 2013-2015
 ----------------------------------------------------------------------------- */
 #ifndef AUTOINF_ALREADYINCLUDED
 #define AUTOINF_ALREADYINCLUDED
@@ -98,6 +98,9 @@ template<typename _OutputIterator> class Serialiser : public SerialiserBase {
   prv void write (char8_t value);
   prv void write (const char8_t *begin, const char8_t *end);
 
+  pub void process (bool &r_value);
+  pub void process (iu8f &r_value);
+  pub void process (is8f &r_value);
   pub void process (iu16f &r_value);
   pub void process (is16f &r_value);
   pub void process (iu32f &r_value);
@@ -152,6 +155,9 @@ template<typename _InputIterator> class Deserialiser : public SerialiserBase {
   prv char8_t readChar8 ();
   prv void readChar8s (char8_t *begin, size_t size);
 
+  pub void process (bool &r_value);
+  pub void process (iu8f &r_value);
+  pub void process (is8f &r_value);
   pub void process (iu16f &r_value);
   pub void process (is16f &r_value);
   pub void process (iu32f &r_value);

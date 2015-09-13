@@ -73,6 +73,18 @@ template<typename _OutputIterator> void Serialiser<_OutputIterator>::write (cons
   copy(begin, end, i);
 }
 
+template<typename _OutputIterator> void Serialiser<_OutputIterator>::process (bool &r_value) {
+  write(static_cast<iu32>(r_value));
+}
+
+template<typename _OutputIterator> void Serialiser<_OutputIterator>::process (iu8f &r_value) {
+  write(static_cast<iu32>(r_value));
+}
+
+template<typename _OutputIterator> void Serialiser<_OutputIterator>::process (is8f &r_value) {
+  write(static_cast<is32>(r_value));
+}
+
 template<typename _OutputIterator> void Serialiser<_OutputIterator>::process (iu16f &r_value) {
   write(static_cast<iu32>(r_value));
 }
@@ -290,6 +302,18 @@ template<typename _InputIterator> void Deserialiser<_InputIterator>::readChar8s 
     *i = *(this->i++);
   }
   DW(, "reading char8_t values ", u8string(begin, begin + size).c_str());
+}
+
+template<typename _InputIterator> void Deserialiser<_InputIterator>::process (bool &r_value) {
+  r_value = static_cast<bool>(readIu<iu8f>());
+}
+
+template<typename _InputIterator> void Deserialiser<_InputIterator>::process (iu8f &r_value) {
+  r_value = readIu<iu8f>();
+}
+
+template<typename _InputIterator> void Deserialiser<_InputIterator>::process (is8f &r_value) {
+  r_value = readIs<is8f>();
 }
 
 template<typename _InputIterator> void Deserialiser<_InputIterator>::process (iu16f &r_value) {
