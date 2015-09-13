@@ -443,9 +443,14 @@ void runCommandLine (Vm &vm, Multiverse &multiverse, const char *outPathName, co
         const char8_t *numBegin = line.data() + 3;
         const char8_t *numEnd = line.data() + line.size();
         bool undershoot = false;
+        bool overshootOnEmpty =  false;
         if (*(numEnd - 1) == U'-') {
           --numEnd;
           undershoot = true;
+        } else if (*(numEnd - 1) == U'|') {
+          --numEnd;
+          undershoot = true;
+          overshootOnEmpty = true;
         }
         is n = getNaturalNumber(numBegin, numEnd);
         if (n > 0 && !selectedNodes.empty()) {
@@ -462,6 +467,9 @@ void runCommandLine (Vm &vm, Multiverse &multiverse, const char *outPathName, co
 
           size_t count = min(static_cast<size_t>(n + undershoot), nodes.size()) - 1;
           size_t minValue = get<0>(nodes[count]);
+          if (overshootOnEmpty && get<0>(nodes[0]) == minValue) {
+            undershoot = false;
+          }
           if (undershoot) {
             for (; count != static_cast<size_t>(-1) && get<0>(nodes[count]) == minValue; --count);
             ++count;
