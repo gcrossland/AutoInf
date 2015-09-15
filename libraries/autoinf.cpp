@@ -458,18 +458,6 @@ bool Multiverse::ActionSet::Action::includesAnyWords (const Bitset &words) const
   return false;
 }
 
-Multiverse::Metric::State::State () {
-}
-
-Multiverse::Metric::State::~State () {
-}
-
-Multiverse::Metric::Metric () {
-}
-
-Multiverse::Metric::~Metric () {
-}
-
 Multiverse::Rangeset::Rangeset (const Bitset &bitset, iu16 rangesEnd) : vector() {
   DS();
   DW(, "creating Rangeset from a bitset:");
@@ -495,8 +483,8 @@ Multiverse::Rangeset::Rangeset (const Bitset &bitset, iu16 rangesEnd) : vector()
 
 Multiverse::Node *const Multiverse::Node::UNPARENTED = static_cast<Node *>(nullptr) + 1;
 
-Multiverse::Node::Node (Node *primeParentNode, Signature &&signature, State &&state, unique_ptr<Metric::State> &&metricState) :
-  primeParentNode(primeParentNode), primeParentNodeInvalid(false), signature(move(signature)), state(), metricState(move(metricState)), children()
+Multiverse::Node::Node (unique_ptr<Listener> &&listener, Node *primeParentNode, Signature &&signature, State &&state) :
+  listener(move(listener)), primeParentNode(primeParentNode), primeParentNodeInvalid(false), signature(move(signature)), state(), children()
 {
   if (!state.isEmpty()) {
     this->state.reset(new State(move(state)));
@@ -504,8 +492,8 @@ Multiverse::Node::Node (Node *primeParentNode, Signature &&signature, State &&st
   DW(, "created new Node with sig of hash ", this->signature.hash());
 }
 
-Multiverse::Metric::State *Multiverse::Node::getMetricState () const {
-  return metricState.get();
+Multiverse::Node::Listener *Multiverse::Node::getListener () const {
+  return listener.get();
 }
 
 Multiverse::Node *Multiverse::Node::getPrimeParentNode () const {
@@ -570,7 +558,7 @@ void Multiverse::Node::addChild (ActionId actionId, u8string &&output, Node *nod
 
   bool primeParentChanged = node->updatePrimeParent(this);
   if (primeParentChanged) {
-    multiverse.metric->subtreePrimeAncestorsUpdated(multiverse, node);
+    multiverse.listener->subtreePrimeAncestorsUpdated(multiverse, node);
   }
 }
 
@@ -661,7 +649,7 @@ void Multiverse::Node::childrenUpdated (const Multiverse &multiverse) {
   DPRE(!primeParentNodeInvalid);
   children.shrink_to_fit();
   // DODGY might be part-way through collapsing nodes -> model tree is in some intermediate state (prime parent might be out of date etc.)
-  multiverse.metric->nodeChildrenUpdated(multiverse, this);
+  multiverse.listener->nodeChildrenUpdated(multiverse, this);
 }
 
 void Multiverse::Node::invalidatePrimeParent () {
@@ -733,23 +721,29 @@ void Multiverse::Node::rebuildPrimeParents (Node *rootNode, const Multiverse &mu
   }
 
   for (Node *node : reparentedNodes) {
-    multiverse.metric->subtreePrimeAncestorsUpdated(multiverse, node);
+    multiverse.listener->subtreePrimeAncestorsUpdated(multiverse, node);
   }
+}
+
+Multiverse::Node::Listener::Listener () {
+}
+
+Multiverse::Node::Listener::~Listener () {
 }
 
 Multiverse::Multiverse (
   Vm &r_vm, const u8string &initialInput, u8string &r_initialOutput, function<bool (Vm &r_vm)> &&saver, function<bool (Vm &r_vm)> &&restorer,
   const vector<vector<u8string>> &equivalentActionInputsSet,
   vector<ActionWord> &&words, vector<ActionTemplate> &&dewordingTemplates, vector<ActionTemplate> &&otherTemplates,
-  function<bool (const Vm &vm, const u8string &output)> &&deworder, unique_ptr<Metric> &&metric
+  function<bool (const Vm &vm, const u8string &output)> &&deworder, unique_ptr<Listener> &&listener
 ) :
   saver(saver), restorer(restorer), actionSet(move(words), move(dewordingTemplates), move(otherTemplates)),
-  deworder(move(deworder)), metric(move(metric)),
+  deworder(move(deworder)), listener(move(listener)),
   ignoredBytes(initIgnoredBytes(r_vm)), ignoredByteRangeset(ignoredBytes, r_vm.getDynamicMemorySize()), rootNode(nullptr)
 {
   DS();
   DPRE(r_vm.isAlive());
-  DPRE(!!this->metric);
+  DPRE(!!this->listener);
 
   doAction(r_vm, initialInput, r_initialOutput, u8("VM died while running the initial input"));
   Signature signature = createSignature(r_vm, ignoredByteRangeset);
@@ -780,11 +774,12 @@ Multiverse::Multiverse (
   ignoredByteRangeset = Rangeset(ignoredBytes, r_vm.getDynamicMemorySize());
   signature = recreateSignature(signature, ignoredByteRangeset);
 
-  unique_ptr<Metric::State> metricState(this->metric->nodeCreated(*this, NON_ID, r_initialOutput, signature, r_vm));
-  unique_ptr<Node> node(new Node(nullptr, move(signature), move(state), move(metricState)));
+  unique_ptr<Node::Listener> nodeListener(this->listener->createNodeListener());
+  this->listener->nodeReached(*this, nodeListener.get(), NON_ID, r_initialOutput, signature, r_vm);
+  unique_ptr<Node> node(new Node(move(nodeListener), nullptr, move(signature), move(state)));
   rootNode = node.get();
   nodes.emplace(ref(rootNode->getSignature()), rootNode);
-  this->metric->subtreePrimeAncestorsUpdated(*this, rootNode);
+  this->listener->subtreePrimeAncestorsUpdated(*this, rootNode);
   node.release();
 }
 
@@ -825,8 +820,8 @@ const Multiverse::ActionSet &Multiverse::getActionSet () const {
   return actionSet;
 }
 
-const Multiverse::Metric *Multiverse::getMetric () const {
-  return metric.get();
+Multiverse::Listener *Multiverse::getListener () const {
+  return listener.get();
 }
 
 void Multiverse::doAction(Vm &r_vm, u8string::const_iterator inputBegin, u8string::const_iterator inputEnd, u8string &r_output, const char8_t *deathExceptionMsg) {
@@ -1008,13 +1003,13 @@ void Multiverse::save (const char *pathName) {
   DA(s.isSerialising());
   for (auto nodeEntry : nodes) {
     Node *node = get<1>(nodeEntry);
-    Metric::State *state = node->getMetricState();
-    if (state) {
-      derefAndProcessMetricState(state, s);
+    Node::Listener *listener = node->getListener();
+    if (listener) {
+      derefAndProcessNodeListener(listener, s);
     }
   }
-  Metric::State *state = nullptr;
-  derefAndProcessMetricState(state, s);
+  Node::Listener *listener = nullptr;
+  derefAndProcessNodeListener(listener, s);
 
   s.process(ignoredBytes);
   s.derefAndProcess(rootNode);
@@ -1040,14 +1035,14 @@ void Multiverse::load (const char *pathName, const Vm &vm) {
   }
   nodes.clear();
 
-  vector<Metric::State *> metricStates;
+  vector<Node::Listener *> listeners;
   try {
     DA(!s.isSerialising());
     while (true) {
-      metricStates.emplace_back(nullptr);
-      Metric::State *&state = metricStates.back();
-      derefAndProcessMetricState(state, s);
-      if (!state) {
+      listeners.emplace_back(nullptr);
+      Node::Listener *&listener = listeners.back();
+      derefAndProcessNodeListener(listener, s);
+      if (!listener) {
         break;
       }
     }
@@ -1077,7 +1072,7 @@ void Multiverse::load (const char *pathName, const Vm &vm) {
       }
       seenNodes.emplace(node);
 
-      node->metricState.reset();
+      node->listener.reset();
       return true;
     });
     rootNode = nullptr;
@@ -1086,16 +1081,22 @@ void Multiverse::load (const char *pathName, const Vm &vm) {
       delete node;
     }
 
-    if (!metricStates.back()) {
-      metricStates.pop_back();
+    if (!listeners.back()) {
+      listeners.pop_back();
     }
-    DA(!!metricStates.back());
-    for (Metric::State *state : metricStates) {
-      delete state;
+    DA(!!listeners.back());
+    for (Node::Listener *listener : listeners) {
+      delete listener;
     }
 */
     throw;
   }
+}
+
+Multiverse::Listener::Listener () {
+}
+
+Multiverse::Listener::~Listener () {
 }
 
 /* -----------------------------------------------------------------------------

@@ -349,8 +349,6 @@ class Multiverse {
     };
   };
 
-  pub class Node;
-
   prv struct RangesetPart {
     iu16f setSize;
     iu16f clearSize;
@@ -365,16 +363,18 @@ class Multiverse {
   };
 
   pub class Node {
+    pub class Listener;
+
     pub static Node *const UNPARENTED;
 
-    prv std::unique_ptr<Metric::State> metricState;
+    prv std::unique_ptr<Listener> listener;
     prv Node *primeParentNode;
     prv bool primeParentNodeInvalid;
     prv Signature signature;
     prv std::unique_ptr<autofrotz::State> state;
     prv std::vector<std::tuple<ActionId, core::u8string, Node *>> children;
 
-    pub Node (Node *primeParentNode, Signature &&signature, autofrotz::State &&state, std::unique_ptr<Metric::State> &&metricState);
+    pub Node (std::unique_ptr<Listener> &&listener, Node *primeParentNode, Signature &&signature, autofrotz::State &&state);
     Node (const Node &) = delete;
     Node &operator= (const Node &) = delete;
     Node (Node &&) = delete;
@@ -382,7 +382,7 @@ class Multiverse {
     pub template<typename _InputIterator> explicit Node (const Deserialiser<_InputIterator> &);
     pub template<typename _Walker> void beWalked (_Walker &w);
 
-    pub Metric::State *getMetricState () const;
+    pub Listener *getListener () const;
     pub Node *getPrimeParentNode () const;
     pub size_t getPrimeParentArcChildIndex () const;
     pub const Signature &getSignature () const;
@@ -402,19 +402,19 @@ class Multiverse {
 
     pub template<typename _F, iff(std::is_convertible<_F, std::function<bool (Node *)>>::value)> void forEach (const _F &f);
 
-    pub class State {
-      prt State ();
-      pub virtual ~State ();
-
-      pub virtual size_t getValue (size_t i) = 0;
+    pub class Listener {
+      prt Listener ();
+      pub virtual ~Listener ();
     };
   };
+
+  pub class Listener;
 
   prv const std::function<bool (autofrotz::Vm &r_vm)> saver;
   prv const std::function<bool (autofrotz::Vm &r_vm)> restorer;
   prv const ActionSet actionSet;
   prv const std::function<bool (const autofrotz::Vm &vm, const core::u8string &output)> deworder;
-  prv const std::unique_ptr<Metric> metric;
+  prv std::unique_ptr<Listener> listener;
   prv bitset::Bitset ignoredBytes;
   prv Rangeset ignoredByteRangeset;
   prv Node *rootNode;
@@ -425,7 +425,7 @@ class Multiverse {
     std::function<bool (autofrotz::Vm &r_vm)> &&saver, std::function<bool (autofrotz::Vm &r_vm)> &&restorer,
     const std::vector<std::vector<core::u8string>> &equivalentActionInputsSet,
     std::vector<ActionWord> &&words, std::vector<ActionTemplate> &&dewordingTemplates, std::vector<ActionTemplate> &&otherTemplates,
-    std::function<bool (const autofrotz::Vm &vm, const core::u8string &output)> &&deworder, std::unique_ptr<Metric> &&metric
+    std::function<bool (const autofrotz::Vm &vm, const core::u8string &output)> &&deworder, std::unique_ptr<Listener> &&listener
   );
   prv static bitset::Bitset initIgnoredBytes (const autofrotz::Vm &vm);
   Multiverse (const Multiverse &) = delete;
@@ -435,7 +435,7 @@ class Multiverse {
   pub ~Multiverse () noexcept;
 
   pub const ActionSet &getActionSet () const;
-  pub const Metric *getMetric () const;
+  pub Listener *getListener () const;
   pub static void doAction (autofrotz::Vm &r_vm, core::u8string::const_iterator inputBegin, core::u8string::const_iterator inputEnd, core::u8string &r_output, const char8_t *deathExceptionMsg);
   pub static void doAction (autofrotz::Vm &r_vm, const core::u8string &input, core::u8string &r_output, const char8_t *deathExceptionMsg);
   prv void doSaveAction (autofrotz::Vm &r_vm, autofrotz::State &r_state);
@@ -454,24 +454,23 @@ class Multiverse {
   );
   pub void save (const char *pathName);
   pub void load (const char *pathName, const autofrotz::Vm &vm);
-  prv template<typename _Walker> void derefAndProcessMetricState (Metric::State *&state, _Walker &w);
+  prv template<typename _Walker> void derefAndProcessNodeListener (Node::Listener *&listener, _Walker &w);
 
-  pub class Metric {
-    prt Metric ();
-    pub virtual ~Metric ();
+  pub class Listener {
+    prt Listener ();
+    pub virtual ~Listener ();
 
-    pub virtual std::tuple<void *, size_t> deduceStateType (State *state) = 0;
-    pub virtual std::tuple<State *, void *, size_t> constructState () = 0;
-    pub virtual void walkState (State *state, Serialiser<FileOutputIterator> &s) = 0;
-    pub virtual void walkState (State *state, Deserialiser<FileInputIterator> &s) = 0;
+    pub virtual std::tuple<void *, size_t> deduceNodeListenerType (Node::Listener *listener) = 0;
+    pub virtual std::tuple<Node::Listener *, void *, size_t> constructNodeListener () = 0;
+    pub virtual void walkNodeListener (Node::Listener *listener, Serialiser<FileOutputIterator> &s) = 0;
+    pub virtual void walkNodeListener (Node::Listener *listener, Deserialiser<FileInputIterator> &s) = 0;
 
-    pub virtual std::unique_ptr<State> nodeCreated (const Multiverse &multiverse, ActionId parentActionId, const core::u8string &output, const Signature &signature, const autofrotz::Vm &vm) = 0;
+    pub virtual std::unique_ptr<Node::Listener> createNodeListener () = 0;
+    pub virtual void nodeReached (const Multiverse &multiverse, Node::Listener *listener, ActionId parentActionId, const core::u8string &output, const Signature &signature, const autofrotz::Vm &vm) = 0;
     pub virtual void subtreePrimeAncestorsUpdated (const Multiverse &multiverse, const Node *node) = 0;
     pub virtual void nodeChildrenUpdated (const Multiverse &multiverse, const Node *node) = 0;
     pub virtual void nodesProcessed (const Multiverse &multiverse, const Node *rootNode, const std::unordered_map<std::reference_wrapper<const Signature>, Node *, Hasher<Signature>> &nodes) = 0;
     pub virtual void nodesCollapsed (const Multiverse &multiverse, const Node *rootNode, const std::unordered_map<std::reference_wrapper<const Signature>, Node *, Hasher<Signature>> &nodes) = 0;
-
-    pub virtual size_t getValueCount () const = 0;
   };
 };
 

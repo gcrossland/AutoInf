@@ -537,10 +537,10 @@ template<typename _InputIterator> Multiverse::Node::Node (const Deserialiser<_In
 
 template<typename _Walker> void Multiverse::Node::beWalked (_Walker &w) {
   DS();
+  w.process(listener);
   w.derefAndProcess(primeParentNode);
   w.process(signature);
   w.derefAndProcess(state);
-  w.process(metricState);
   w.process(children, [] (tuple<ActionId, u8string, Node *> &o, _Walker &w) {
     DS();
     w.process(get<0>(o));
@@ -560,7 +560,7 @@ template<typename _F, iff(std::is_convertible<_F, std::function<bool (Multiverse
 }
 
 template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd, Vm &r_vm) {
-  typedef tuple<Node *, ActionId, u8string, Signature, State, unique_ptr<Metric::State>> result;
+  typedef tuple<Node *, ActionId, u8string, Signature, State, unique_ptr<Node::Listener>> result;
   DS();
 
   deque<result> resultQueue;
@@ -625,7 +625,8 @@ template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd,
           continue;
         }
 
-        unique_ptr<Metric::State> metricState = metric->nodeCreated(*this, id, output, signature, r_vm);
+        unique_ptr<Node::Listener> nodeListener = listener->createNodeListener();
+        listener->nodeReached(*this, nodeListener.get(), id, output, signature, r_vm);
 
         DW(, "output from the action is **", output.c_str(), "**");
         try {
@@ -637,7 +638,7 @@ template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd,
         {
           DW(, "adding the result to queue");
           unique_lock<mutex> l(resultQueueLock);
-          resultQueue.emplace_back(parentNode, id, output, move(signature), postState, move(metricState));
+          resultQueue.emplace_back(parentNode, id, output, move(signature), postState, move(nodeListener));
           resultQueueCondVar.notify_one();
           DW(, "done adding the result to queue");
         }
@@ -677,7 +678,7 @@ template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd,
     u8string &resultOutput = get<2>(rs);
     Signature &resultSignature = get<3>(rs);
     State &resultState = get<4>(rs);
-    unique_ptr<Metric::State> &resultMetricState = get<5>(rs);
+    unique_ptr<Node::Listener> &resultListener = get<5>(rs);
     DW(, "M the child is for the action of id ",parentActionId,"; the sig is of hash ", resultSignature.hash());
     DA(!(resultSignature == parentNode->getSignature()));
 
@@ -685,7 +686,7 @@ template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd,
     auto v = find(nodes, resultSignature);
     if (!v) {
       DW(, "M this is a new node for this multiverse!");
-      unique_ptr<Node> n(new Node(Node::UNPARENTED, move(resultSignature), move(resultState), move(resultMetricState)));
+      unique_ptr<Node> n(new Node(move(resultListener), Node::UNPARENTED, move(resultSignature), move(resultState)));
       resultNode = n.get();
       nodes.emplace(ref(resultNode->getSignature()), resultNode);
       n.release();
@@ -699,7 +700,7 @@ template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd,
 
   dispatcherFuture.get();
 
-  metric->nodesProcessed(*this, rootNode, nodes);
+  listener->nodesProcessed(*this, rootNode, nodes);
 }
 
 template<typename _I> Bitset Multiverse::createExtraIgnoredBytes (const Signature &firstSignature, _I otherSignatureIsBegin, _I otherSignatureIsEnd, const Vm &vm) {
@@ -787,20 +788,20 @@ template<typename _I> void Multiverse::collapseNodes (_I nodesBegin, _I nodesEnd
 
   Node::rebuildPrimeParents(rootNode, *this);
 
-  metric->nodesCollapsed(*this, rootNode, nodes);
+  listener->nodesCollapsed(*this, rootNode, nodes);
 }
 
-template<typename _Walker> void Multiverse::derefAndProcessMetricState (Metric::State *&state, _Walker &w) {
-  w.derefAndProcess(state, [&] (Metric::State *state) -> tuple<SerialiserBase::SubtypeId, void *, size_t> {
-    auto r = metric->deduceStateType(state);
+template<typename _Walker> void Multiverse::derefAndProcessNodeListener (Node::Listener *&nodeListener, _Walker &w) {
+  w.derefAndProcess(nodeListener, [&] (Node::Listener *nodeListener) -> tuple<SerialiserBase::SubtypeId, void *, size_t> {
+    auto r = listener->deduceNodeListenerType(nodeListener);
     return tuple<SerialiserBase::SubtypeId, void *, size_t>(0, get<0>(r), get<1>(r));
-  }, [&] (SerialiserBase::SubtypeId type) -> tuple<Metric::State *, void *, size_t> {
+  }, [&] (SerialiserBase::SubtypeId type) -> tuple<Node::Listener *, void *, size_t> {
     if (type != 0) {
-      throw PlainException(u8("invalid metric state type found"));
+      throw PlainException(u8("invalid node listener type found"));
     }
-    return metric->constructState();
-  }, [&] (Metric::State *state, void *, SerialiserBase::SubtypeId, _Walker &w) {
-    metric->walkState(state, w);
+    return listener->constructNodeListener();
+  }, [&] (Node::Listener *nodeListener, void *, SerialiserBase::SubtypeId, _Walker &w) {
+    listener->walkNodeListener(nodeListener, w);
   });
 }
 
