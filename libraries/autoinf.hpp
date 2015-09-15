@@ -351,31 +351,6 @@ class Multiverse {
 
   pub class Node;
 
-  pub class Metric {
-    pub class State {
-      prt State ();
-      pub virtual ~State ();
-
-      pub virtual size_t getValue (size_t i) = 0;
-    };
-
-    prt Metric ();
-    pub virtual ~Metric ();
-
-    pub virtual std::tuple<void *, size_t> deduceStateType (State *state) = 0;
-    pub virtual std::tuple<State *, void *, size_t> constructState () = 0;
-    pub virtual void walkState (State *state, Serialiser<FileOutputIterator> &s) = 0;
-    pub virtual void walkState (State *state, Deserialiser<FileInputIterator> &s) = 0;
-
-    pub virtual std::unique_ptr<State> nodeCreated (const Multiverse &multiverse, ActionId parentActionId, const core::u8string &output, const Signature &signature, const autofrotz::Vm &vm) = 0;
-    pub virtual void subtreePrimeAncestorsUpdated (const Multiverse &multiverse, const Node *node) = 0;
-    pub virtual void nodeChildrenUpdated (const Multiverse &multiverse, const Node *node) = 0;
-    pub virtual void nodesProcessed (const Multiverse &multiverse, const Node *rootNode, const std::unordered_map<std::reference_wrapper<const Signature>, Node *, Hasher<Signature>> &nodes) = 0;
-    pub virtual void nodesCollapsed (const Multiverse &multiverse, const Node *rootNode, const std::unordered_map<std::reference_wrapper<const Signature>, Node *, Hasher<Signature>> &nodes) = 0;
-
-    pub virtual size_t getValueCount () const = 0;
-  };
-
   prv struct RangesetPart {
     iu16f setSize;
     iu16f clearSize;
@@ -392,11 +367,11 @@ class Multiverse {
   pub class Node {
     pub static Node *const UNPARENTED;
 
+    prv std::unique_ptr<Metric::State> metricState;
     prv Node *primeParentNode;
     prv bool primeParentNodeInvalid;
     prv Signature signature;
     prv std::unique_ptr<autofrotz::State> state;
-    prv std::unique_ptr<Metric::State> metricState;
     prv std::vector<std::tuple<ActionId, core::u8string, Node *>> children;
 
     pub Node (Node *primeParentNode, Signature &&signature, autofrotz::State &&state, std::unique_ptr<Metric::State> &&metricState);
@@ -407,13 +382,13 @@ class Multiverse {
     pub template<typename _InputIterator> explicit Node (const Deserialiser<_InputIterator> &);
     pub template<typename _Walker> void beWalked (_Walker &w);
 
+    pub Metric::State *getMetricState () const;
     pub Node *getPrimeParentNode () const;
     pub size_t getPrimeParentArcChildIndex () const;
     pub const Signature &getSignature () const;
     pub Signature setSignature (Signature &&signature);
     pub const autofrotz::State *getState () const;
     pub void clearState ();
-    pub Metric::State *getMetricState () const;
     pub size_t getChildrenSize () const;
     pub const std::tuple<ActionId, core::u8string, Node *> &getChild (size_t i) const;
     pub size_t getChildIndex (ActionId id) const;
@@ -426,6 +401,13 @@ class Multiverse {
     pub static void rebuildPrimeParents (Node *rootNode, const Multiverse &multiverse);
 
     pub template<typename _F, iff(std::is_convertible<_F, std::function<bool (Node *)>>::value)> void forEach (const _F &f);
+
+    pub class State {
+      prt State ();
+      pub virtual ~State ();
+
+      pub virtual size_t getValue (size_t i) = 0;
+    };
   };
 
   prv const std::function<bool (autofrotz::Vm &r_vm)> saver;
@@ -473,6 +455,24 @@ class Multiverse {
   pub void save (const char *pathName);
   pub void load (const char *pathName, const autofrotz::Vm &vm);
   prv template<typename _Walker> void derefAndProcessMetricState (Metric::State *&state, _Walker &w);
+
+  pub class Metric {
+    prt Metric ();
+    pub virtual ~Metric ();
+
+    pub virtual std::tuple<void *, size_t> deduceStateType (State *state) = 0;
+    pub virtual std::tuple<State *, void *, size_t> constructState () = 0;
+    pub virtual void walkState (State *state, Serialiser<FileOutputIterator> &s) = 0;
+    pub virtual void walkState (State *state, Deserialiser<FileInputIterator> &s) = 0;
+
+    pub virtual std::unique_ptr<State> nodeCreated (const Multiverse &multiverse, ActionId parentActionId, const core::u8string &output, const Signature &signature, const autofrotz::Vm &vm) = 0;
+    pub virtual void subtreePrimeAncestorsUpdated (const Multiverse &multiverse, const Node *node) = 0;
+    pub virtual void nodeChildrenUpdated (const Multiverse &multiverse, const Node *node) = 0;
+    pub virtual void nodesProcessed (const Multiverse &multiverse, const Node *rootNode, const std::unordered_map<std::reference_wrapper<const Signature>, Node *, Hasher<Signature>> &nodes) = 0;
+    pub virtual void nodesCollapsed (const Multiverse &multiverse, const Node *rootNode, const std::unordered_map<std::reference_wrapper<const Signature>, Node *, Hasher<Signature>> &nodes) = 0;
+
+    pub virtual size_t getValueCount () const = 0;
+  };
 };
 
 /* -----------------------------------------------------------------------------

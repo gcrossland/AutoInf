@@ -49,315 +49,6 @@ void terminator () {
   core::dieHard();
 }
 
-static const vector<size_t> NEW_LOCATION_VISITAGE_MODIFIERS = {20, 13, 8, 5};
-
-class TestMetric : public virtual Metric {
-  pub class State : public Metric::State {
-    prv size_t scoreValue;
-
-    prv Bitset interestingChildActionWords;
-    prv size_t wordValue;
-
-    prv size_t locationHash;
-    prv size_t visitageValue;
-
-    pub size_t index;
-    pub ActionId primeParentChildIndex;
-    pub bool allChildrenAreNonPrime;
-
-    pub static constexpr size_t NON_VALUE = static_cast<size_t>(-1);
-
-    pub State () :
-      scoreValue(NON_VALUE),
-      wordValue(NON_VALUE - 1),
-      locationHash(NON_VALUE), visitageValue(NON_VALUE),
-      index(NON_VALUE - 1), primeParentChildIndex(Multiverse::NON_ID), allChildrenAreNonPrime(false)
-    {
-    }
-
-    prt template<typename _Walker> void beWalked (_Walker &w) {
-      DS();
-      w.process(scoreValue);
-      w.process(interestingChildActionWords);
-      w.process(wordValue);
-      w.process(locationHash);
-      w.process(visitageValue);
-      w.process(index);
-      w.process(primeParentChildIndex);
-      w.process(allChildrenAreNonPrime);
-    }
-
-    State (const State &) = delete;
-    State &operator= (const State &) = delete;
-    State (State &&) = delete;
-    State &operator= (State &&) = delete;
-
-    pub size_t getValue (size_t i) override {
-      DPRE(i < 3);
-      return i == 0 ? scoreValue : i == 1 ? wordValue : visitageValue;
-    }
-
-    friend class TestMetric;
-  };
-
-  prv static constexpr size_t INITIAL_VISITAGE_VALUE = 100000;
-  prv static constexpr const vector<size_t> &NEW_LOCATION_VISITAGE_MODIFIERS = ::NEW_LOCATION_VISITAGE_MODIFIERS;
-  prv static constexpr ptrdiff_t OLD_LOCATION_VISITAGE_MODIFIER = -200;
-  prv const zword scoreAddr;
-
-  pub TestMetric (zword scoreAddr) : scoreAddr(scoreAddr) {
-  }
-
-  pub tuple<void *, size_t> deduceStateType (Metric::State *listener) override {
-    DPRE(!!dynamic_cast<State *>(listener));
-    return tuple<void *, size_t>(static_cast<State *>(listener), sizeof(State));
-  }
-
-  pub tuple<Metric::State *, void *, size_t> constructState () override {
-    State *listener = new State();
-    return tuple<Metric::State *, void *, size_t>(listener, static_cast<void *>(listener), sizeof(*listener));
-  }
-
-  pub void walkState (Metric::State *listener, Serialiser<FileOutputIterator> &s) override {
-    static_cast<State *>(listener)->beWalked(s);
-  }
-
-  pub void walkState (Metric::State *listener, Deserialiser<FileInputIterator> &s) override {
-    static_cast<State *>(listener)->beWalked(s);
-  }
-
-  pub unique_ptr<Metric::State> nodeCreated (const Multiverse &multiverse, ActionId parentActionId, const u8string &output, const Signature &signature, const Vm &vm) override {
-    DW(, "DDDD created new node with sig of hash ", signature.hash());
-    State *listener = new State();
-    unique_ptr<Metric::State> state_(listener);
-
-    setScoreValue(listener, vm);
-    setVisitageData(listener, output);
-
-    return state_;
-  }
-
-  prv void setScoreValue (State *listener, const Vm &vm) {
-    DPRE((static_cast<iu>(scoreAddr) + 1) < vm.getDynamicMemorySize() + 0);
-    const zbyte *m = vm.getDynamicMemory();
-    listener->scoreValue = static_cast<zword>(static_cast<zword>(m[scoreAddr] << 8) | m[scoreAddr + 1]);
-    DW(, "DDDD game score is ",listener->scoreValue);
-  }
-
-  prv void setVisitageData (State *listener, const u8string &output) {
-    const char8_t *outI = output.data();
-    const char8_t *outEnd = outI + output.size();
-    const char8_t *locationBegin = outI = skipSpaces(outI, outEnd);
-    while (true) {
-      outI = skipNonSpaces(outI, outEnd);
-      if (outI == outEnd) {
-        break;
-      }
-      const char8_t *i = outI + 1;
-      if (i == outEnd || *i == ' ') {
-        break;
-      }
-      outI = i;
-    }
-    const char8_t *locationEnd = outI;
-    DW(, "DDDD location string is ", u8string(locationBegin, locationEnd).c_str());
-
-    listener->locationHash = autoinf::hashImpl(locationBegin, locationEnd);
-    DW(, "DDDD location hash is ", listener->locationHash);
-    DA(listener->visitageValue == State::NON_VALUE);
-  }
-
-  pub void subtreePrimeAncestorsUpdated (const Multiverse &multiverse, const Node *node) override {
-    State *listener = static_cast<State *>(node->getMetricState());
-
-    setVisitageValueRecursively(node, listener, getVisitageChain(node->getPrimeParentNode()));
-  }
-
-  prv tuple<unordered_set<size_t>, size_t, vector<size_t>::const_iterator, size_t> getVisitageChain (const Node *node) {
-    if (!node) {
-      DW(, "DDDD   reached the root; starting visitage value work");
-      tuple<unordered_set<size_t>, size_t, vector<size_t>::const_iterator, size_t> r;
-      auto &locationHash = get<1>(r);
-      auto &visitageModifiersI = get<2>(r);
-      auto &visitageValue = get<3>(r);
-
-      locationHash = State::NON_VALUE;
-      visitageModifiersI = NEW_LOCATION_VISITAGE_MODIFIERS.begin();
-      visitageValue = INITIAL_VISITAGE_VALUE;
-
-      return r;
-    }
-
-    DW(, "DDDD   looking at node with sig of hash ",node->getSignature().hash());
-    State *listener = static_cast<State *>(node->getMetricState());
-
-    tuple<unordered_set<size_t>, size_t, vector<size_t>::const_iterator, size_t> r = getVisitageChain(node->getPrimeParentNode());
-    incrementVisitageChain(listener, r);
-    DPRE(listener->visitageValue == get<3>(r));
-
-    return r;
-  }
-
-  prv void incrementVisitageChain (State *listener, tuple<unordered_set<size_t>, size_t, vector<size_t>::const_iterator, size_t> &r_chain) {
-    auto &r_visitedLocationHashes = get<0>(r_chain);
-    auto &r_locationHash = get<1>(r_chain);
-    auto &r_newLocationVisitageModifiersI = get<2>(r_chain);
-    auto &r_visitageValue = get<3>(r_chain);
-
-    if (listener->locationHash == r_locationHash) {
-      DW(, "DDDD   location didn't change");
-      if (r_newLocationVisitageModifiersI != NEW_LOCATION_VISITAGE_MODIFIERS.end()) {
-        r_visitageValue += *r_newLocationVisitageModifiersI++;
-      }
-    } else {
-      r_locationHash = listener->locationHash;
-      if (contains(r_visitedLocationHashes, r_locationHash)) {
-        DW(, "DDDD   location changed to one we've visted");
-        r_newLocationVisitageModifiersI = NEW_LOCATION_VISITAGE_MODIFIERS.end();
-        size_t t = -OLD_LOCATION_VISITAGE_MODIFIER;
-        r_visitageValue = r_visitageValue < t ? 0 : r_visitageValue - t;
-      } else {
-        DW(, "DDDD   location changed to one we've not visted");
-        r_visitedLocationHashes.emplace(r_locationHash);
-        r_newLocationVisitageModifiersI = NEW_LOCATION_VISITAGE_MODIFIERS.begin();
-        DA(!NEW_LOCATION_VISITAGE_MODIFIERS.empty());
-        r_visitageValue += *r_newLocationVisitageModifiersI++;
-      }
-    }
-  }
-
-  prv void setVisitageValueRecursively (const Node *node, State *listener, tuple<unordered_set<size_t>, size_t, vector<size_t>::const_iterator, size_t> chain) {
-    setVisitageValue(node, listener, chain);
-
-    for (size_t i = 0, end = node->getChildrenSize(); i != end; ++i) {
-      Node *childNode = get<2>(node->getChild(i));
-      if (childNode->getPrimeParentNode() == node) {
-        State *childListener = static_cast<State *>(childNode->getMetricState());
-        DA((childNode->getPrimeParentArcChildIndex() == i) != (childListener->visitageValue == State::NON_VALUE));
-        childListener->visitageValue = State::NON_VALUE;
-      }
-    }
-    for (size_t i = 0, end = node->getChildrenSize(); i != end; ++i) {
-      Node *childNode = get<2>(node->getChild(i));
-      if (childNode->getPrimeParentNode() == node) {
-        State *childListener = static_cast<State *>(childNode->getMetricState());
-        DA((childNode->getPrimeParentArcChildIndex() == i) == (childListener->visitageValue == State::NON_VALUE));
-        if (childListener->visitageValue == State::NON_VALUE) {
-          setVisitageValueRecursively(childNode, childListener, chain);
-          DA(childListener->visitageValue != State::NON_VALUE);
-        }
-      }
-    }
-  }
-
-  prv void setVisitageValue (const Node *node, State *listener, tuple<unordered_set<size_t>, size_t, vector<size_t>::const_iterator, size_t> &r_chain) {
-    auto &r_visitageValue = get<3>(r_chain);
-    DA(!node->getPrimeParentNode() || static_cast<State *>(node->getPrimeParentNode()->getMetricState())->visitageValue == r_visitageValue);
-
-    incrementVisitageChain(listener, r_chain);
-    listener->visitageValue = r_visitageValue;
-  }
-
-  pub void nodeChildrenUpdated (const Multiverse &multiverse, const Node *node) override {
-    State *listener = static_cast<State *>(node->getMetricState());
-
-    setWordData(node, listener, multiverse.getActionSet());
-  }
-
-  prv void setWordData (const Node *node, State *listener, const Multiverse::ActionSet &actionSet) {
-    DA(!node->getState());
-    Bitset &words = listener->interestingChildActionWords;
-    words.clear();
-    for (size_t i = 0, end = node->getChildrenSize(); i != end; ++i) {
-      auto action = actionSet.get(get<0>(node->getChild(i)));
-      for (size_t i = 0, end = action.getWordCount(); i != end; ++i) {
-        words.setBit(action.getWord(i));
-      }
-    }
-    words.compact();
-  }
-
-  pub void nodesProcessed (const Multiverse &multiverse, const Node *rootNode, const unordered_map<reference_wrapper<const Signature>, Node *, autoinf::Hasher<Signature>> &nodes) override {
-    const Multiverse::ActionSet &actionSet = multiverse.getActionSet();
-
-    unique_ptr<size_t []> stats = getWordStats(nodes, [] (const Node *node, State *listener) {
-      DA(listener->wordValue != State::NON_VALUE);
-      listener->wordValue = State::NON_VALUE;
-    }, actionSet);
-    setWordValueRecursively(rootNode, static_cast<State *>(rootNode->getMetricState()), nodes.size(), stats.get(), 0);
-
-    #ifndef NDEBUG
-    for (auto &entry : nodes) {
-      getVisitageChain(get<1>(entry));
-    }
-    #endif
-  }
-
-  prv template<typename F> unique_ptr<size_t []> getWordStats (const unordered_map<reference_wrapper<const Signature>, Node *, autoinf::Hasher<Signature>> &nodes, const F &nodeFunctor, const Multiverse::ActionSet &actionSet) {
-    DS();
-    DW(, "DDDD nodes have changed!");
-    unique_ptr<size_t []> wordCounts(new size_t[actionSet.getWordsSize()]);
-    fill(wordCounts.get(), wordCounts.get() + actionSet.getWordsSize(), 0);
-
-    for (auto &entry : nodes) {
-      Node *node = get<1>(entry);
-      State *listener = static_cast<State *>(node->getMetricState());
-
-      nodeFunctor(node, listener);
-
-      Bitset &words = listener->interestingChildActionWords;
-      for (size_t i = words.getNextSetBit(0); i != Bitset::NON_INDEX; i = words.getNextSetBit(i + 1)) {
-        ++wordCounts[i];
-      }
-    }
-    DW(, "DDDD word counts:");
-    for (size_t i = 0, end = actionSet.getWordsSize(); i != end; ++i) {
-      DW(, "DDDD   ",actionSet.getWord(i).c_str()," - ",wordCounts[i]);
-    }
-
-    return wordCounts;
-  }
-
-  prv void setWordValueRecursively (const Node *node, State *listener, size_t nodesSize, const size_t *stats, size_t wordValue) {
-    setWordValue(node, listener, nodesSize, stats, wordValue);
-
-    for (size_t i = 0, end = node->getChildrenSize(); i != end; ++i) {
-      Node *childNode = get<2>(node->getChild(i));
-      if (childNode->getPrimeParentNode() == node) {
-        State *childListener = static_cast<State *>(childNode->getMetricState());
-        DA((childNode->getPrimeParentArcChildIndex() == i) == (childListener->wordValue == State::NON_VALUE));
-        if (childListener->wordValue == State::NON_VALUE) {
-          setWordValueRecursively(childNode, childListener, nodesSize, stats, wordValue);
-        }
-      }
-    }
-  }
-
-  prv void setWordValue (const Node *node, State *listener, size_t nodesSize, const size_t *stats, size_t &r_wordValue) {
-    DA(listener->wordValue == State::NON_VALUE);
-    DW(, "DDDD calculating node word value for node with sig of hash ", node->getSignature().hash());
-    DA((!node->getPrimeParentNode() && r_wordValue == 0) || r_wordValue == static_cast<State *>(node->getPrimeParentNode()->getMetricState())->wordValue);
-
-    size_t value = r_wordValue;
-    Bitset &words = listener->interestingChildActionWords;
-    for (size_t i = words.getNextSetBit(0); i != Bitset::NON_INDEX; i = words.getNextSetBit(i + 1)) {
-      DW(, "       action word of id ", i);
-      value += nodesSize / stats[i];
-    }
-    DW(, "       final local word value is ", value - r_wordValue);
-    DW(, "       (parent word value is ", r_wordValue,")");
-    listener->wordValue = r_wordValue = value;
-  }
-
-  pub void nodesCollapsed (const Multiverse &multiverse, const Node *rootNode, const unordered_map<reference_wrapper<const Signature>, Node *, autoinf::Hasher<Signature>> &nodes) override {
-    nodesProcessed(multiverse, rootNode, nodes);
-  }
-
-  pub size_t getValueCount () const override {
-    return 3;
-  }
-};
-
 int main (int argc, char *argv[]) {
   std::set_terminate(&terminator);
   try {
@@ -682,197 +373,6 @@ int main (int argc, char *argv[]) {
     size_t maxDepth = numeric_limits<size_t>::max();
     u8string in(u8(" "));
     do {
-      u8string message;
-
-      const char8_t *inI = in.data();
-      const char8_t *inEnd = inI + in.size();
-      while (inI != inEnd) {
-        const char8_t *inPartBegin = inI = skipSpaces(inI, inEnd);
-        const char8_t *inPartEnd = inI = skipNonSpaces(inI, inEnd);
-        u8string line(inPartBegin, inPartEnd);
-
-        if (line == u8("N") || line == u8("n")) {
-          elideDeadEndNodes = false;
-        } else if (line == u8("D") || line == u8("d")) {
-          elideDeadEndNodes = true;
-        } else if (line == u8("W") || line == u8("w")) {
-          maxDepth = numeric_limits<size_t>::max();
-        } else if (line.size() > 2 && (line[0] == U'W' || line[0] == U'w') && line[1] == U'-') {
-          is n = getNaturalNumber(line.data() + 2, line.data() + line.size());
-          if (n >= 0) {
-            maxDepth = static_cast<iu>(n);
-          }
-        } else if (line == u8("A") || line == u8("a")) {
-          selectedNodes.clear();
-          for (const auto &node : nodesByIndex) {
-            selectedNodes.insert(node);
-          }
-        } else if (line == u8("U") || line == u8("u")) {
-          for (const auto &node : nodesByIndex) {
-            if (node->getState()) {
-              selectedNodes.insert(node);
-            }
-          }
-        } else if (line == u8("C") || line == u8("c")) {
-          selectedNodes.clear();
-        } else if (line == u8("I") || line == u8("i")) {
-          decltype(selectedNodes) nextSelectedNodes;
-          for (const auto &node : nodesByIndex) {
-            if (!contains(selectedNodes, node)) {
-              nextSelectedNodes.insert(node);
-            }
-          }
-          selectedNodes = move(nextSelectedNodes);
-        } else if (line.size() > 3 && (line[0] == U'V' || line[0] == U'v') && line[1] == U'-') {
-          char8_t valueName = line[2];
-          if (valueName >= 'a' && valueName <= 'z') {
-            size_t valueIndex = static_cast<size_t>(valueName - 'a');
-            is n = getNaturalNumber(line.data() + 3, line.data() + line.size());
-            if (n > 0 && !selectedNodes.empty()) {
-              vector<tuple<size_t, Node *>> nodes;
-              nodes.reserve(selectedNodes.size());
-
-              for (Node *node : selectedNodes) {
-                size_t value = node->getMetricState()->getValue(valueIndex);
-                nodes.emplace_back(value, node);
-              }
-              sort(nodes.begin(), nodes.end(), [] (const tuple<size_t, Node *> &o0, const tuple<size_t, Node *> &o1) -> bool {
-                return get<0>(o0) > get<0>(o1);
-              });
-
-              auto nodesNetEnd = nodes.begin() + static_cast<ptrdiff_t>(min(static_cast<size_t>(n), nodes.size()) - 1); // XXXX sort out size_t -> ptrdiff_t
-              size_t minValue = get<0>(*nodesNetEnd);
-              ++nodesNetEnd;
-              for (auto nodesEnd = nodes.end(); nodesNetEnd != nodesEnd && get<0>(*nodesNetEnd) == minValue; ++nodesNetEnd);
-              size_t count = static_cast<size_t>(nodesNetEnd - nodes.begin());
-
-              selectedNodes.clear();
-              size_t unprocessedCount = 0;
-              for (auto i = nodes.begin(); i != nodesNetEnd; ++i) {
-                Node *node = get<1>(*i);
-                unprocessedCount += !!node->getState();
-                selectedNodes.insert(node);
-              }
-
-              char8_t b[1024];
-              sprintf(reinterpret_cast<char *>(b), "Selected %d (%d unprocessed) (of %d) nodes (threshold metric value %d)\n\n", count, unprocessedCount, nodes.size(), minValue);
-              message.append(b);
-            }
-          }
-        } else if (line == u8("S") || line == u8("s")) {
-          verboseNodes.insert(selectedNodes.cbegin(), selectedNodes.cend());
-        } else if (line == u8("H") || line == u8("h")) {
-          for (Node *node : selectedNodes) {
-            verboseNodes.erase(node);
-          }
-        } else if (line == u8("P") || line == u8("p")) {
-          vector<Node *> t;
-          t.reserve(selectedNodes.size());
-          for (const auto &n : nodesByIndex) {
-            if (contains(selectedNodes, n)) {
-              t.emplace_back(n);
-            }
-          }
-          multiverse.processNodes(t.begin(), t.end(), vm);
-          nodesByIndex.clear();
-        } else if (line == u8("L") || line == u8("l")) {
-          if (selectedNodes.cbegin() != selectedNodes.cend()) {
-            multiverse.collapseNodes(selectedNodes.cbegin(), selectedNodes.cend(), vm);
-          }
-          nodesByIndex.clear();
-        } else if (line == u8("T") || line == u8("t")) {
-          for (Node *node : selectedNodes) {
-            node->clearState();
-          }
-          nodesByIndex.clear();
-        } else if (line.size() > 2 && (line[0] == U'E' || line[0] == U'e') && line[1] == U'-') {
-          u8string name(line.data() + 2, line.data() + line.size());
-          multiverse.save(reinterpret_cast<const char *>(name.c_str()));
-        } else if (line.size() > 2 && (line[0] == U'O' || line[0] == U'o') && line[1] == U'-') {
-          u8string name(line.data() + 2, line.data() + line.size());
-          multiverse.load(reinterpret_cast<const char *>(name.c_str()), vm);
-          nodesByIndex.clear();
-        } else {
-          const char8_t *numBegin = line.data();
-          const char8_t *numEnd = numBegin + line.size();
-          const char8_t *dash = find(numBegin, numEnd, U'-');
-
-          const size_t rX = static_cast<size_t>(-1);
-          size_t r0 = rX;
-          size_t r1 = rX;
-
-          is n = getNaturalNumber(numBegin, dash);
-          size_t nn;
-          if (n >= 0 && (nn = static_cast<size_t>(n)) < nodesByIndex.size()) {
-            r0 = nn;
-          }
-          if (dash == numEnd) {
-            r1 = r0 + 1;
-          } else {
-            is n = getNaturalNumber(dash + 1, numEnd);
-            size_t nn;
-            if (n >= 0 && (nn = static_cast<size_t>(n)) < nodesByIndex.size()) {
-              r1 = nn + 1;
-            }
-          }
-
-          if (r0 != rX && r1 != rX) {
-            for (size_t i = r0; i != r1; ++i) {
-              Node *node = nodesByIndex[i];
-              auto pos = selectedNodes.find(node);
-              if (pos == selectedNodes.end()) {
-                selectedNodes.insert(node);
-              } else {
-                selectedNodes.erase(pos);
-              }
-            }
-          }
-        }
-
-        if (nodesByIndex.empty()) {
-          selectedNodes.clear();
-          verboseNodes.clear();
-          studyNodes(multiverse, nodesByIndex);
-        }
-      }
-
-      if (getenv("TERM")) {
-        printf("\x1B[1J\x1B[;H");
-      } else {
-        system("cls");
-      }
-
-      {
-        FILE *out = stdout;
-        if (outPathName) {
-          out = fopen(outPathName, "wb");
-          if (!out) {
-            throw PlainException(u8("unable to open output file"));
-          }
-        }
-        auto _ = autoinf::finally([&] {
-          if (outPathName) {
-            fclose(out);
-          }
-        });
-
-        printNode(multiverse.getRootNode(), multiverse, selectedNodes, verboseNodes, nodesByIndex, elideDeadEndNodes, maxDepth, out);
-      }
-
-      if (!message.empty()) {
-        printf("%s", message.c_str());
-      }
-      printf(
-        "Show All _Nodes         Hide _Dead End Nodes    Sho_w Nodes n Deep[-<n>]\n"
-        "Select _All             Select _Unprocesseds\n"
-        "_Clear Selection        _Invert Selection\n"
-        "Shrink Selection to Highest _Valued-<n>\n"
-        "_Show Output            _Hide Output\n"
-        "_Process                Co_llapse               _Terminate\n"
-        "Sav_e As-<name>         _Open File-<name>\n"
-        ">"
-      );
-      fflush(stdout);
 
       in.clear();
       readLine(in);
@@ -889,6 +389,506 @@ int main (int argc, char *argv[]) {
     fprintf(stderr, "Error: %s\n", core::createExceptionMessage(e, false).c_str());
     return 1;
   }
+}
+
+  u8string message;
+
+  const char8_t *inI = in.data();
+  const char8_t *inEnd = inI + in.size();
+  while (inI != inEnd) {
+    const char8_t *inPartBegin = inI = skipSpaces(inI, inEnd);
+    const char8_t *inPartEnd = inI = skipNonSpaces(inI, inEnd);
+    u8string line(inPartBegin, inPartEnd);
+
+    if (line == u8("N") || line == u8("n")) {
+      elideDeadEndNodes = false;
+    } else if (line == u8("D") || line == u8("d")) {
+      elideDeadEndNodes = true;
+    } else if (line == u8("W") || line == u8("w")) {
+      maxDepth = numeric_limits<size_t>::max();
+    } else if (line.size() > 2 && (line[0] == U'W' || line[0] == U'w') && line[1] == U'-') {
+      is n = getNaturalNumber(line.data() + 2, line.data() + line.size());
+      if (n >= 0) {
+        maxDepth = static_cast<iu>(n);
+      }
+    } else if (line == u8("A") || line == u8("a")) {
+      selectedNodes.clear();
+      for (const auto &node : nodesByIndex) {
+        selectedNodes.insert(node);
+      }
+    } else if (line == u8("U") || line == u8("u")) {
+      for (const auto &node : nodesByIndex) {
+        if (node->getState()) {
+          selectedNodes.insert(node);
+        }
+      }
+    } else if (line == u8("C") || line == u8("c")) {
+      selectedNodes.clear();
+    } else if (line == u8("I") || line == u8("i")) {
+      decltype(selectedNodes) nextSelectedNodes;
+      for (const auto &node : nodesByIndex) {
+        if (!contains(selectedNodes, node)) {
+          nextSelectedNodes.insert(node);
+        }
+      }
+      selectedNodes = move(nextSelectedNodes);
+    } else if (line.size() > 3 && (line[0] == U'V' || line[0] == U'v') && line[1] == U'-') {
+      char8_t valueName = line[2];
+      if (valueName >= 'a' && valueName <= 'z') {
+        size_t valueIndex = static_cast<size_t>(valueName - 'a');
+        is n = getNaturalNumber(line.data() + 3, line.data() + line.size());
+        if (n > 0 && !selectedNodes.empty()) {
+          vector<tuple<size_t, Node *>> nodes;
+          nodes.reserve(selectedNodes.size());
+
+          for (Node *node : selectedNodes) {
+            size_t value = node->getMetricState()->getValue(valueIndex);
+            nodes.emplace_back(value, node);
+          }
+          sort(nodes.begin(), nodes.end(), [] (const tuple<size_t, Node *> &o0, const tuple<size_t, Node *> &o1) -> bool {
+            return get<0>(o0) > get<0>(o1);
+          });
+
+          auto nodesNetEnd = nodes.begin() + static_cast<ptrdiff_t>(min(static_cast<size_t>(n), nodes.size()) - 1); // XXXX sort out size_t -> ptrdiff_t
+          size_t minValue = get<0>(*nodesNetEnd);
+          ++nodesNetEnd;
+          for (auto nodesEnd = nodes.end(); nodesNetEnd != nodesEnd && get<0>(*nodesNetEnd) == minValue; ++nodesNetEnd);
+          size_t count = static_cast<size_t>(nodesNetEnd - nodes.begin());
+
+          selectedNodes.clear();
+          size_t unprocessedCount = 0;
+          for (auto i = nodes.begin(); i != nodesNetEnd; ++i) {
+            Node *node = get<1>(*i);
+            unprocessedCount += !!node->getState();
+            selectedNodes.insert(node);
+          }
+
+          char8_t b[1024];
+          sprintf(reinterpret_cast<char *>(b), "Selected %d (%d unprocessed) (of %d) nodes (threshold metric value %d)\n\n", count, unprocessedCount, nodes.size(), minValue);
+          message.append(b);
+        }
+      }
+    } else if (line == u8("S") || line == u8("s")) {
+      verboseNodes.insert(selectedNodes.cbegin(), selectedNodes.cend());
+    } else if (line == u8("H") || line == u8("h")) {
+      for (Node *node : selectedNodes) {
+        verboseNodes.erase(node);
+      }
+    } else if (line == u8("P") || line == u8("p")) {
+      vector<Node *> t;
+      t.reserve(selectedNodes.size());
+      for (const auto &n : nodesByIndex) {
+        if (contains(selectedNodes, n)) {
+          t.emplace_back(n);
+        }
+      }
+      multiverse.processNodes(t.begin(), t.end(), vm);
+      nodesByIndex.clear();
+    } else if (line == u8("L") || line == u8("l")) {
+      if (selectedNodes.cbegin() != selectedNodes.cend()) {
+        multiverse.collapseNodes(selectedNodes.cbegin(), selectedNodes.cend(), vm);
+      }
+      nodesByIndex.clear();
+    } else if (line == u8("T") || line == u8("t")) {
+      for (Node *node : selectedNodes) {
+        node->clearState();
+      }
+      nodesByIndex.clear();
+    } else if (line.size() > 2 && (line[0] == U'E' || line[0] == U'e') && line[1] == U'-') {
+      u8string name(line.data() + 2, line.data() + line.size());
+      multiverse.save(reinterpret_cast<const char *>(name.c_str()));
+    } else if (line.size() > 2 && (line[0] == U'O' || line[0] == U'o') && line[1] == U'-') {
+      u8string name(line.data() + 2, line.data() + line.size());
+      multiverse.load(reinterpret_cast<const char *>(name.c_str()), vm);
+      nodesByIndex.clear();
+    } else {
+      const char8_t *numBegin = line.data();
+      const char8_t *numEnd = numBegin + line.size();
+      const char8_t *dash = find(numBegin, numEnd, U'-');
+
+      const size_t rX = static_cast<size_t>(-1);
+      size_t r0 = rX;
+      size_t r1 = rX;
+
+      is n = getNaturalNumber(numBegin, dash);
+      size_t nn;
+      if (n >= 0 && (nn = static_cast<size_t>(n)) < nodesByIndex.size()) {
+        r0 = nn;
+      }
+      if (dash == numEnd) {
+        r1 = r0 + 1;
+      } else {
+        is n = getNaturalNumber(dash + 1, numEnd);
+        size_t nn;
+        if (n >= 0 && (nn = static_cast<size_t>(n)) < nodesByIndex.size()) {
+          r1 = nn + 1;
+        }
+      }
+
+      if (r0 != rX && r1 != rX) {
+        for (size_t i = r0; i != r1; ++i) {
+          Node *node = nodesByIndex[i];
+          auto pos = selectedNodes.find(node);
+          if (pos == selectedNodes.end()) {
+            selectedNodes.insert(node);
+          } else {
+            selectedNodes.erase(pos);
+          }
+        }
+      }
+    }
+
+    if (nodesByIndex.empty()) {
+      selectedNodes.clear();
+      verboseNodes.clear();
+      studyNodes(multiverse, nodesByIndex);
+    }
+  }
+
+  if (getenv("TERM")) {
+    printf("\x1B[1J\x1B[;H");
+  } else {
+    system("cls");
+  }
+
+  {
+    FILE *out = stdout;
+    if (outPathName) {
+      out = fopen(outPathName, "wb");
+      if (!out) {
+        throw PlainException(u8("unable to open output file"));
+      }
+    }
+    auto _ = autoinf::finally([&] {
+      if (outPathName) {
+        fclose(out);
+      }
+    });
+
+    printNode(multiverse.getRootNode(), multiverse, selectedNodes, verboseNodes, nodesByIndex, elideDeadEndNodes, maxDepth, out);
+  }
+
+  if (!message.empty()) {
+    printf("%s", message.c_str());
+  }
+  printf(
+    "Show All _Nodes         Hide _Dead End Nodes    Sho_w Nodes n Deep[-<n>]\n"
+    "Select _All             Select _Unprocesseds\n"
+    "_Clear Selection        _Invert Selection\n"
+    "Shrink Selection to Highest _Valued-<n>\n"
+    "_Show Output            _Hide Output\n"
+    "_Process                Co_llapse               _Terminate\n"
+    "Sav_e As-<name>         _Open File-<name>\n"
+    ">"
+  );
+  fflush(stdout);
+
+class TestMetric : public virtual Metric {
+pub class State : public Metric::State {
+prv size_t scoreValue;
+
+prv Bitset interestingChildActionWords;
+prv size_t wordValue;
+
+prv size_t locationHash;
+prv size_t visitageValue;
+
+pub size_t index;
+pub ActionId primeParentChildIndex;
+pub bool allChildrenAreNonPrime;
+
+pub static constexpr size_t NON_VALUE = static_cast<size_t>(-1);
+
+pub State () :
+  scoreValue(NON_VALUE),
+  wordValue(NON_VALUE - 1),
+  locationHash(NON_VALUE), visitageValue(NON_VALUE),
+  index(NON_VALUE - 1), primeParentChildIndex(Multiverse::NON_ID), allChildrenAreNonPrime(false)
+{
+}
+
+prt template<typename _Walker> void beWalked (_Walker &w) {
+  DS();
+  w.process(scoreValue);
+  w.process(interestingChildActionWords);
+  w.process(wordValue);
+  w.process(locationHash);
+  w.process(visitageValue);
+  w.process(index);
+  w.process(primeParentChildIndex);
+  w.process(allChildrenAreNonPrime);
+}
+
+State (const State &) = delete;
+State &operator= (const State &) = delete;
+State (State &&) = delete;
+State &operator= (State &&) = delete;
+
+pub size_t getValue (size_t i) override {
+  DPRE(i < 3);
+  return i == 0 ? scoreValue : i == 1 ? wordValue : visitageValue;
+}
+
+friend class TestMetric;
+};
+
+prv static constexpr size_t INITIAL_VISITAGE_VALUE = 100000;
+prv static constexpr const vector<size_t> &NEW_LOCATION_VISITAGE_MODIFIERS = ::NEW_LOCATION_VISITAGE_MODIFIERS;
+static const vector<size_t> NEW_LOCATION_VISITAGE_MODIFIERS = {20, 13, 8, 5};
+prv static constexpr ptrdiff_t OLD_LOCATION_VISITAGE_MODIFIER = -200;
+prv const zword scoreAddr;
+
+pub TestMetric (zword scoreAddr) : scoreAddr(scoreAddr) {
+}
+
+pub unique_ptr<Metric::State> nodeCreated (const Multiverse &multiverse, ActionId parentActionId, const u8string &output, const Signature &signature, const Vm &vm) override {
+  DW(, "DDDD created new node with sig of hash ", signature.hash());
+  State *listener = new State();
+  unique_ptr<Metric::State> state_(listener);
+
+  setScoreValue(listener, vm);
+  setVisitageData(listener, output);
+
+  return state_;
+}
+
+prv void setScoreValue (State *listener, const Vm &vm) {
+  DPRE((static_cast<iu>(scoreAddr) + 1) < vm.getDynamicMemorySize() + 0);
+  const zbyte *m = vm.getDynamicMemory();
+  listener->scoreValue = static_cast<zword>(static_cast<zword>(m[scoreAddr] << 8) | m[scoreAddr + 1]);
+  DW(, "DDDD game score is ",listener->scoreValue);
+}
+
+prv void setVisitageData (State *listener, const u8string &output) {
+  const char8_t *outI = output.data();
+  const char8_t *outEnd = outI + output.size();
+  const char8_t *locationBegin = outI = skipSpaces(outI, outEnd);
+  while (true) {
+    outI = skipNonSpaces(outI, outEnd);
+    if (outI == outEnd) {
+      break;
+    }
+    const char8_t *i = outI + 1;
+    if (i == outEnd || *i == ' ') {
+      break;
+    }
+    outI = i;
+  }
+  const char8_t *locationEnd = outI;
+  DW(, "DDDD location string is ", u8string(locationBegin, locationEnd).c_str());
+
+  listener->locationHash = autoinf::hashImpl(locationBegin, locationEnd);
+  DW(, "DDDD location hash is ", listener->locationHash);
+  DA(listener->visitageValue == State::NON_VALUE);
+}
+
+pub void subtreePrimeAncestorsUpdated (const Multiverse &multiverse, const Node *node) override {
+  State *listener = static_cast<State *>(node->getMetricState());
+
+  setVisitageValueRecursively(node, listener, getVisitageChain(node->getPrimeParentNode()));
+}
+
+prv tuple<unordered_set<size_t>, size_t, vector<size_t>::const_iterator, size_t> getVisitageChain (const Node *node) {
+  if (!node) {
+    DW(, "DDDD   reached the root; starting visitage value work");
+    tuple<unordered_set<size_t>, size_t, vector<size_t>::const_iterator, size_t> r;
+    auto &locationHash = get<1>(r);
+    auto &visitageModifiersI = get<2>(r);
+    auto &visitageValue = get<3>(r);
+
+    locationHash = State::NON_VALUE;
+    visitageModifiersI = NEW_LOCATION_VISITAGE_MODIFIERS.begin();
+    visitageValue = INITIAL_VISITAGE_VALUE;
+
+    return r;
+  }
+
+  DW(, "DDDD   looking at node with sig of hash ",node->getSignature().hash());
+  State *listener = static_cast<State *>(node->getMetricState());
+
+  tuple<unordered_set<size_t>, size_t, vector<size_t>::const_iterator, size_t> r = getVisitageChain(node->getPrimeParentNode());
+  incrementVisitageChain(listener, r);
+  DPRE(listener->visitageValue == get<3>(r));
+
+  return r;
+}
+
+prv void incrementVisitageChain (State *listener, tuple<unordered_set<size_t>, size_t, vector<size_t>::const_iterator, size_t> &r_chain) {
+  auto &r_visitedLocationHashes = get<0>(r_chain);
+  auto &r_locationHash = get<1>(r_chain);
+  auto &r_newLocationVisitageModifiersI = get<2>(r_chain);
+  auto &r_visitageValue = get<3>(r_chain);
+
+  if (listener->locationHash == r_locationHash) {
+    DW(, "DDDD   location didn't change");
+    if (r_newLocationVisitageModifiersI != NEW_LOCATION_VISITAGE_MODIFIERS.end()) {
+      r_visitageValue += *r_newLocationVisitageModifiersI++;
+    }
+  } else {
+    r_locationHash = listener->locationHash;
+    if (contains(r_visitedLocationHashes, r_locationHash)) {
+      DW(, "DDDD   location changed to one we've visted");
+      r_newLocationVisitageModifiersI = NEW_LOCATION_VISITAGE_MODIFIERS.end();
+      size_t t = -OLD_LOCATION_VISITAGE_MODIFIER;
+      r_visitageValue = r_visitageValue < t ? 0 : r_visitageValue - t;
+    } else {
+      DW(, "DDDD   location changed to one we've not visted");
+      r_visitedLocationHashes.emplace(r_locationHash);
+      r_newLocationVisitageModifiersI = NEW_LOCATION_VISITAGE_MODIFIERS.begin();
+      DA(!NEW_LOCATION_VISITAGE_MODIFIERS.empty());
+      r_visitageValue += *r_newLocationVisitageModifiersI++;
+    }
+  }
+}
+
+prv void setVisitageValueRecursively (const Node *node, State *listener, tuple<unordered_set<size_t>, size_t, vector<size_t>::const_iterator, size_t> chain) {
+  setVisitageValue(node, listener, chain);
+
+  for (size_t i = 0, end = node->getChildrenSize(); i != end; ++i) {
+    Node *childNode = get<2>(node->getChild(i));
+    if (childNode->getPrimeParentNode() == node) {
+      State *childListener = static_cast<State *>(childNode->getMetricState());
+      DA((childNode->getPrimeParentArcChildIndex() == i) != (childListener->visitageValue == State::NON_VALUE));
+      childListener->visitageValue = State::NON_VALUE;
+    }
+  }
+  for (size_t i = 0, end = node->getChildrenSize(); i != end; ++i) {
+    Node *childNode = get<2>(node->getChild(i));
+    if (childNode->getPrimeParentNode() == node) {
+      State *childListener = static_cast<State *>(childNode->getMetricState());
+      DA((childNode->getPrimeParentArcChildIndex() == i) == (childListener->visitageValue == State::NON_VALUE));
+      if (childListener->visitageValue == State::NON_VALUE) {
+        setVisitageValueRecursively(childNode, childListener, chain);
+        DA(childListener->visitageValue != State::NON_VALUE);
+      }
+    }
+  }
+}
+
+prv void setVisitageValue (const Node *node, State *listener, tuple<unordered_set<size_t>, size_t, vector<size_t>::const_iterator, size_t> &r_chain) {
+  auto &r_visitageValue = get<3>(r_chain);
+  DA(!node->getPrimeParentNode() || static_cast<State *>(node->getPrimeParentNode()->getMetricState())->visitageValue == r_visitageValue);
+
+  incrementVisitageChain(listener, r_chain);
+  listener->visitageValue = r_visitageValue;
+}
+
+pub void nodeChildrenUpdated (const Multiverse &multiverse, const Node *node) override {
+  State *listener = static_cast<State *>(node->getMetricState());
+
+  setWordData(node, listener, multiverse.getActionSet());
+}
+
+prv void setWordData (const Node *node, State *listener, const Multiverse::ActionSet &actionSet) {
+  DA(!node->getState());
+  Bitset &words = listener->interestingChildActionWords;
+  words.clear();
+  for (size_t i = 0, end = node->getChildrenSize(); i != end; ++i) {
+    auto action = actionSet.get(get<0>(node->getChild(i)));
+    for (size_t i = 0, end = action.getWordCount(); i != end; ++i) {
+      words.setBit(action.getWord(i));
+    }
+  }
+  words.compact();
+}
+
+pub void nodesProcessed (const Multiverse &multiverse, const Node *rootNode, const unordered_map<reference_wrapper<const Signature>, Node *, autoinf::Hasher<Signature>> &nodes) override {
+  const Multiverse::ActionSet &actionSet = multiverse.getActionSet();
+
+  unique_ptr<size_t []> stats = getWordStats(nodes, [] (const Node *node, State *listener) {
+    DA(listener->wordValue != State::NON_VALUE);
+    listener->wordValue = State::NON_VALUE;
+  }, actionSet);
+  setWordValueRecursively(rootNode, static_cast<State *>(rootNode->getMetricState()), nodes.size(), stats.get(), 0);
+
+  #ifndef NDEBUG
+  for (auto &entry : nodes) {
+    getVisitageChain(get<1>(entry));
+  }
+  #endif
+}
+
+prv template<typename F> unique_ptr<size_t []> getWordStats (const unordered_map<reference_wrapper<const Signature>, Node *, autoinf::Hasher<Signature>> &nodes, const F &nodeFunctor, const Multiverse::ActionSet &actionSet) {
+  DS();
+  DW(, "DDDD nodes have changed!");
+  unique_ptr<size_t []> wordCounts(new size_t[actionSet.getWordsSize()]);
+  fill(wordCounts.get(), wordCounts.get() + actionSet.getWordsSize(), 0);
+
+  for (auto &entry : nodes) {
+    Node *node = get<1>(entry);
+    State *listener = static_cast<State *>(node->getMetricState());
+
+    nodeFunctor(node, listener);
+
+    Bitset &words = listener->interestingChildActionWords;
+    for (size_t i = words.getNextSetBit(0); i != Bitset::NON_INDEX; i = words.getNextSetBit(i + 1)) {
+      ++wordCounts[i];
+    }
+  }
+  DW(, "DDDD word counts:");
+  for (size_t i = 0, end = actionSet.getWordsSize(); i != end; ++i) {
+    DW(, "DDDD   ",actionSet.getWord(i).c_str()," - ",wordCounts[i]);
+  }
+
+  return wordCounts;
+}
+
+prv void setWordValueRecursively (const Node *node, State *listener, size_t nodesSize, const size_t *stats, size_t wordValue) {
+  setWordValue(node, listener, nodesSize, stats, wordValue);
+
+  for (size_t i = 0, end = node->getChildrenSize(); i != end; ++i) {
+    Node *childNode = get<2>(node->getChild(i));
+    if (childNode->getPrimeParentNode() == node) {
+      State *childListener = static_cast<State *>(childNode->getMetricState());
+      DA((childNode->getPrimeParentArcChildIndex() == i) == (childListener->wordValue == State::NON_VALUE));
+      if (childListener->wordValue == State::NON_VALUE) {
+        setWordValueRecursively(childNode, childListener, nodesSize, stats, wordValue);
+      }
+    }
+  }
+}
+
+prv void setWordValue (const Node *node, State *listener, size_t nodesSize, const size_t *stats, size_t &r_wordValue) {
+  DA(listener->wordValue == State::NON_VALUE);
+  DW(, "DDDD calculating node word value for node with sig of hash ", node->getSignature().hash());
+  DA((!node->getPrimeParentNode() && r_wordValue == 0) || r_wordValue == static_cast<State *>(node->getPrimeParentNode()->getMetricState())->wordValue);
+
+  size_t value = r_wordValue;
+  Bitset &words = listener->interestingChildActionWords;
+  for (size_t i = words.getNextSetBit(0); i != Bitset::NON_INDEX; i = words.getNextSetBit(i + 1)) {
+    DW(, "       action word of id ", i);
+    value += nodesSize / stats[i];
+  }
+  DW(, "       final local word value is ", value - r_wordValue);
+  DW(, "       (parent word value is ", r_wordValue,")");
+  listener->wordValue = r_wordValue = value;
+}
+
+pub void nodesCollapsed (const Multiverse &multiverse, const Node *rootNode, const unordered_map<reference_wrapper<const Signature>, Node *, autoinf::Hasher<Signature>> &nodes) override {
+  nodesProcessed(multiverse, rootNode, nodes);
+}
+
+pub size_t getValueCount () const override {
+  return 3;
+}
+};
+
+pub tuple<void *, size_t> deduceStateType (Metric::State *listener) override {
+  DPRE(!!dynamic_cast<State *>(listener));
+  return tuple<void *, size_t>(static_cast<State *>(listener), sizeof(State));
+}
+
+pub tuple<Metric::State *, void *, size_t> constructState () override {
+  State *listener = new State();
+  return tuple<Metric::State *, void *, size_t>(listener, static_cast<void *>(listener), sizeof(*listener));
+}
+
+pub void walkState (Metric::State *listener, Serialiser<FileOutputIterator> &s) override {
+  static_cast<State *>(listener)->beWalked(s);
+}
+
+pub void walkState (Metric::State *listener, Deserialiser<FileInputIterator> &s) override {
+  static_cast<State *>(listener)->beWalked(s);
 }
 
 void studyNodes (const Multiverse &multiverse, vector<Node *> &r_nodesByIndex) {
@@ -1017,17 +1017,6 @@ void printNode (
   printNodeAsNonleaf(0, nullptr, rootNode, nullptr, Multiverse::NON_ID, multiverse, selectedNodes, verboseNodes, nodesByIndex, elideDeadEndNodes, maxDepth, prefix, out);
 }
 
-u8string renderActionInput (ActionId actionId, const Multiverse &multiverse) {
-  u8string actionInput;
-  if (actionId != Multiverse::NON_ID) {
-    actionInput.push_back(U'"');
-    multiverse.getActionSet().get(actionId).getInput(actionInput);
-    actionInput.erase(actionInput.size() - 1);
-    actionInput.append(u8("\" ->"));
-  }
-  return actionInput;
-}
-
 void printNodeHeader (
   char8_t nodeIndexRenderingPrefix, char8_t nodeIndexRenderingSuffix, Node *node, ActionId actionId,
   const Multiverse &multiverse, const unordered_set<Node *> &selectedNodes, FILE *out
@@ -1048,6 +1037,17 @@ void printNodeHeader (
     fprintf(out, "%s%d", i == 0 ? "" : ", ", nodeView->getValue(i));
   }
   fprintf(out, "}");
+}
+
+u8string renderActionInput (ActionId actionId, const Multiverse &multiverse) {
+  u8string actionInput;
+  if (actionId != Multiverse::NON_ID) {
+    actionInput.push_back(U'"');
+    multiverse.getActionSet().get(actionId).getInput(actionInput);
+    actionInput.erase(actionInput.size() - 1);
+    actionInput.append(u8("\" ->"));
+  }
+  return actionInput;
 }
 
 void printNodeOutput (const u8string *output, const u8string &prefix, FILE *out) {

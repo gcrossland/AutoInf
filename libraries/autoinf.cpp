@@ -504,6 +504,10 @@ Multiverse::Node::Node (Node *primeParentNode, Signature &&signature, State &&st
   DW(, "created new Node with sig of hash ", this->signature.hash());
 }
 
+Multiverse::Metric::State *Multiverse::Node::getMetricState () const {
+  return metricState.get();
+}
+
 Multiverse::Node *Multiverse::Node::getPrimeParentNode () const {
   DPRE(!primeParentNodeInvalid);
   DPRE(primeParentNode != UNPARENTED);
@@ -538,10 +542,6 @@ const State *Multiverse::Node::getState () const {
 void Multiverse::Node::clearState () {
   DW(, "done with trying to process Node with sig of hash ", signature.hash());
   state.reset();
-}
-
-Multiverse::Metric::State *Multiverse::Node::getMetricState () const {
-  return metricState.get();
 }
 
 size_t Multiverse::Node::getChildrenSize () const {
