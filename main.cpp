@@ -39,6 +39,10 @@ using std::hash;
 using autoinf::find;
 using autoinf::contains;
 using std::fill;
+using autoinf::finally;
+using std::packaged_task;
+using std::thread;
+using std::future_status;
 
 /* -----------------------------------------------------------------------------
 ----------------------------------------------------------------------------- */
@@ -56,11 +60,6 @@ int main (int argc, char *argv[]) {
     autoinf::DOPEN(, errs);
     //autofrotz::DOPEN(, errs);
     //autofrotz::vmlink::DOPEN(, errs);
-
-    const char *outPathName = nullptr;
-    if (argc == 2) {
-      outPathName = argv[1];
-    }
 
     const iu height = 64;
     const iu undoDepth = 0;
@@ -364,21 +363,85 @@ int main (int argc, char *argv[]) {
       unique_ptr<Multiverse::Listener>(new MultiverseView(one of 0x3BEB or 0x3C0B or 0x3C0D))
     );
     */
-    static_cast<MultiverseView *>(multiverse.getListener())->multiverseChanged(multiverse);
+    MultiverseView *view = static_cast<MultiverseView *>(multiverse.getListener());
+    view->multiverseChanged(multiverse);
 
-    u8string in(u8(" "));
-    do {
-      runCommandLine(vm, multiverse, outPathName, in);
-
-      in.clear();
-      readLine(in);
-      size_t comment = in.find(U'#');
-      if (comment != u8string::npos) {
-        in.erase(comment);
+    if (argc < 2) {
+      throw PlainException(u8("no mode specified"));
+    } else if (strcmp(argv[1], "cmd") == 0) {
+      const char *outPathName = nullptr;
+      if (argc == 3) {
+        outPathName = argv[2];
       }
-    } while (in != u8("quit"));
 
-    printf("Time spent in VM (over and above init): %f secs\n", vm.getTime());
+      u8string in(u8(" "));
+      u8string message;
+      do {
+        runCommandLine(vm, multiverse, in, message);
+
+        updateMultiverseDisplay(multiverse, outPathName, message);
+        message.clear();
+
+        in.clear();
+        readLine(in);
+        size_t comment = in.find(U'#');
+        if (comment != u8string::npos) {
+          in.erase(comment);
+        }
+      } while (in != u8("quit"));
+    } else if (strcmp(argv[1], "velocityrun") == 0) {
+      if (argc != 5) {
+        throw PlainException(u8("initial and advancement command lines must be specified"));
+      }
+      // TODO uargs
+      u8string initialCommandLine(reinterpret_cast<char8_t *>(argv[2]));
+      u8string advancementCommandLine(reinterpret_cast<char8_t *>(argv[3]));
+      u8string finalCommandLine(reinterpret_cast<char8_t *>(argv[4]));
+
+      u8string message;
+
+      packaged_task<void ()> waiter([] () {
+        u8string in;
+        readLine(in);
+      });
+      auto waiterFuture = waiter.get_future();
+      thread waiterThread(move(waiter));
+      auto _ = finally([&waiterThread] () {
+        waiterThread.join();
+      });
+
+      runCommandLine(vm, multiverse, initialCommandLine, message);
+      message.clear();
+
+      auto getUserTime = [] () -> double {
+        return 0;
+      };
+      auto getVmTime = [&vm] () -> double {
+        return 0;
+      };
+      double tTotal0 = getUserTime();
+      double tVm0 = getVmTime();
+
+      printf("\"Number of advancements\", \"total time\", \"VM time\", \"max score\"\n");
+      for (iu advancementCount = 0;; ++advancementCount) {
+        double tTotal1 = getUserTime();
+        double tVm1 = getVmTime();
+        printf("%d, %f, %f, %d\n", static_cast<int>(advancementCount), tTotal1 - tTotal0, tVm1 - tVm0, static_cast<int>(view->getMaxScoreValue()));
+        fflush(stdout);
+
+        if (waiterFuture.wait_for(std::chrono::nanoseconds::zero()) == future_status::ready) {
+          waiterFuture.get();
+          break;
+        }
+
+        runCommandLine(vm, multiverse, advancementCommandLine, message);
+        message.clear();
+      }
+
+      runCommandLine(vm, multiverse, finalCommandLine, message);
+    } else {
+      throw PlainException(u8("no valid mode specified"));
+    }
 
     return 0;
   } catch (exception &e) {
@@ -387,15 +450,13 @@ int main (int argc, char *argv[]) {
   }
 }
 
-void runCommandLine (Vm &vm, Multiverse &multiverse, const char *outPathName, const u8string &in) {
+void runCommandLine (Vm &vm, Multiverse &multiverse, const u8string &in, u8string &message) {
   MultiverseView *view = static_cast<MultiverseView *>(multiverse.getListener());
   vector<Node *> &nodesByIndex = view->nodesByIndex;
   unordered_set<Node *> &selectedNodes = view->selectedNodes;
   unordered_set<Node *> &verboseNodes = view->verboseNodes;
   bool &elideDeadEndNodes = view->elideDeadEndNodes;
   size_t &maxDepth = view->maxDepth;
-
-  u8string message;
 
   const char8_t *inI = in.data();
   const char8_t *inEnd = inI + in.size();
@@ -561,6 +622,10 @@ void runCommandLine (Vm &vm, Multiverse &multiverse, const char *outPathName, co
       }
     }
   }
+}
+
+void updateMultiverseDisplay (Multiverse &multiverse, const char *outPathName, const u8string &message) {
+  MultiverseView *view = static_cast<MultiverseView *>(multiverse.getListener());
 
   if (getenv("TERM")) {
     printf("\x1B[1J\x1B[;H");
@@ -576,7 +641,7 @@ void runCommandLine (Vm &vm, Multiverse &multiverse, const char *outPathName, co
         throw PlainException(u8("unable to open output file"));
       }
     }
-    auto _ = autoinf::finally([&] {
+    auto _ = finally([&] {
       if (outPathName) {
         fclose(out);
       }
@@ -627,7 +692,7 @@ const size_t MultiverseMetricsListener::INITIAL_VISITAGE_VALUE = 100000;
 const vector<size_t> MultiverseMetricsListener::NEW_LOCATION_VISITAGE_MODIFIERS = {20, 13, 8, 5};
 const ptrdiff_t MultiverseMetricsListener::OLD_LOCATION_VISITAGE_MODIFIER = -200;
 
-MultiverseMetricsListener::MultiverseMetricsListener (zword scoreAddr) : scoreAddr(scoreAddr) {
+MultiverseMetricsListener::MultiverseMetricsListener (zword scoreAddr) : scoreAddr(scoreAddr), maxScoreValue(0) {
 }
 
 void MultiverseMetricsListener::nodeReached (const Multiverse &multiverse, Node::Listener *listener_, ActionId parentActionId, const u8string &output, const Signature &signature, const Vm &vm) {
@@ -643,6 +708,9 @@ void MultiverseMetricsListener::setScoreValue (NodeMetricsListener *listener, co
   const zbyte *m = vm.getDynamicMemory();
   listener->scoreValue = static_cast<zword>(static_cast<zword>(m[scoreAddr] << 8) | m[scoreAddr + 1]);
   DW(, "DDDD game score is ",listener->scoreValue);
+  if (listener->scoreValue > maxScoreValue) {
+    maxScoreValue = listener->scoreValue;
+  }
 }
 
 void MultiverseMetricsListener::setVisitageData (NodeMetricsListener *listener, const u8string &output) {
@@ -852,6 +920,10 @@ void MultiverseMetricsListener::setWordValue (const Node *node, NodeMetricsListe
 
 void MultiverseMetricsListener::nodesCollapsed (const Multiverse &multiverse, const Node *rootNode, const unordered_map<reference_wrapper<const Signature>, Node *, autoinf::Hasher<Signature>> &nodes) {
   nodesProcessed(multiverse, rootNode, nodes);
+}
+
+size_t MultiverseMetricsListener::getMaxScoreValue () const {
+  return maxScoreValue;
 }
 
 NodeView::NodeView () :
@@ -1159,7 +1231,9 @@ void MultiverseView::printNodeAsNonleaf (
 
 size_t readLine (char8_t *b, size_t bSize) {
   // TODO convert input from native
-  fgets(reinterpret_cast<char *>(b), static_cast<int>(bSize), stdin);
+  if (!fgets(reinterpret_cast<char *>(b), static_cast<int>(bSize), stdin)) {
+    throw PlainException(u8("failed to read input"));
+  }
   size_t size = 0;
   for (; b[size] != 0; ++size) {
     if (b[size] >= 128) {

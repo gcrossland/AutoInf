@@ -8,7 +8,8 @@
 /* -----------------------------------------------------------------------------
 ----------------------------------------------------------------------------- */
 int main (int argc, char *argv[]);
-void runCommandLine (autofrotz::Vm &vm, autoinf::Multiverse &multiverse, const char *outPathName, const core::u8string &in);
+void runCommandLine (autofrotz::Vm &vm, autoinf::Multiverse &multiverse, const core::u8string &in, core::u8string &message);
+void updateMultiverseDisplay (autoinf::Multiverse &multiverse, const char *outPathName, const core::u8string &message);
 
 class NodeMetricsListener : public autoinf::Multiverse::Node::Listener {
   pub static constexpr size_t VALUE_COUNT = 3;
@@ -40,6 +41,7 @@ class MultiverseMetricsListener : public autoinf::Multiverse::Listener {
   prv static const ptrdiff_t OLD_LOCATION_VISITAGE_MODIFIER;
 
   prv const autofrotz::zword scoreAddr;
+  prv size_t maxScoreValue;
 
   pub MultiverseMetricsListener (autofrotz::zword scoreAddr);
   MultiverseMetricsListener (const MultiverseMetricsListener &) = delete;
@@ -62,6 +64,8 @@ class MultiverseMetricsListener : public autoinf::Multiverse::Listener {
   prv void setWordValueRecursively (const autoinf::Multiverse::Node *node, NodeMetricsListener *listener, size_t nodesSize, const size_t *stats, size_t wordValue);
   prv void setWordValue (const autoinf::Multiverse::Node *node, NodeMetricsListener *listener, size_t nodesSize, const size_t *stats, size_t &r_wordValue);
   pub void virtual nodesCollapsed (const autoinf::Multiverse &multiverse, const autoinf::Multiverse::Node *rootNode, const std::unordered_map<std::reference_wrapper<const autoinf::Signature>, autoinf::Multiverse::Node *, autoinf::Hasher<autoinf::Signature>> &nodes) override;
+
+  pub size_t getMaxScoreValue () const;
 
   friend class NodeMetricsListener;
 };
