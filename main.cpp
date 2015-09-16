@@ -390,13 +390,27 @@ int main (int argc, char *argv[]) {
         }
       } while (in != u8("quit"));
     } else if (strcmp(argv[1], "velocityrun") == 0) {
-      if (argc != 5) {
+      if (argc != 5 && argc != 6) {
         throw PlainException(u8("initial and advancement command lines must be specified"));
       }
       // TODO uargs
       u8string initialCommandLine(reinterpret_cast<char8_t *>(argv[2]));
       u8string advancementCommandLine(reinterpret_cast<char8_t *>(argv[3]));
       u8string finalCommandLine(reinterpret_cast<char8_t *>(argv[4]));
+      iu initialAdvancementCount = 0;
+      double initialTTotal = 0;
+      double initialTVm = 0;
+      if (argc == 6) {
+        int v0;
+        float v1;
+        float v2;
+        if (sscanf(argv[5], "%d,%f,%f", &v0, &v1, &v2) != 3 || v0 < 0) {
+          throw PlainException(u8("invalid initial stats state specified"));
+        }
+        initialAdvancementCount = static_cast<unsigned int>(v0);
+        initialTTotal = v1;
+        initialTVm = v2;
+      }
 
       u8string message;
 
@@ -419,14 +433,14 @@ int main (int argc, char *argv[]) {
       auto getVmTime = [&vm] () -> double {
         return 0;
       };
-      double tTotal0 = getUserTime();
-      double tVm0 = getVmTime();
+      double tTotal0 = getUserTime() - initialTTotal;
+      double tVm0 = getVmTime() - initialTVm;
 
-      printf("\"Number of advancements\", \"total time\", \"VM time\", \"max score\"\n");
-      for (iu advancementCount = 0;; ++advancementCount) {
+      printf("\"Number of advancements\",\"total time\",\"VM time\",\"max score\"\n");
+      for (iu advancementCount = initialAdvancementCount;; ++advancementCount) {
         double tTotal1 = getUserTime();
         double tVm1 = getVmTime();
-        printf("%d, %f, %f, %d\n", static_cast<int>(advancementCount), tTotal1 - tTotal0, tVm1 - tVm0, static_cast<int>(view->getMaxScoreValue()));
+        printf("%d,%f,%f,%d\n", static_cast<int>(advancementCount), tTotal1 - tTotal0, tVm1 - tVm0, static_cast<int>(view->getMaxScoreValue()));
         fflush(stdout);
 
         if (waiterFuture.wait_for(std::chrono::nanoseconds::zero()) == future_status::ready) {
@@ -559,17 +573,19 @@ void runCommandLine (Vm &vm, Multiverse &multiverse, const u8string &in, u8strin
         verboseNodes.erase(node);
       }
     } else if (line == u8("P") || line == u8("p")) {
-      vector<Node *> t;
-      t.reserve(selectedNodes.size());
-      for (const auto &n : nodesByIndex) {
-        if (contains(selectedNodes, n)) {
-          t.emplace_back(n);
+      if (!selectedNodes.empty()) {
+        vector<Node *> t;
+        t.reserve(selectedNodes.size());
+        for (const auto &n : nodesByIndex) {
+          if (contains(selectedNodes, n)) {
+            t.emplace_back(n);
+          }
         }
+        multiverse.processNodes(t.begin(), t.end(), vm);
       }
-      multiverse.processNodes(t.begin(), t.end(), vm);
       view->multiverseChanged(multiverse);
     } else if (line == u8("L") || line == u8("l")) {
-      if (selectedNodes.cbegin() != selectedNodes.cend()) {
+      if (!selectedNodes.empty()) {
         multiverse.collapseNodes(selectedNodes.cbegin(), selectedNodes.cend(), vm);
       }
       view->multiverseChanged(multiverse);
