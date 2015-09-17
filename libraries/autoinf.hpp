@@ -471,6 +471,7 @@ class Multiverse {
     pub virtual void nodeChildrenUpdated (const Multiverse &multiverse, const Node *node) = 0;
     pub virtual void nodesProcessed (const Multiverse &multiverse, const Node *rootNode, const std::unordered_map<std::reference_wrapper<const Signature>, Node *, Hasher<Signature>> &nodes) = 0;
     pub virtual void nodesCollapsed (const Multiverse &multiverse, const Node *rootNode, const std::unordered_map<std::reference_wrapper<const Signature>, Node *, Hasher<Signature>> &nodes) = 0;
+    pub virtual void loaded (const Multiverse &multiverse, const Node *rootNode, const std::unordered_map<std::reference_wrapper<const Signature>, Node *, Hasher<Signature>> &nodes) = 0;
   };
 };
 

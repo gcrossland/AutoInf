@@ -8,7 +8,10 @@
 /* -----------------------------------------------------------------------------
 ----------------------------------------------------------------------------- */
 int main (int argc, char *argv[]);
-void runCommandLine (autofrotz::Vm &vm, autoinf::Multiverse &multiverse, const core::u8string &in, core::u8string &message);
+class MultiverseView;
+void runCmd (int argc, char **argv, autofrotz::Vm &vm, autoinf::Multiverse &multiverse, MultiverseView *view);
+void runVelocityrun (int argc, char **argv, autofrotz::Vm &vm, autoinf::Multiverse &multiverse, MultiverseView *view);
+bool runCommandLine (autofrotz::Vm &vm, autoinf::Multiverse &multiverse, const core::u8string &in, core::u8string &message);
 void updateMultiverseDisplay (autoinf::Multiverse &multiverse, const char *outPathName, const core::u8string &message);
 
 class NodeMetricsListener : public autoinf::Multiverse::Node::Listener {
@@ -64,6 +67,7 @@ class MultiverseMetricsListener : public autoinf::Multiverse::Listener {
   prv void setWordValueRecursively (const autoinf::Multiverse::Node *node, NodeMetricsListener *listener, size_t nodesSize, const size_t *stats, size_t wordValue);
   prv void setWordValue (const autoinf::Multiverse::Node *node, NodeMetricsListener *listener, size_t nodesSize, const size_t *stats, size_t &r_wordValue);
   pub void virtual nodesCollapsed (const autoinf::Multiverse &multiverse, const autoinf::Multiverse::Node *rootNode, const std::unordered_map<std::reference_wrapper<const autoinf::Signature>, autoinf::Multiverse::Node *, autoinf::Hasher<autoinf::Signature>> &nodes) override;
+  pub void virtual loaded (const autoinf::Multiverse &multiverse, const autoinf::Multiverse::Node *rootNode, const std::unordered_map<std::reference_wrapper<const autoinf::Signature>, autoinf::Multiverse::Node *, autoinf::Hasher<autoinf::Signature>> &nodes) override;
 
   pub size_t getMaxScoreValue () const;
 
@@ -81,6 +85,7 @@ class NodeView : public NodeMetricsListener {
 
 class MultiverseView : public MultiverseMetricsListener {
   pub std::vector<autoinf::Multiverse::Node *> nodesByIndex;
+  pub size_t processedNodesSize;
   pub std::unordered_set<autoinf::Multiverse::Node *> selectedNodes;
   pub std::unordered_set<autoinf::Multiverse::Node *> verboseNodes;
   pub bool elideDeadEndNodes = false;

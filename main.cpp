@@ -366,95 +366,25 @@ int main (int argc, char *argv[]) {
     MultiverseView *view = static_cast<MultiverseView *>(multiverse.getListener());
     view->multiverseChanged(multiverse);
 
+    struct {
+      const char *name;
+      void (*impl)(int argc, char **argv, Vm &vm, Multiverse &multiverse, MultiverseView *view);
+    } modes[] = {{"cmd", runCmd}, {"velocityrun", runVelocityrun}};
     if (argc < 2) {
       throw PlainException(u8("no mode specified"));
-    } else if (strcmp(argv[1], "cmd") == 0) {
-      const char *outPathName = nullptr;
-      if (argc == 3) {
-        outPathName = argv[2];
-      }
-
-      u8string in(u8(" "));
-      u8string message;
-      do {
-        runCommandLine(vm, multiverse, in, message);
-
-        updateMultiverseDisplay(multiverse, outPathName, message);
-        message.clear();
-
-        in.clear();
-        readLine(in);
-        size_t comment = in.find(U'#');
-        if (comment != u8string::npos) {
-          in.erase(comment);
-        }
-      } while (in != u8("quit"));
-    } else if (strcmp(argv[1], "velocityrun") == 0) {
-      if (argc != 5 && argc != 6) {
-        throw PlainException(u8("initial and advancement command lines must be specified"));
-      }
-      // TODO uargs
-      u8string initialCommandLine(reinterpret_cast<char8_t *>(argv[2]));
-      u8string advancementCommandLine(reinterpret_cast<char8_t *>(argv[3]));
-      u8string finalCommandLine(reinterpret_cast<char8_t *>(argv[4]));
-      iu initialAdvancementCount = 0;
-      double initialTTotal = 0;
-      double initialTVm = 0;
-      if (argc == 6) {
-        int v0;
-        float v1;
-        float v2;
-        if (sscanf(argv[5], "%d,%f,%f", &v0, &v1, &v2) != 3 || v0 < 0) {
-          throw PlainException(u8("invalid initial stats state specified"));
-        }
-        initialAdvancementCount = static_cast<unsigned int>(v0);
-        initialTTotal = v1;
-        initialTVm = v2;
-      }
-
-      u8string message;
-
-      packaged_task<void ()> waiter([] () {
-        u8string in;
-        readLine(in);
-      });
-      auto waiterFuture = waiter.get_future();
-      thread waiterThread(move(waiter));
-      auto _ = finally([&waiterThread] () {
-        waiterThread.join();
-      });
-
-      runCommandLine(vm, multiverse, initialCommandLine, message);
-      message.clear();
-
-      auto getUserTime = [] () -> double {
-        return 0;
-      };
-      auto getVmTime = [&vm] () -> double {
-        return 0;
-      };
-      double tTotal0 = getUserTime() - initialTTotal;
-      double tVm0 = getVmTime() - initialTVm;
-
-      printf("\"Number of advancements\",\"total time\",\"VM time\",\"max score\"\n");
-      for (iu advancementCount = initialAdvancementCount;; ++advancementCount) {
-        double tTotal1 = getUserTime();
-        double tVm1 = getVmTime();
-        printf("%d,%f,%f,%d\n", static_cast<int>(advancementCount), tTotal1 - tTotal0, tVm1 - tVm0, static_cast<int>(view->getMaxScoreValue()));
-        fflush(stdout);
-
-        if (waiterFuture.wait_for(std::chrono::nanoseconds::zero()) == future_status::ready) {
-          waiterFuture.get();
+    } else {
+      void (*impl)(int argc, char **argv, Vm &vm, Multiverse &multiverse, MultiverseView *view) = nullptr;
+      for (auto &mode : modes) {
+        if (strcmp(argv[1], mode.name) == 0) {
+          impl = mode.impl;
           break;
         }
-
-        runCommandLine(vm, multiverse, advancementCommandLine, message);
-        message.clear();
       }
-
-      runCommandLine(vm, multiverse, finalCommandLine, message);
-    } else {
-      throw PlainException(u8("no valid mode specified"));
+      if (impl) {
+        (*impl)(argc, argv, vm, multiverse, view);
+      } else {
+        throw PlainException(u8("no valid mode specified"));
+      }
     }
 
     return 0;
@@ -464,7 +394,139 @@ int main (int argc, char *argv[]) {
   }
 }
 
-void runCommandLine (Vm &vm, Multiverse &multiverse, const u8string &in, u8string &message) {
+void runCmd (int argc, char **argv, Vm &vm, Multiverse &multiverse, MultiverseView *view) {
+  const char *outPathName = nullptr;
+  if (argc == 3) {
+    outPathName = argv[2];
+  }
+
+  u8string message;
+  updateMultiverseDisplay(multiverse, outPathName, message);
+
+  u8string in;
+  while (true) {
+    readLine(in);
+    size_t comment = in.find(U'#');
+    if (comment != u8string::npos) {
+      in.erase(comment);
+    }
+
+    bool done = !runCommandLine(vm, multiverse, in, message);
+    in.clear();
+    if (done) {
+      break;
+    }
+
+    updateMultiverseDisplay(multiverse, outPathName, message);
+    message.clear();
+  }
+}
+
+void runVelocityrun (int argc, char **argv, Vm &vm, Multiverse &multiverse, MultiverseView *view) {
+  if (argc != 7 && argc != 8) {
+    throw PlainException(u8("command lines to be run initially, each round, on max score change, on no nodes being processed and on user exit must be specified"));
+  }
+  // TODO uargs
+  u8string initialCommandLine(reinterpret_cast<char8_t *>(argv[2]));
+  u8string roundCommandLine(reinterpret_cast<char8_t *>(argv[3]));
+  u8string maxScoreChangeCommandLine(reinterpret_cast<char8_t *>(argv[4]));
+  u8string nullProcessingCommandLine(reinterpret_cast<char8_t *>(argv[5]));
+  u8string stopCommandLine(reinterpret_cast<char8_t *>(argv[6]));
+  iu initialRoundCount = 0;
+  double initialTTotal = 0;
+  double initialTVm = 0;
+  if (argc == 8) {
+    int v0;
+    float v1;
+    float v2;
+    if (sscanf(argv[7], "%d,%f,%f", &v0, &v1, &v2) != 3 || v0 < 0) {
+      throw PlainException(u8("invalid initial stats state specified"));
+    }
+    initialRoundCount = static_cast<unsigned int>(v0);
+    initialTTotal = v1;
+    initialTVm = v2;
+  }
+
+  u8string message;
+
+  packaged_task<void ()> waiter([] () {
+    u8string in;
+    readLine(in);
+  });
+  auto waiterFuture = waiter.get_future();
+  thread waiterThread(move(waiter));
+  // XXXX isn't this supposed to not work?
+  //auto _ = finally([&waiterThread] () {
+  // waiterThread.join();
+  //});
+
+  if (!runCommandLine(vm, multiverse, initialCommandLine, message)) {
+    return;
+  }
+
+  auto getUserTime = [] () -> double {
+    return 0;
+  };
+  auto getVmTime = [&vm] () -> double {
+    return 0;
+  };
+  double tTotal0 = getUserTime() - initialTTotal;
+  double tVm0 = getVmTime() - initialTVm;
+
+  printf("\"Number of rounds\",\"total time\",\"VM time\",\"max score\"\n");
+  auto printStats = [&] (iu roundCount, double tTotal1, double tVm1, size_t maxScoreValue) {
+    printf("%d,%f,%f,%d\n", static_cast<int>(roundCount), tTotal1 - tTotal0, tVm1 - tVm0, static_cast<int>(maxScoreValue));
+    fflush(stdout);
+  };
+  printStats(initialRoundCount, tTotal0, tVm0, view->getMaxScoreValue());
+
+  for (iu round = initialRoundCount; true; ++round) {
+    if (waiterFuture.wait_for(std::chrono::nanoseconds::zero()) == future_status::ready) {
+      printf("  stopping\n");
+      fflush(stdout);
+      waiterFuture.get();
+      runCommandLine(vm, multiverse, stopCommandLine, message);
+      return;
+    }
+
+    size_t maxScoreValue0 = view->getMaxScoreValue();
+    size_t processedNodesSize0 = view->processedNodesSize;
+    if (!runCommandLine(vm, multiverse, roundCommandLine, message)) {
+      return;
+    }
+    size_t maxScoreValue1 = view->getMaxScoreValue();
+    size_t processedNodesSize1 = view->processedNodesSize;
+
+    double tTotal1 = getUserTime();
+    double tVm1 = getVmTime();
+    printStats(round + 1, tTotal1, tVm1, maxScoreValue1);
+
+    if (maxScoreValue1 != maxScoreValue0) {
+      printf("  max score changed\n");
+      fflush(stdout);
+      if (!runCommandLine(vm, multiverse, maxScoreChangeCommandLine, message)) {
+        return;
+      }
+    }
+
+    if (processedNodesSize1 == processedNodesSize0) {
+      printf("  no nodes processed\n");
+      fflush(stdout);
+      if (!runCommandLine(vm, multiverse, nullProcessingCommandLine, message)) {
+        return;
+      }
+    }
+
+    double tTotal2 = getUserTime();
+    double tVm2 = getVmTime();
+    tTotal0 -= (tTotal2 - tTotal1);
+    tVm0 -= (tVm2 - tVm1);
+
+    message.clear();
+  }
+}
+
+bool runCommandLine (Vm &vm, Multiverse &multiverse, const u8string &in, u8string &message) {
   MultiverseView *view = static_cast<MultiverseView *>(multiverse.getListener());
   vector<Node *> &nodesByIndex = view->nodesByIndex;
   unordered_set<Node *> &selectedNodes = view->selectedNodes;
@@ -479,7 +541,9 @@ void runCommandLine (Vm &vm, Multiverse &multiverse, const u8string &in, u8strin
     const char8_t *inPartEnd = inI = skipNonSpaces(inI, inEnd);
     u8string line(inPartBegin, inPartEnd);
 
-    if (line == u8("N") || line == u8("n")) {
+    if (line == u8("quit")) {
+      return false;
+    } else if (line == u8("N") || line == u8("n")) {
       elideDeadEndNodes = false;
     } else if (line == u8("D") || line == u8("d")) {
       elideDeadEndNodes = true;
@@ -638,6 +702,8 @@ void runCommandLine (Vm &vm, Multiverse &multiverse, const u8string &in, u8strin
       }
     }
   }
+
+  return true;
 }
 
 void updateMultiverseDisplay (Multiverse &multiverse, const char *outPathName, const u8string &message) {
@@ -938,7 +1004,20 @@ void MultiverseMetricsListener::nodesCollapsed (const Multiverse &multiverse, co
   nodesProcessed(multiverse, rootNode, nodes);
 }
 
+void MultiverseMetricsListener::loaded (const Multiverse &multiverse, const Node *rootNode, const unordered_map<reference_wrapper<const Signature>, Node *, autoinf::Hasher<Signature>> &nodes) {
+  size_t maxScoreValue = 0;
+  for (auto &entry : nodes) {
+    Node *node = get<1>(entry);
+    NodeMetricsListener *listener = static_cast<NodeMetricsListener *>(node->getListener());
+    if (listener->scoreValue > maxScoreValue) {
+      maxScoreValue = listener->scoreValue;
+    }
+  }
+  this->maxScoreValue = maxScoreValue;
+}
+
 size_t MultiverseMetricsListener::getMaxScoreValue () const {
+  DPRE(maxScoreValue != NodeMetricsListener::NON_VALUE);
   return maxScoreValue;
 }
 
@@ -955,7 +1034,7 @@ template<typename _Walker> void NodeView::beWalked (_Walker &w) {
   w.process(allChildrenAreNonPrime);
 }
 
-MultiverseView::MultiverseView (zword scoreAddr) : MultiverseMetricsListener(scoreAddr), elideDeadEndNodes(false), maxDepth(numeric_limits<size_t>::max()) {
+MultiverseView::MultiverseView (zword scoreAddr) : MultiverseMetricsListener(scoreAddr), processedNodesSize(static_cast<size_t>(-1)), elideDeadEndNodes(false), maxDepth(numeric_limits<size_t>::max()) {
 }
 
 tuple<void *, size_t> MultiverseView::deduceNodeListenerType (Node::Listener *listener) {
@@ -982,6 +1061,7 @@ unique_ptr<Node::Listener> MultiverseView::createNodeListener () {
 
 void MultiverseView::multiverseChanged (const Multiverse &multiverse) {
   nodesByIndex.clear();
+  processedNodesSize = 0;
   selectedNodes.clear();
   verboseNodes.clear();
 
@@ -991,6 +1071,7 @@ void MultiverseView::multiverseChanged (const Multiverse &multiverse) {
 void MultiverseView::studyNodes (const Multiverse &multiverse) {
   DS();
   DA(nodesByIndex.empty());
+  DA(processedNodesSize == 0);
   DA(selectedNodes.empty());
   DA(verboseNodes.empty());
 
@@ -1029,7 +1110,7 @@ void MultiverseView::studyNodes (const Multiverse &multiverse) {
     s0 = s1;
     studyNode(0, depth, rootNode, nullptr, Multiverse::NON_ID);
     s1 = nodesByIndex.size();
-    DW(, "after studying nodes at depth ",depth,", we know about ",s1," nodes");
+    DW(, "after studying nodes at depth ",depth,", we know about ",s1," nodes (of which ",processedNodesSize," have been processed)");
     ++depth;
   } while (s0 != s1);
   DA(s1 != 0);
@@ -1077,6 +1158,7 @@ void MultiverseView::studyNode (iu depth, iu targetDepth, Node *node, Node *pare
   nodeView->index = nodesByIndex.size();
   nodeView->primeParentChildIndex = childIndex;
   nodesByIndex.emplace_back(node);
+  processedNodesSize += !node->getState();
   return;
 }
 

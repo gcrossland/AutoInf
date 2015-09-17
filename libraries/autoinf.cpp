@@ -1091,6 +1091,8 @@ void Multiverse::load (const char *pathName, const Vm &vm) {
 */
     throw;
   }
+
+  listener->loaded(*this, rootNode, nodes);
 }
 
 Multiverse::Listener::Listener () {
