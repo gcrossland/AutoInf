@@ -473,12 +473,12 @@ void runVelocityrun (int argc, char **argv, Vm &vm, Multiverse &multiverse, Mult
   double tTotal0 = getUserTime() - initialTTotal;
   double tVm0 = getVmTime() - initialTVm;
 
-  printf("\"Number of rounds\",\"total time\",\"VM time\",\"max score\"\n");
-  auto printStats = [&] (iu roundCount, double tTotal1, double tVm1, size_t maxScoreValue) {
-    printf("%d,%f,%f,%d\n", static_cast<int>(roundCount), tTotal1 - tTotal0, tVm1 - tVm0, static_cast<int>(maxScoreValue));
+  printf("\"Number of rounds\",\"total time\",\"VM time\",\"max score\",\"node count\"\n");
+  auto printStats = [&] (iu roundCount, double tTotal1, double tVm1) {
+    printf("%d,%f,%f,%d,%d\n", static_cast<int>(roundCount), tTotal1 - tTotal0, tVm1 - tVm0, static_cast<int>(view->getMaxScoreValue()), static_cast<int>(view->nodesByIndex.size()));
     fflush(stdout);
   };
-  printStats(initialRoundCount, tTotal0, tVm0, view->getMaxScoreValue());
+  printStats(initialRoundCount, tTotal0, tVm0);
 
   for (iu round = initialRoundCount; true; ++round) {
     if (waiterFuture.wait_for(std::chrono::nanoseconds::zero()) == future_status::ready) {
@@ -499,7 +499,7 @@ void runVelocityrun (int argc, char **argv, Vm &vm, Multiverse &multiverse, Mult
 
     double tTotal1 = getUserTime();
     double tVm1 = getVmTime();
-    printStats(round + 1, tTotal1, tVm1, maxScoreValue1);
+    printStats(round + 1, tTotal1, tVm1);
 
     if (maxScoreValue1 != maxScoreValue0) {
       printf("  max score changed\n");
