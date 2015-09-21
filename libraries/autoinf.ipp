@@ -140,11 +140,7 @@ template<typename _OutputIterator> typename Serialiser<_OutputIterator>::decltyp
   --i;
   void *allocationStart = get<0>(*i);
   void *allocationEnd = get<1>(get<1>(*i));
-  if (!(ptr >= allocationStart && ptr < allocationEnd)) {
-    return nullptr;
-  }
-
-  return &(*i);
+  return (ptr >= allocationStart && ptr < allocationEnd) ? &(*i) : nullptr;
 }
 
 template<typename _OutputIterator> template<typename _T, typename _TypeDeductionFunctor, typename _ConstructionFunctor, typename _WalkingFunctor, iff(
@@ -487,6 +483,9 @@ template<typename _InputIterator> template<typename _T> void Deserialiser<_Input
 
 template<typename _InputIterator> template<typename _T, typename _P> void Deserialiser<_InputIterator>::process (_T *&o, _P *parent) {
   id allocationId = readAllocationId();
+  if (allocationId == NON_ID) {
+    throw PlainException(u8("serialisation of an as-yet-unseen allocation appears in the input where only a reference to an already-seen allocation was expected"));
+  }
   size_t offset = readIu<size_t>();
   o = static_cast<_T *>(static_cast<void *>(static_cast<char *>(allocations[allocationId]) + offset));
 }

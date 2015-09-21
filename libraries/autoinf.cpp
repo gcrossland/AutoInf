@@ -1063,7 +1063,7 @@ void Multiverse::load (const char *pathName, const Vm &vm) {
     });
     // TODO validate result
   } catch (...) {
-    throw 42;
+    nthrow(PlainException(u8("loading failed")));
 /*
     unordered_set<Node *> seenNodes;
     rootNode->forEach([&] (Node *node) -> bool {

@@ -31,7 +31,7 @@ MAIN_OBJS=$(patsubst %.cpp,o/%.o,$(wildcard *.cpp))
 
 LIBCACHEOUTDIR=$(LIBCACHEDIR)/autoinf-$(AUTOINF_MAJ).$(AUTOINF_MIN)
 autoinf.exe: $(MAIN_OBJS) $(AUTOINF_OBJS)
-	gcc $(FLAGS) $^ -o $@ $(LIBFLAGS) -lstdc++
+	gcc -Wl,--stack,134217728 $(FLAGS) $^ -o $@ $(LIBFLAGS) -lstdc++
 	$(CMD_RM) $(LIBCACHEOUTDIR)
 	$(CMD_MKDIR) $(LIBCACHEOUTDIR)/lib-$(CONFIG)
 	ar -rcsv $(LIBCACHEOUTDIR)/lib-$(CONFIG)/libautoinf.a $(AUTOINF_OBJS)
