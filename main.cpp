@@ -43,6 +43,8 @@ using autoinf::finally;
 using std::packaged_task;
 using std::thread;
 using std::future_status;
+using Value = NodeMetricsListener::Value;
+using std::make_signed;
 
 /* -----------------------------------------------------------------------------
 ----------------------------------------------------------------------------- */
@@ -489,12 +491,12 @@ void runVelocityrun (int argc, char **argv, Vm &vm, Multiverse &multiverse, Mult
       return;
     }
 
-    size_t maxScoreValue0 = view->getMaxScoreValue();
+    Value maxScoreValue0 = view->getMaxScoreValue();
     size_t processedNodesSize0 = view->processedNodesSize;
     if (!runCommandLine(vm, multiverse, roundCommandLine, message)) {
       return;
     }
-    size_t maxScoreValue1 = view->getMaxScoreValue();
+    Value maxScoreValue1 = view->getMaxScoreValue();
     size_t processedNodesSize1 = view->processedNodesSize;
 
     double tTotal1 = getUserTime();
@@ -577,8 +579,8 @@ bool runCommandLine (Vm &vm, Multiverse &multiverse, const u8string &in, u8strin
       selectedNodes = move(nextSelectedNodes);
     } else if (line.size() > 3 && (line[0] == U'V' || line[0] == U'v') && line[1] == U'-') {
       char8_t valueName = line[2];
-      if (valueName >= 'a' && valueName <= 'z') {
-        size_t valueIndex = static_cast<size_t>(valueName - 'a');
+      size_t valueIndex;
+      if (valueName >= 'a' && valueName <= 'z' && (valueIndex = static_cast<size_t>(valueName - 'a')) < NodeMetricsListener::VALUE_COUNT) {
         const char8_t *numBegin = line.data() + 3;
         const char8_t *numEnd = line.data() + line.size();
         bool undershoot = false;
@@ -595,19 +597,19 @@ bool runCommandLine (Vm &vm, Multiverse &multiverse, const u8string &in, u8strin
         if (n > 0 && !selectedNodes.empty()) {
           size_t count = static_cast<size_t>(n);
           if (count < selectedNodes.size()) {
-            vector<tuple<size_t, Node *>> nodes;
+            vector<tuple<Value, Node *>> nodes;
             nodes.reserve(selectedNodes.size());
 
             for (Node *node : selectedNodes) {
-              size_t value = static_cast<NodeView *>(node->getListener())->getValue(valueIndex);
+              Value value = static_cast<NodeView *>(node->getListener())->getValue(valueIndex);
               nodes.emplace_back(value, node);
             }
-            sort(nodes.begin(), nodes.end(), [] (const tuple<size_t, Node *> &o0, const tuple<size_t, Node *> &o1) -> bool {
+            sort(nodes.begin(), nodes.end(), [] (const tuple<Value, Node *> &o0, const tuple<Value, Node *> &o1) -> bool {
               return get<0>(o0) > get<0>(o1);
             });
 
             if (undershoot) {
-              size_t minValue = get<0>(nodes[count]);
+              Value minValue = get<0>(nodes[count]);
               if (overshootOnEmpty && get<0>(nodes[0]) == minValue) {
                 undershoot = false;
               } else {
@@ -617,7 +619,7 @@ bool runCommandLine (Vm &vm, Multiverse &multiverse, const u8string &in, u8strin
               }
             }
             if (!undershoot) {
-              size_t minValue = get<0>(nodes[count - 1]);
+              Value minValue = get<0>(nodes[count - 1]);
               for (auto end = nodes.size(); count != end && get<0>(nodes[count]) == minValue; ++count);
             }
 
@@ -758,10 +760,10 @@ void updateMultiverseDisplay (Multiverse &multiverse, const char *outPathName, c
 }
 
 constexpr size_t NodeMetricsListener::VALUE_COUNT;
-constexpr size_t NodeMetricsListener::NON_VALUE;
+constexpr Value NodeMetricsListener::NON_VALUE;
 
 NodeMetricsListener::NodeMetricsListener () :
-  scoreValue(NON_VALUE), wordValue(NON_VALUE - 1), locationHash(NON_VALUE), visitageValue(NON_VALUE)
+  scoreValue(NON_VALUE), wordValue(NON_VALUE - 1), locationHash(0), visitageValue(NON_VALUE)
 {
 }
 
@@ -774,16 +776,15 @@ template<typename _Walker> void NodeMetricsListener::beWalked (_Walker &w) {
   w.process(visitageValue);
 }
 
-size_t NodeMetricsListener::getValue (size_t i) const {
+Value NodeMetricsListener::getValue (size_t i) const {
   DPRE(i < VALUE_COUNT);
   return i == 0 ? scoreValue : i == 1 ? wordValue : visitageValue;
 }
 
-const size_t MultiverseMetricsListener::INITIAL_VISITAGE_VALUE = 100000;
-const vector<size_t> MultiverseMetricsListener::NEW_LOCATION_VISITAGE_MODIFIERS = {20, 13, 8, 5};
-const ptrdiff_t MultiverseMetricsListener::OLD_LOCATION_VISITAGE_MODIFIER = -200;
+const vector<Value> MultiverseMetricsListener::NEW_LOCATION_VISITAGE_MODIFIERS = {20, 13, 8, 5};
+const Value MultiverseMetricsListener::OLD_LOCATION_VISITAGE_MODIFIER = -200;
 
-MultiverseMetricsListener::MultiverseMetricsListener (zword scoreAddr) : scoreAddr(scoreAddr), maxScoreValue(0) {
+MultiverseMetricsListener::MultiverseMetricsListener (zword scoreAddr) : scoreAddr(scoreAddr), maxScoreValue(numeric_limits<Value>::min()) {
 }
 
 void MultiverseMetricsListener::nodeReached (const Multiverse &multiverse, Node::Listener *listener_, ActionId parentActionId, const u8string &output, const Signature &signature, const Vm &vm) {
@@ -797,7 +798,7 @@ void MultiverseMetricsListener::nodeReached (const Multiverse &multiverse, Node:
 void MultiverseMetricsListener::setScoreValue (NodeMetricsListener *listener, const Vm &vm) {
   DPRE((static_cast<iu>(scoreAddr) + 1) < vm.getDynamicMemorySize() + 0);
   const zbyte *m = vm.getDynamicMemory();
-  listener->scoreValue = static_cast<zword>(static_cast<zword>(m[scoreAddr] << 8) | m[scoreAddr + 1]);
+  listener->scoreValue = static_cast<make_signed<zword>::type>(static_cast<zword>(static_cast<zword>(m[scoreAddr] << 8) | m[scoreAddr + 1]));
   DW(, "DDDD game score is ",listener->scoreValue);
   if (listener->scoreValue > maxScoreValue) {
     maxScoreValue = listener->scoreValue;
@@ -834,7 +835,7 @@ void MultiverseMetricsListener::subtreePrimeAncestorsUpdated (const Multiverse &
 }
 
 MultiverseMetricsListener::VisitageChain::VisitageChain (
-  size_t locationHash, vector<size_t>::const_iterator newLocationVisitageModifiersI, size_t visitageValue
+  size_t locationHash, vector<Value>::const_iterator newLocationVisitageModifiersI, Value visitageValue
 ) :
   locationHash(locationHash), newLocationVisitageModifiersI(newLocationVisitageModifiersI), visitageValue(visitageValue)
 {
@@ -851,8 +852,7 @@ void MultiverseMetricsListener::VisitageChain::increment (NodeMetricsListener *l
     if (contains(visitedLocationHashes, locationHash)) {
       DW(, "DDDD   location changed to one we've visted");
       newLocationVisitageModifiersI = NEW_LOCATION_VISITAGE_MODIFIERS.end();
-      size_t t = -OLD_LOCATION_VISITAGE_MODIFIER;
-      visitageValue = visitageValue < t ? 0 : visitageValue - t;
+      visitageValue += OLD_LOCATION_VISITAGE_MODIFIER;
     } else {
       DW(, "DDDD   location changed to one we've not visted");
       visitedLocationHashes.emplace(locationHash);
@@ -863,14 +863,14 @@ void MultiverseMetricsListener::VisitageChain::increment (NodeMetricsListener *l
   }
 }
 
-size_t MultiverseMetricsListener::VisitageChain::getVisitageValue () const {
+Value MultiverseMetricsListener::VisitageChain::getVisitageValue () const {
   return visitageValue;
 }
 
 MultiverseMetricsListener::VisitageChain MultiverseMetricsListener::getVisitageChain (const Node *node) {
   if (!node) {
     DW(, "DDDD   reached the root; starting visitage value work");
-    return VisitageChain(NodeMetricsListener::NON_VALUE, NEW_LOCATION_VISITAGE_MODIFIERS.begin(), INITIAL_VISITAGE_VALUE);
+    return VisitageChain(numeric_limits<size_t>::max(), NEW_LOCATION_VISITAGE_MODIFIERS.begin(), 0);
   }
 
   DW(, "DDDD   looking at node with sig of hash ",node->getSignature().hash());
@@ -973,7 +973,7 @@ template<typename F> unique_ptr<size_t []> MultiverseMetricsListener::getWordSta
   return wordCounts;
 }
 
-void MultiverseMetricsListener::setWordValueRecursively (const Node *node, NodeMetricsListener *listener, size_t nodesSize, const size_t *stats, size_t wordValue) {
+void MultiverseMetricsListener::setWordValueRecursively (const Node *node, NodeMetricsListener *listener, size_t nodesSize, const size_t *stats, Value wordValue) {
   setWordValue(node, listener, nodesSize, stats, wordValue);
 
   for (size_t i = 0, end = node->getChildrenSize(); i != end; ++i) {
@@ -988,16 +988,16 @@ void MultiverseMetricsListener::setWordValueRecursively (const Node *node, NodeM
   }
 }
 
-void MultiverseMetricsListener::setWordValue (const Node *node, NodeMetricsListener *listener, size_t nodesSize, const size_t *stats, size_t &r_wordValue) {
+void MultiverseMetricsListener::setWordValue (const Node *node, NodeMetricsListener *listener, size_t nodesSize, const size_t *stats, Value &r_wordValue) {
   DA(listener->wordValue == NodeMetricsListener::NON_VALUE);
   DW(, "DDDD calculating node word value for node with sig of hash ", node->getSignature().hash());
   DA((!node->getPrimeParentNode() && r_wordValue == 0) || r_wordValue == static_cast<NodeMetricsListener *>(node->getPrimeParentNode()->getListener())->wordValue);
 
-  size_t value = r_wordValue;
+  Value value = r_wordValue;
   Bitset &words = listener->interestingChildActionWords;
   for (size_t i = words.getNextSetBit(0); i != Bitset::NON_INDEX; i = words.getNextSetBit(i + 1)) {
     DW(, "       action word of id ", i);
-    value += nodesSize / stats[i];
+    value += static_cast<Value>(nodesSize / stats[i]);
   }
   DW(, "       final local word value is ", value - r_wordValue);
   DW(, "       (parent word value is ", r_wordValue,")");
@@ -1009,7 +1009,7 @@ void MultiverseMetricsListener::nodesCollapsed (const Multiverse &multiverse, co
 }
 
 void MultiverseMetricsListener::loaded (const Multiverse &multiverse, const Node *rootNode, const unordered_map<reference_wrapper<const Signature>, Node *, autoinf::Hasher<Signature>> &nodes) {
-  size_t maxScoreValue = 0;
+  Value maxScoreValue = numeric_limits<Value>::min();
   for (auto &entry : nodes) {
     Node *node = get<1>(entry);
     NodeMetricsListener *listener = static_cast<NodeMetricsListener *>(node->getListener());
@@ -1020,13 +1020,15 @@ void MultiverseMetricsListener::loaded (const Multiverse &multiverse, const Node
   this->maxScoreValue = maxScoreValue;
 }
 
-size_t MultiverseMetricsListener::getMaxScoreValue () const {
-  DPRE(maxScoreValue != NodeMetricsListener::NON_VALUE);
+Value MultiverseMetricsListener::getMaxScoreValue () const {
+  DPRE(maxScoreValue != numeric_limits<Value>::min());
   return maxScoreValue;
 }
 
+constexpr size_t NodeView::NON_INDEX;
+
 NodeView::NodeView () :
-  index(NON_VALUE - 1), primeParentChildIndex(Multiverse::NON_ID), allChildrenAreNonPrime(false)
+  index(NON_INDEX - 1), primeParentChildIndex(Multiverse::NON_ID), allChildrenAreNonPrime(false)
 {
 }
 
@@ -1090,7 +1092,7 @@ void MultiverseView::studyNodes (const Multiverse &multiverse) {
     seenNodes.emplace(node);
 
     NodeView *nodeView = static_cast<NodeView *>(node->getListener());
-    DA(nodeView->index != NodeView::NON_VALUE);
+    DA(nodeView->index != NodeView::NON_INDEX);
     return true;
   });
   #endif
@@ -1098,11 +1100,11 @@ void MultiverseView::studyNodes (const Multiverse &multiverse) {
   rootNode->forEach([&] (Node *node) -> bool {
     NodeView *nodeView = static_cast<NodeView *>(node->getListener());
 
-    if (nodeView->index == NodeView::NON_VALUE) {
+    if (nodeView->index == NodeView::NON_INDEX) {
       return false;
     }
 
-    nodeView->index = NodeView::NON_VALUE;
+    nodeView->index = NodeView::NON_INDEX;
     return true;
   });
 
@@ -1132,14 +1134,14 @@ void MultiverseView::studyNode (iu depth, iu targetDepth, Node *node, Node *pare
   DPRE(targetDepth >= depth, "");
   if (depth != targetDepth) {
     DW(, " not yet at the right depth");
-    DPRE(nodeView->index != NodeView::NON_VALUE);
+    DPRE(nodeView->index != NodeView::NON_INDEX);
     for (size_t i = 0, end = node->getChildrenSize(); i != end; ++i) {
       DW(, " looking at child ",i);
       Node *childNode = get<2>(node->getChild(i));
       NodeView *childNodeView = static_cast<NodeView *>(childNode->getListener());
 
       bool skip = true;
-      if (childNodeView->index == NodeView::NON_VALUE) {
+      if (childNodeView->index == NodeView::NON_INDEX) {
         DA(depth == targetDepth - 1);
         DA(childNode->getPrimeParentNode() == node);
         skip = false;
@@ -1151,14 +1153,14 @@ void MultiverseView::studyNode (iu depth, iu targetDepth, Node *node, Node *pare
       if (!skip) {
         studyNode(depth + 1, targetDepth, childNode, node, i);
       }
-      DA(childNodeView->index != NodeView::NON_VALUE);
+      DA(childNodeView->index != NodeView::NON_INDEX);
     }
 
     return;
   }
 
   DW(, " this node is at the right depth");
-  DPRE(nodeView->index == NodeView::NON_VALUE);
+  DPRE(nodeView->index == NodeView::NON_INDEX);
   nodeView->index = nodesByIndex.size();
   nodeView->primeParentChildIndex = childIndex;
   nodesByIndex.emplace_back(node);

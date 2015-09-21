@@ -16,15 +16,16 @@ void updateMultiverseDisplay (autoinf::Multiverse &multiverse, const char *outPa
 
 class NodeMetricsListener : public autoinf::Multiverse::Node::Listener {
   pub static constexpr size_t VALUE_COUNT = 3;
-  pub static constexpr size_t NON_VALUE = static_cast<size_t>(-1);
+  pub typedef is Value;
+  pub static constexpr Value NON_VALUE = core::numeric_limits<Value>::max();
 
-  prv size_t scoreValue;
+  prv Value scoreValue;
 
   prv bitset::Bitset interestingChildActionWords;
-  prv size_t wordValue;
+  prv Value wordValue;
 
   prv size_t locationHash;
-  prv size_t visitageValue;
+  prv Value visitageValue;
 
   pub NodeMetricsListener ();
   NodeMetricsListener (const NodeMetricsListener &) = delete;
@@ -33,18 +34,19 @@ class NodeMetricsListener : public autoinf::Multiverse::Node::Listener {
   NodeMetricsListener &operator= (NodeMetricsListener &&) = delete;
   pub template<typename _Walker> void beWalked (_Walker &w);
 
-  pub size_t getValue (size_t i) const;
+  pub Value getValue (size_t i) const;
 
   friend class MultiverseMetricsListener;
 };
 
 class MultiverseMetricsListener : public autoinf::Multiverse::Listener {
-  prv static const size_t INITIAL_VISITAGE_VALUE;
-  prv static const std::vector<size_t> NEW_LOCATION_VISITAGE_MODIFIERS;
-  prv static const ptrdiff_t OLD_LOCATION_VISITAGE_MODIFIER;
+  pub typedef NodeMetricsListener::Value Value;
+
+  prv static const std::vector<Value> NEW_LOCATION_VISITAGE_MODIFIERS;
+  prv static const Value OLD_LOCATION_VISITAGE_MODIFIER;
 
   prv const autofrotz::zword scoreAddr;
-  prv size_t maxScoreValue;
+  prv Value maxScoreValue;
 
   pub MultiverseMetricsListener (autofrotz::zword scoreAddr);
   MultiverseMetricsListener (const MultiverseMetricsListener &) = delete;
@@ -59,17 +61,17 @@ class MultiverseMetricsListener : public autoinf::Multiverse::Listener {
   prv class VisitageChain {
     prv std::unordered_set<size_t> visitedLocationHashes;
     prv size_t locationHash;
-    prv std::vector<size_t>::const_iterator newLocationVisitageModifiersI;
-    prv size_t visitageValue;
+    prv std::vector<Value>::const_iterator newLocationVisitageModifiersI;
+    prv Value visitageValue;
 
-    pub VisitageChain (size_t locationHash, std::vector<size_t>::const_iterator newLocationVisitageModifiersI, size_t visitageValue);
+    pub VisitageChain (size_t locationHash, std::vector<Value>::const_iterator newLocationVisitageModifiersI, Value visitageValue);
     pub VisitageChain (const VisitageChain &) = default;
     pub VisitageChain &operator= (const VisitageChain &) = default;
     pub VisitageChain (VisitageChain &&) = default;
     pub VisitageChain &operator= (VisitageChain &&) = default;
 
     pub void increment (NodeMetricsListener *listener);
-    pub size_t getVisitageValue () const;
+    pub Value getVisitageValue () const;
   };
   prv VisitageChain getVisitageChain (const autoinf::Multiverse::Node *node);
   prv void setVisitageValueRecursively (const autoinf::Multiverse::Node *node, NodeMetricsListener *listener, VisitageChain chain);
@@ -78,18 +80,19 @@ class MultiverseMetricsListener : public autoinf::Multiverse::Listener {
   prv void setWordData (const autoinf::Multiverse::Node *node, NodeMetricsListener *listener, const autoinf::Multiverse::ActionSet &actionSet);
   pub virtual void nodesProcessed (const autoinf::Multiverse &multiverse, const autoinf::Multiverse::Node *rootNode, const std::unordered_map<std::reference_wrapper<const autoinf::Signature>, autoinf::Multiverse::Node *, autoinf::Hasher<autoinf::Signature>> &nodes) override;
   prv template<typename F> std::unique_ptr<size_t []> getWordStats (const std::unordered_map<std::reference_wrapper<const autoinf::Signature>, autoinf::Multiverse::Node *, autoinf::Hasher<autoinf::Signature>> &nodes, const F &nodeFunctor, const autoinf::Multiverse::ActionSet &actionSet);
-  prv void setWordValueRecursively (const autoinf::Multiverse::Node *node, NodeMetricsListener *listener, size_t nodesSize, const size_t *stats, size_t wordValue);
-  prv void setWordValue (const autoinf::Multiverse::Node *node, NodeMetricsListener *listener, size_t nodesSize, const size_t *stats, size_t &r_wordValue);
+  prv void setWordValueRecursively (const autoinf::Multiverse::Node *node, NodeMetricsListener *listener, size_t nodesSize, const size_t *stats, Value wordValue);
+  prv void setWordValue (const autoinf::Multiverse::Node *node, NodeMetricsListener *listener, size_t nodesSize, const size_t *stats, Value &r_wordValue);
   pub void virtual nodesCollapsed (const autoinf::Multiverse &multiverse, const autoinf::Multiverse::Node *rootNode, const std::unordered_map<std::reference_wrapper<const autoinf::Signature>, autoinf::Multiverse::Node *, autoinf::Hasher<autoinf::Signature>> &nodes) override;
   pub void virtual loaded (const autoinf::Multiverse &multiverse, const autoinf::Multiverse::Node *rootNode, const std::unordered_map<std::reference_wrapper<const autoinf::Signature>, autoinf::Multiverse::Node *, autoinf::Hasher<autoinf::Signature>> &nodes) override;
 
-  pub size_t getMaxScoreValue () const;
+  pub Value getMaxScoreValue () const;
 
   friend class NodeMetricsListener;
 };
 
 class NodeView : public NodeMetricsListener {
   pub size_t index;
+  pub static constexpr size_t NON_INDEX = static_cast<size_t>(-1);
   pub autoinf::Multiverse::ActionId primeParentChildIndex;
   pub bool allChildrenAreNonPrime;
 
