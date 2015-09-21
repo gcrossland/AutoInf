@@ -833,60 +833,57 @@ void MultiverseMetricsListener::subtreePrimeAncestorsUpdated (const Multiverse &
   setVisitageValueRecursively(node, listener, getVisitageChain(node->getPrimeParentNode()));
 }
 
-tuple<unordered_set<size_t>, size_t, vector<size_t>::const_iterator, size_t> MultiverseMetricsListener::getVisitageChain (const Node *node) {
+MultiverseMetricsListener::VisitageChain::VisitageChain (
+  size_t locationHash, vector<size_t>::const_iterator newLocationVisitageModifiersI, size_t visitageValue
+) :
+  locationHash(locationHash), newLocationVisitageModifiersI(newLocationVisitageModifiersI), visitageValue(visitageValue)
+{
+}
+
+void MultiverseMetricsListener::VisitageChain::increment (NodeMetricsListener *listener) {
+  if (listener->locationHash == locationHash) {
+    DW(, "DDDD   location didn't change");
+    if (newLocationVisitageModifiersI != NEW_LOCATION_VISITAGE_MODIFIERS.end()) {
+      visitageValue += *newLocationVisitageModifiersI++;
+    }
+  } else {
+    locationHash = listener->locationHash;
+    if (contains(visitedLocationHashes, locationHash)) {
+      DW(, "DDDD   location changed to one we've visted");
+      newLocationVisitageModifiersI = NEW_LOCATION_VISITAGE_MODIFIERS.end();
+      size_t t = -OLD_LOCATION_VISITAGE_MODIFIER;
+      visitageValue = visitageValue < t ? 0 : visitageValue - t;
+    } else {
+      DW(, "DDDD   location changed to one we've not visted");
+      visitedLocationHashes.emplace(locationHash);
+      newLocationVisitageModifiersI = NEW_LOCATION_VISITAGE_MODIFIERS.begin();
+      DA(!NEW_LOCATION_VISITAGE_MODIFIERS.empty());
+      visitageValue += *newLocationVisitageModifiersI++;
+    }
+  }
+}
+
+size_t MultiverseMetricsListener::VisitageChain::getVisitageValue () const {
+  return visitageValue;
+}
+
+MultiverseMetricsListener::VisitageChain MultiverseMetricsListener::getVisitageChain (const Node *node) {
   if (!node) {
     DW(, "DDDD   reached the root; starting visitage value work");
-    tuple<unordered_set<size_t>, size_t, vector<size_t>::const_iterator, size_t> r;
-    auto &locationHash = get<1>(r);
-    auto &visitageModifiersI = get<2>(r);
-    auto &visitageValue = get<3>(r);
-
-    locationHash = NodeMetricsListener::NON_VALUE;
-    visitageModifiersI = NEW_LOCATION_VISITAGE_MODIFIERS.begin();
-    visitageValue = INITIAL_VISITAGE_VALUE;
-
-    return r;
+    return VisitageChain(NodeMetricsListener::NON_VALUE, NEW_LOCATION_VISITAGE_MODIFIERS.begin(), INITIAL_VISITAGE_VALUE);
   }
 
   DW(, "DDDD   looking at node with sig of hash ",node->getSignature().hash());
   NodeMetricsListener *listener = static_cast<NodeMetricsListener *>(node->getListener());
 
-  tuple<unordered_set<size_t>, size_t, vector<size_t>::const_iterator, size_t> r = getVisitageChain(node->getPrimeParentNode());
-  incrementVisitageChain(listener, r);
-  DPRE(listener->visitageValue == get<3>(r));
+  VisitageChain r = getVisitageChain(node->getPrimeParentNode());
+  r.increment(listener);
+  DPRE(listener->visitageValue == r.getVisitageValue());
 
   return r;
 }
 
-void MultiverseMetricsListener::incrementVisitageChain (NodeMetricsListener *listener, tuple<unordered_set<size_t>, size_t, vector<size_t>::const_iterator, size_t> &r_chain) {
-  auto &r_visitedLocationHashes = get<0>(r_chain);
-  auto &r_locationHash = get<1>(r_chain);
-  auto &r_newLocationVisitageModifiersI = get<2>(r_chain);
-  auto &r_visitageValue = get<3>(r_chain);
-
-  if (listener->locationHash == r_locationHash) {
-    DW(, "DDDD   location didn't change");
-    if (r_newLocationVisitageModifiersI != NEW_LOCATION_VISITAGE_MODIFIERS.end()) {
-      r_visitageValue += *r_newLocationVisitageModifiersI++;
-    }
-  } else {
-    r_locationHash = listener->locationHash;
-    if (contains(r_visitedLocationHashes, r_locationHash)) {
-      DW(, "DDDD   location changed to one we've visted");
-      r_newLocationVisitageModifiersI = NEW_LOCATION_VISITAGE_MODIFIERS.end();
-      size_t t = -OLD_LOCATION_VISITAGE_MODIFIER;
-      r_visitageValue = r_visitageValue < t ? 0 : r_visitageValue - t;
-    } else {
-      DW(, "DDDD   location changed to one we've not visted");
-      r_visitedLocationHashes.emplace(r_locationHash);
-      r_newLocationVisitageModifiersI = NEW_LOCATION_VISITAGE_MODIFIERS.begin();
-      DA(!NEW_LOCATION_VISITAGE_MODIFIERS.empty());
-      r_visitageValue += *r_newLocationVisitageModifiersI++;
-    }
-  }
-}
-
-void MultiverseMetricsListener::setVisitageValueRecursively (const Node *node, NodeMetricsListener *listener, tuple<unordered_set<size_t>, size_t, vector<size_t>::const_iterator, size_t> chain) {
+void MultiverseMetricsListener::setVisitageValueRecursively (const Node *node, NodeMetricsListener *listener, VisitageChain chain) {
   setVisitageValue(node, listener, chain);
 
   for (size_t i = 0, end = node->getChildrenSize(); i != end; ++i) {
@@ -910,12 +907,10 @@ void MultiverseMetricsListener::setVisitageValueRecursively (const Node *node, N
   }
 }
 
-void MultiverseMetricsListener::setVisitageValue (const Node *node, NodeMetricsListener *listener, tuple<unordered_set<size_t>, size_t, vector<size_t>::const_iterator, size_t> &r_chain) {
-  auto &r_visitageValue = get<3>(r_chain);
-  DA(!node->getPrimeParentNode() || static_cast<NodeMetricsListener *>(node->getPrimeParentNode()->getListener())->visitageValue == r_visitageValue);
-
-  incrementVisitageChain(listener, r_chain);
-  listener->visitageValue = r_visitageValue;
+void MultiverseMetricsListener::setVisitageValue (const Node *node, NodeMetricsListener *listener, VisitageChain &r_chain) {
+  DA(!node->getPrimeParentNode() || static_cast<NodeMetricsListener *>(node->getPrimeParentNode()->getListener())->visitageValue == r_chain.getVisitageValue());
+  r_chain.increment(listener);
+  listener->visitageValue = r_chain.getVisitageValue();
 }
 
 void MultiverseMetricsListener::nodeChildrenUpdated (const Multiverse &multiverse, const Node *node) {
