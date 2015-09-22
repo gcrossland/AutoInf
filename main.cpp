@@ -480,7 +480,7 @@ void runVelocityrun (int argc, char **argv, Vm &vm, Multiverse &multiverse, Mult
     printf("%d,%f,%f,%d,%d\n", static_cast<int>(roundCount), tTotal1 - tTotal0, tVm1 - tVm0, static_cast<int>(view->getMaxScoreValue()), static_cast<int>(view->nodesByIndex.size()));
     fflush(stdout);
   };
-  printStats(initialRoundCount, tTotal0, tVm0);
+  printStats(initialRoundCount, getUserTime(), getVmTime());
 
   for (iu round = initialRoundCount; true; ++round) {
     if (waiterFuture.wait_for(std::chrono::nanoseconds::zero()) == future_status::ready) {
