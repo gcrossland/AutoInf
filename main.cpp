@@ -545,6 +545,19 @@ bool runCommandLine (Vm &vm, Multiverse &multiverse, const u8string &in, u8strin
 
     if (line == u8("quit")) {
       return false;
+    } else if (line.size() > 1 && (line[0] == U'X' || line[0] == U'x')) {
+      is n = getNaturalNumber(line.data() + 1, line.data() + line.size());
+      if (n >= 0) {
+        iu times = static_cast<iu>(n);
+        u8string subLine(inPartEnd, inEnd);
+        for (iu i = 0; i != times; ++i) {
+          bool notDone = runCommandLine(vm, multiverse, subLine, message);
+          if (!notDone) {
+            return false;
+          }
+        }
+        return true;
+      }
     } else if (line == u8("N") || line == u8("n")) {
       elideDeadEndNodes = false;
     } else if (line == u8("D") || line == u8("d")) {
