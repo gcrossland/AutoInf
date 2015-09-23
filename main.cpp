@@ -432,7 +432,7 @@ void runVelocityrun (int argc, char **argv, Vm &vm, Multiverse &multiverse, Mult
   u8string initialCommandLine(reinterpret_cast<char8_t *>(argv[2]));
   u8string roundCommandLine(reinterpret_cast<char8_t *>(argv[3]));
   u8string maxScoreChangeCommandLine(reinterpret_cast<char8_t *>(argv[4]));
-  u8string nullProcessingCommandLine(reinterpret_cast<char8_t *>(argv[5]));
+  u8string nullChangeCommandLine(reinterpret_cast<char8_t *>(argv[5]));
   u8string stopCommandLine(reinterpret_cast<char8_t *>(argv[6]));
   iu initialRoundCount = 0;
   double initialTTotal = 0;
@@ -492,12 +492,12 @@ void runVelocityrun (int argc, char **argv, Vm &vm, Multiverse &multiverse, Mult
     }
 
     Value maxScoreValue0 = view->getMaxScoreValue();
-    size_t processedNodesSize0 = view->processedNodesSize;
+    size_t nodesSize0 = view->nodesByIndex.size();
     if (!runCommandLine(vm, multiverse, roundCommandLine, message)) {
       return;
     }
     Value maxScoreValue1 = view->getMaxScoreValue();
-    size_t processedNodesSize1 = view->processedNodesSize;
+    size_t nodesSize1 = view->nodesByIndex.size();
 
     double tTotal1 = getUserTime();
     double tVm1 = getVmTime();
@@ -511,10 +511,10 @@ void runVelocityrun (int argc, char **argv, Vm &vm, Multiverse &multiverse, Mult
       }
     }
 
-    if (processedNodesSize1 == processedNodesSize0) {
-      printf("  no nodes processed\n");
+    if (nodesSize1 == nodesSize0) {
+      printf("  node count unchanged\n");
       fflush(stdout);
-      if (!runCommandLine(vm, multiverse, nullProcessingCommandLine, message)) {
+      if (!runCommandLine(vm, multiverse, nullChangeCommandLine, message)) {
         return;
       }
     }
@@ -1058,7 +1058,7 @@ template<typename _Walker> void NodeView::beWalked (_Walker &w) {
   w.process(allChildrenAreNonPrime);
 }
 
-MultiverseView::MultiverseView (zword scoreAddr) : MultiverseMetricsListener(scoreAddr), processedNodesSize(static_cast<size_t>(-1)), elideDeadEndNodes(false), maxDepth(numeric_limits<size_t>::max()) {
+MultiverseView::MultiverseView (zword scoreAddr) : MultiverseMetricsListener(scoreAddr), elideDeadEndNodes(false), maxDepth(numeric_limits<size_t>::max()) {
 }
 
 tuple<void *, size_t> MultiverseView::deduceNodeListenerType (Node::Listener *listener) {
@@ -1085,7 +1085,6 @@ unique_ptr<Node::Listener> MultiverseView::createNodeListener () {
 
 void MultiverseView::multiverseChanged (const Multiverse &multiverse) {
   nodesByIndex.clear();
-  processedNodesSize = 0;
   selectedNodes.clear();
   verboseNodes.clear();
 
@@ -1095,7 +1094,6 @@ void MultiverseView::multiverseChanged (const Multiverse &multiverse) {
 void MultiverseView::studyNodes (const Multiverse &multiverse) {
   DS();
   DA(nodesByIndex.empty());
-  DA(processedNodesSize == 0);
   DA(selectedNodes.empty());
   DA(verboseNodes.empty());
 
@@ -1134,7 +1132,7 @@ void MultiverseView::studyNodes (const Multiverse &multiverse) {
     s0 = s1;
     studyNode(0, depth, rootNode, nullptr, Multiverse::NON_ID);
     s1 = nodesByIndex.size();
-    DW(, "after studying nodes at depth ",depth,", we know about ",s1," nodes (of which ",processedNodesSize," have been processed)");
+    DW(, "after studying nodes at depth ",depth,", we know about ",s1," nodes");
     ++depth;
   } while (s0 != s1);
   DA(s1 != 0);
@@ -1182,7 +1180,6 @@ void MultiverseView::studyNode (iu depth, iu targetDepth, Node *node, Node *pare
   nodeView->index = nodesByIndex.size();
   nodeView->primeParentChildIndex = childIndex;
   nodesByIndex.emplace_back(node);
-  processedNodesSize += !node->getState();
   return;
 }
 

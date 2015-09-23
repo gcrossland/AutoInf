@@ -102,7 +102,6 @@ class NodeView : public NodeMetricsListener {
 
 class MultiverseView : public MultiverseMetricsListener {
   pub std::vector<autoinf::Multiverse::Node *> nodesByIndex;
-  pub size_t processedNodesSize;
   pub std::unordered_set<autoinf::Multiverse::Node *> selectedNodes;
   pub std::unordered_set<autoinf::Multiverse::Node *> verboseNodes;
   pub bool elideDeadEndNodes = false;
