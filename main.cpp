@@ -645,7 +645,12 @@ bool runCommandLine (Vm &vm, Multiverse &multiverse, const u8string &in, u8strin
             }
 
             char8_t b[1024];
-            sprintf(reinterpret_cast<char *>(b), "Selected %d (%d unprocessed) (from %d) nodes (threshold metric value %d)\n\n", count, unprocessedCount, nodes.size(), get<0>(nodes[count - 1]));
+            char *t = reinterpret_cast<char *>(b);
+            t += sprintf(t, "Selected %d (%d unprocessed) (from %d) nodes", count, unprocessedCount, nodes.size());
+            if (count != 0) {
+              t += sprintf(t, " (threshold metric value %d)", get<0>(nodes[count - 1]));
+            }
+            t += sprintf(t, "\n\n");
             message.append(b);
           } else {
             char8_t b[1024];
