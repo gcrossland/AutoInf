@@ -699,7 +699,7 @@ template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd,
 
   dispatcherFuture.get();
 
-  listener->nodesProcessed(*this, rootNode, nodes);
+  listener->nodesProcessed(*this);
 }
 
 template<typename _I> Bitset Multiverse::createExtraIgnoredBytes (const Signature &firstSignature, _I otherSignatureIsBegin, _I otherSignatureIsEnd, const Vm &vm) {
@@ -785,9 +785,9 @@ template<typename _I> void Multiverse::collapseNodes (_I nodesBegin, _I nodesEnd
   DW(, dc, " old nodes were deleted");
   nodes = move(survivingNodes);
 
-  Node::rebuildPrimeParents(rootNode, *this);
+  Node::rebuildPrimeParents(*this);
 
-  listener->nodesCollapsed(*this, rootNode, nodes);
+  listener->nodesCollapsed(*this);
 }
 
 template<typename _Walker> void Multiverse::derefAndProcessNodeListener (Node::Listener *&nodeListener, _Walker &w) {

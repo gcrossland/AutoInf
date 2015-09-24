@@ -15,14 +15,11 @@ using std::unordered_set;
 using std::get;
 using core::numeric_limits;
 using std::exception;
-using std::unordered_map;
 using std::move;
 using core::PlainException;
 using std::copy;
 using autoinf::Signature;
 using std::unique_ptr;
-using std::unordered_map;
-using std::reference_wrapper;
 using bitset::Bitset;
 using std::tuple;
 using std::sort;
@@ -950,30 +947,30 @@ void MultiverseMetricsListener::setWordData (const Node *node, NodeMetricsListen
   words.compact();
 }
 
-void MultiverseMetricsListener::nodesProcessed (const Multiverse &multiverse, const Node *rootNode, const unordered_map<reference_wrapper<const Signature>, Node *, autoinf::Hasher<Signature>> &nodes) {
-  const Multiverse::ActionSet &actionSet = multiverse.getActionSet();
+void MultiverseMetricsListener::nodesProcessed (const Multiverse &multiverse) {
+  const Node *rootNode = multiverse.getRoot();
 
-  unique_ptr<size_t []> stats = getWordStats(nodes, [] (const Node *node, NodeMetricsListener *listener) {
+  unique_ptr<size_t []> stats = getWordStats(multiverse, [] (const Node *node, NodeMetricsListener *listener) {
     DA(listener->wordValue != NodeMetricsListener::NON_VALUE);
     listener->wordValue = NodeMetricsListener::NON_VALUE;
-  }, actionSet);
-  setWordValueRecursively(rootNode, static_cast<NodeMetricsListener *>(rootNode->getListener()), nodes.size(), stats.get(), 0);
+  });
+  setWordValueRecursively(rootNode, static_cast<NodeMetricsListener *>(rootNode->getListener()), multiverse.size(), stats.get(), 0);
 
   #ifndef NDEBUG
-  for (auto &entry : nodes) {
-    getVisitageChain(get<1>(entry));
+  for (const Node *node : multiverse) {
+    getVisitageChain(node);
   }
   #endif
 }
 
-template<typename F> unique_ptr<size_t []> MultiverseMetricsListener::getWordStats (const unordered_map<reference_wrapper<const Signature>, Node *, autoinf::Hasher<Signature>> &nodes, const F &nodeFunctor, const Multiverse::ActionSet &actionSet) {
+template<typename F> unique_ptr<size_t []> MultiverseMetricsListener::getWordStats (const Multiverse &multiverse, const F &nodeFunctor) {
   DS();
   DW(, "DDDD nodes have changed!");
+  auto &actionSet = multiverse.getActionSet();
   unique_ptr<size_t []> wordCounts(new size_t[actionSet.getWordsSize()]);
   fill(wordCounts.get(), wordCounts.get() + actionSet.getWordsSize(), 0);
 
-  for (auto &entry : nodes) {
-    Node *node = get<1>(entry);
+  for (const Node *node : multiverse) {
     NodeMetricsListener *listener = static_cast<NodeMetricsListener *>(node->getListener());
 
     nodeFunctor(node, listener);
@@ -1022,14 +1019,13 @@ void MultiverseMetricsListener::setWordValue (const Node *node, NodeMetricsListe
   listener->wordValue = r_wordValue = value;
 }
 
-void MultiverseMetricsListener::nodesCollapsed (const Multiverse &multiverse, const Node *rootNode, const unordered_map<reference_wrapper<const Signature>, Node *, autoinf::Hasher<Signature>> &nodes) {
-  nodesProcessed(multiverse, rootNode, nodes);
+void MultiverseMetricsListener::nodesCollapsed (const Multiverse &multiverse) {
+  nodesProcessed(multiverse);
 }
 
-void MultiverseMetricsListener::loaded (const Multiverse &multiverse, const Node *rootNode, const unordered_map<reference_wrapper<const Signature>, Node *, autoinf::Hasher<Signature>> &nodes) {
+void MultiverseMetricsListener::loaded (const Multiverse &multiverse) {
   Value maxScoreValue = numeric_limits<Value>::min();
-  for (auto &entry : nodes) {
-    Node *node = get<1>(entry);
+  for (const Node *node : multiverse) {
     NodeMetricsListener *listener = static_cast<NodeMetricsListener *>(node->getListener());
     if (listener->scoreValue > maxScoreValue) {
       maxScoreValue = listener->scoreValue;
@@ -1097,32 +1093,13 @@ void MultiverseView::studyNodes (const Multiverse &multiverse) {
   DA(selectedNodes.empty());
   DA(verboseNodes.empty());
 
-  Node *rootNode = multiverse.getRootNode();
+  Node *rootNode = multiverse.getRoot();
 
-  #ifndef NDEBUG
-  unordered_set<Node *> seenNodes;
-  rootNode->forEach([&] (Node *node) -> bool {
-    if (contains(seenNodes, node)) {
-      return false;
-    }
-    seenNodes.emplace(node);
-
+  for (const Node *node : multiverse) {
     NodeView *nodeView = static_cast<NodeView *>(node->getListener());
     DA(nodeView->index != NodeView::NON_INDEX);
-    return true;
-  });
-  #endif
-
-  rootNode->forEach([&] (Node *node) -> bool {
-    NodeView *nodeView = static_cast<NodeView *>(node->getListener());
-
-    if (nodeView->index == NodeView::NON_INDEX) {
-      return false;
-    }
-
     nodeView->index = NodeView::NON_INDEX;
-    return true;
-  });
+  }
 
   iu depth = 0;
   size_t s0;
@@ -1213,7 +1190,7 @@ void MultiverseView::markDeadEndNodes () {
 
 void MultiverseView::printNodes (const Multiverse &multiverse, FILE *out) {
   u8string prefix;
-  printNodeAsNonleaf(0, nullptr, multiverse.getRootNode(), nullptr, Multiverse::NON_ID, multiverse.getActionSet(), prefix, out);
+  printNodeAsNonleaf(0, nullptr, multiverse.getRoot(), nullptr, Multiverse::NON_ID, multiverse.getActionSet(), prefix, out);
 }
 
 void MultiverseView::printNodeHeader (

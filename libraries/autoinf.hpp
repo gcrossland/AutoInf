@@ -398,7 +398,7 @@ class Multiverse {
     pub void changeChild (size_t i, Node *node);
     pub void childrenUpdated (const Multiverse &multiverse);
     pub void invalidatePrimeParent ();
-    pub static void rebuildPrimeParents (Node *rootNode, const Multiverse &multiverse);
+    pub static void rebuildPrimeParents (Multiverse &multiverse);
 
     pub template<typename _F, iff(std::is_convertible<_F, std::function<bool (Node *)>>::value)> void forEach (const _F &f);
 
@@ -406,6 +406,25 @@ class Multiverse {
       prt Listener ();
       pub virtual ~Listener ();
     };
+  };
+
+  pub class NodeIterator {
+    prv std::unordered_map<std::reference_wrapper<const Signature>, Node *, Hasher<Signature>>::const_iterator i;
+
+    pub NodeIterator ();
+    prv NodeIterator (decltype(i) &&i);
+    pub NodeIterator (const NodeIterator &) = default;
+    pub NodeIterator &operator= (const NodeIterator &) = default;
+    pub NodeIterator (NodeIterator &&) = default;
+    pub NodeIterator &operator= (NodeIterator &&) = default;
+
+    pub Node *const &operator* () const;
+    pub NodeIterator &operator++ ();
+    pub NodeIterator operator++ (int);
+    friend bool operator== (const NodeIterator &l, const NodeIterator &r);
+    friend bool operator!= (const NodeIterator &l, const NodeIterator &r);
+
+    friend class Multiverse;
   };
 
   pub class Listener;
@@ -442,7 +461,10 @@ class Multiverse {
   prv void doRestoreAction (autofrotz::Vm &r_vm, const autofrotz::State &state);
   prv static Signature createSignature (const autofrotz::Vm &vm, const Rangeset &ignoredByteRangeset);
   prv static Signature recreateSignature (const Signature &oldSignature, const Rangeset &extraIgnoredByteRangeset);
-  pub Node *getRootNode () const;
+  pub size_t size () const;
+  pub NodeIterator begin () const;
+  pub NodeIterator end () const;
+  pub Node *getRoot () const;
   pub template<typename _I> void processNodes (_I nodesBegin, _I nodesEnd, autofrotz::Vm &r_vm);
   prv template<typename _I> bitset::Bitset createExtraIgnoredBytes (const Signature &firstSignature, _I otherSignatureIsBegin, _I otherSignatureIsEnd, const autofrotz::Vm &vm);
   pub template<typename _I> void collapseNodes (_I nodesBegin, _I nodesEnd, const autofrotz::Vm &vm);
@@ -469,9 +491,9 @@ class Multiverse {
     pub virtual void nodeReached (const Multiverse &multiverse, Node::Listener *listener, ActionId parentActionId, const core::u8string &output, const Signature &signature, const autofrotz::Vm &vm) = 0;
     pub virtual void subtreePrimeAncestorsUpdated (const Multiverse &multiverse, const Node *node) = 0;
     pub virtual void nodeChildrenUpdated (const Multiverse &multiverse, const Node *node) = 0;
-    pub virtual void nodesProcessed (const Multiverse &multiverse, const Node *rootNode, const std::unordered_map<std::reference_wrapper<const Signature>, Node *, Hasher<Signature>> &nodes) = 0;
-    pub virtual void nodesCollapsed (const Multiverse &multiverse, const Node *rootNode, const std::unordered_map<std::reference_wrapper<const Signature>, Node *, Hasher<Signature>> &nodes) = 0;
-    pub virtual void loaded (const Multiverse &multiverse, const Node *rootNode, const std::unordered_map<std::reference_wrapper<const Signature>, Node *, Hasher<Signature>> &nodes) = 0;
+    pub virtual void nodesProcessed (const Multiverse &multiverse) = 0;
+    pub virtual void nodesCollapsed (const Multiverse &multiverse) = 0;
+    pub virtual void loaded (const Multiverse &multiverse) = 0;
   };
 };
 

@@ -78,12 +78,12 @@ class MultiverseMetricsListener : public autoinf::Multiverse::Listener {
   prv void setVisitageValue (const autoinf::Multiverse::Node *node, NodeMetricsListener *listener, VisitageChain &r_chain);
   pub virtual void nodeChildrenUpdated (const autoinf::Multiverse &multiverse, const autoinf::Multiverse::Node *node) override;
   prv void setWordData (const autoinf::Multiverse::Node *node, NodeMetricsListener *listener, const autoinf::Multiverse::ActionSet &actionSet);
-  pub virtual void nodesProcessed (const autoinf::Multiverse &multiverse, const autoinf::Multiverse::Node *rootNode, const std::unordered_map<std::reference_wrapper<const autoinf::Signature>, autoinf::Multiverse::Node *, autoinf::Hasher<autoinf::Signature>> &nodes) override;
-  prv template<typename F> std::unique_ptr<size_t []> getWordStats (const std::unordered_map<std::reference_wrapper<const autoinf::Signature>, autoinf::Multiverse::Node *, autoinf::Hasher<autoinf::Signature>> &nodes, const F &nodeFunctor, const autoinf::Multiverse::ActionSet &actionSet);
+  pub virtual void nodesProcessed (const autoinf::Multiverse &multiverse) override;
+  prv template<typename F> std::unique_ptr<size_t []> getWordStats (const autoinf::Multiverse &multiverse, const F &nodeFunctor);
   prv void setWordValueRecursively (const autoinf::Multiverse::Node *node, NodeMetricsListener *listener, size_t nodesSize, const size_t *stats, Value wordValue);
   prv void setWordValue (const autoinf::Multiverse::Node *node, NodeMetricsListener *listener, size_t nodesSize, const size_t *stats, Value &r_wordValue);
-  pub void virtual nodesCollapsed (const autoinf::Multiverse &multiverse, const autoinf::Multiverse::Node *rootNode, const std::unordered_map<std::reference_wrapper<const autoinf::Signature>, autoinf::Multiverse::Node *, autoinf::Hasher<autoinf::Signature>> &nodes) override;
-  pub void virtual loaded (const autoinf::Multiverse &multiverse, const autoinf::Multiverse::Node *rootNode, const std::unordered_map<std::reference_wrapper<const autoinf::Signature>, autoinf::Multiverse::Node *, autoinf::Hasher<autoinf::Signature>> &nodes) override;
+  pub void virtual nodesCollapsed (const autoinf::Multiverse &multiverse) override;
+  pub void virtual loaded (const autoinf::Multiverse &multiverse) override;
 
   pub Value getMaxScoreValue () const;
 

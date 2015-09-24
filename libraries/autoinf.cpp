@@ -657,21 +657,13 @@ void Multiverse::Node::invalidatePrimeParent () {
   primeParentNodeInvalid = true;
 }
 
-void Multiverse::Node::rebuildPrimeParents (Node *rootNode, const Multiverse &multiverse) {
+void Multiverse::Node::rebuildPrimeParents (Multiverse &multiverse) {
   DS();
   DW(, "number of surviving nodes is ", multiverse.nodes.size());
   #ifndef NDEBUG
-  unordered_set<Node *> seenNodes;
-  rootNode->forEach([&] (Node *node) -> bool {
-    if (contains(seenNodes, node)) {
-      return false;
-    }
-    seenNodes.emplace(node);
-
+  for (Node *node : multiverse) {
     DA(node->primeParentNodeInvalid);
-    return true;
-  });
-  DW(, "number of walked nodes is ", seenNodes.size());
+  }
   #endif
 
   vector<Node *> reparentedNodes;
@@ -682,6 +674,7 @@ void Multiverse::Node::rebuildPrimeParents (Node *rootNode, const Multiverse &mu
     vector<Node *> *nodesAtThisDepth = &nodes0, *nodesAtNextDepth = &nodes1;
     unordered_set<Node *> nodes2, nodes3;
     unordered_set<Node *> *enshadowedNodesAtThisDepth = &nodes2, *enshadowedNodesAtNextDepth = &nodes3;
+    Node *rootNode = multiverse.getRoot();
     nodesAtThisDepth->emplace_back(rootNode);
     DA(rootNode->primeParentNode == nullptr);
     rootNode->primeParentNodeInvalid = false;
@@ -729,6 +722,33 @@ Multiverse::Node::Listener::Listener () {
 }
 
 Multiverse::Node::Listener::~Listener () {
+}
+
+Multiverse::NodeIterator::NodeIterator () {
+}
+
+Multiverse::NodeIterator::NodeIterator (decltype(i) &&i) : i(move(i)) {
+}
+
+Multiverse::Node *const &Multiverse::NodeIterator::operator* () const {
+  return get<1>(*i);
+}
+
+Multiverse::NodeIterator &Multiverse::NodeIterator::operator++ () {
+  ++i;
+  return *this;
+}
+
+Multiverse::NodeIterator Multiverse::NodeIterator::operator++ (int) {
+  return NodeIterator(i++);
+}
+
+bool operator== (const Multiverse::NodeIterator &l, const Multiverse::NodeIterator &r) {
+  return l.i == r.i;
+}
+
+bool operator!= (const Multiverse::NodeIterator &l, const Multiverse::NodeIterator &r) {
+  return l.i != r.i;
 }
 
 Multiverse::Multiverse (
@@ -916,7 +936,19 @@ Signature Multiverse::recreateSignature (const Signature &oldSignature, const Ra
   return signature;
 }
 
-Multiverse::Node *Multiverse::getRootNode () const {
+size_t Multiverse::size () const {
+  return nodes.size();
+}
+
+Multiverse::NodeIterator Multiverse::begin () const {
+  return NodeIterator(nodes.cbegin());
+}
+
+Multiverse::NodeIterator Multiverse::end () const {
+  return NodeIterator(nodes.cend());
+}
+
+Multiverse::Node *Multiverse::getRoot () const {
   return rootNode;
 }
 
@@ -1092,7 +1124,7 @@ void Multiverse::load (const char *pathName, const Vm &vm) {
     throw;
   }
 
-  listener->loaded(*this, rootNode, nodes);
+  listener->loaded(*this);
 }
 
 Multiverse::Listener::Listener () {
