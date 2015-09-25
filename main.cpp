@@ -955,12 +955,6 @@ void MultiverseMetricsListener::nodesProcessed (const Multiverse &multiverse) {
     listener->wordValue = NodeMetricsListener::NON_VALUE;
   });
   setWordValueRecursively(rootNode, static_cast<NodeMetricsListener *>(rootNode->getListener()), multiverse.size(), stats.get(), 0);
-
-  #ifndef NDEBUG
-  for (const Node *node : multiverse) {
-    getVisitageChain(node);
-  }
-  #endif
 }
 
 template<typename F> unique_ptr<size_t []> MultiverseMetricsListener::getWordStats (const Multiverse &multiverse, const F &nodeFunctor) {
@@ -1093,71 +1087,47 @@ void MultiverseView::studyNodes (const Multiverse &multiverse) {
   DA(selectedNodes.empty());
   DA(verboseNodes.empty());
 
-  Node *rootNode = multiverse.getRoot();
-
   for (const Node *node : multiverse) {
     NodeView *nodeView = static_cast<NodeView *>(node->getListener());
     DA(nodeView->index != NodeView::NON_INDEX);
     nodeView->index = NodeView::NON_INDEX;
   }
 
+  studyNode(multiverse.getRoot(), nullptr, Multiverse::NON_ID);
+  size_t passBegin = 0;
+  size_t passEnd = 1;
+  DA(passEnd == nodesByIndex.size());
   iu depth = 0;
-  size_t s0;
-  size_t s1 = 0;
   do {
     DW(, "studying nodes at depth ",depth);
-    s0 = s1;
-    studyNode(0, depth, rootNode, nullptr, Multiverse::NON_ID);
-    s1 = nodesByIndex.size();
-    DW(, "after studying nodes at depth ",depth,", we know about ",s1," nodes");
+    for (size_t i = passBegin; i != passEnd; ++i) {
+      Node *node = nodesByIndex[i];
+      for (size_t i = 0, end = node->getChildrenSize(); i != end; ++i) {
+        Node *childNode = get<2>(node->getChild(i));
+        studyNode(childNode, node, i);
+      }
+    }
+    DW(, "after studying nodes at depth ",depth,", we know about ",nodesByIndex.size()," nodes");
     ++depth;
-  } while (s0 != s1);
-  DA(s1 != 0);
+
+    passBegin = passEnd;
+    passEnd = nodesByIndex.size();
+  } while (passBegin != passEnd);
 
   markDeadEndNodes();
 }
 
-void MultiverseView::studyNode (iu depth, iu targetDepth, Node *node, Node *parentNode, ActionId childIndex) {
+void MultiverseView::studyNode (Node *node, Node *primeParentNode, ActionId childIndex) {
   DS();
   DW(, "looking at node with sig of hash ",node->getSignature().hash());
-  DA(node->getPrimeParentNode() == parentNode);
-  DA(!node->getPrimeParentNode() || node->getPrimeParentArcChildIndex() == childIndex);
   NodeView *nodeView = static_cast<NodeView *>(node->getListener());
 
-  DPRE(targetDepth >= depth, "");
-  if (depth != targetDepth) {
-    DW(, " not yet at the right depth");
-    DPRE(nodeView->index != NodeView::NON_INDEX);
-    for (size_t i = 0, end = node->getChildrenSize(); i != end; ++i) {
-      DW(, " looking at child ",i);
-      Node *childNode = get<2>(node->getChild(i));
-      NodeView *childNodeView = static_cast<NodeView *>(childNode->getListener());
-
-      bool skip = true;
-      if (childNodeView->index == NodeView::NON_INDEX) {
-        DA(depth == targetDepth - 1);
-        DA(childNode->getPrimeParentNode() == node);
-        skip = false;
-      } else {
-        if (childNode->getPrimeParentNode() == node && childNodeView->primeParentChildIndex == i) {
-          skip = false;
-        }
-      }
-      if (!skip) {
-        studyNode(depth + 1, targetDepth, childNode, node, i);
-      }
-      DA(childNodeView->index != NodeView::NON_INDEX);
-    }
-
-    return;
+  DA(!primeParentNode || (node->getPrimeParentNode() == primeParentNode && node->getPrimeParentArcChildIndex() == childIndex) == (nodeView->index == NodeView::NON_INDEX));
+  if (nodeView->index == NodeView::NON_INDEX) {
+    nodeView->index = nodesByIndex.size();
+    nodeView->primeParentChildIndex = childIndex;
+    nodesByIndex.emplace_back(node);
   }
-
-  DW(, " this node is at the right depth");
-  DPRE(nodeView->index == NodeView::NON_INDEX);
-  nodeView->index = nodesByIndex.size();
-  nodeView->primeParentChildIndex = childIndex;
-  nodesByIndex.emplace_back(node);
-  return;
 }
 
 void MultiverseView::markDeadEndNodes () {

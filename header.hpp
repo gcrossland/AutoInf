@@ -117,9 +117,7 @@ class MultiverseView : public MultiverseMetricsListener {
   pub virtual std::unique_ptr<autoinf::Multiverse::Node::Listener> createNodeListener () override;
   pub void multiverseChanged (const autoinf::Multiverse &multiverse);
   prv void studyNodes (const autoinf::Multiverse &multiverse);
-  prv void studyNode (
-    iu depth, iu targetDepth, autoinf::Multiverse::Node *node, autoinf::Multiverse::Node *parentNode, autoinf::Multiverse::ActionId childIndex
-  );
+  prv void studyNode (autoinf::Multiverse::Node *node, autoinf::Multiverse::Node *parentNode, autoinf::Multiverse::ActionId childIndex);
   prv void markDeadEndNodes ();
   pub void printNodes (const autoinf::Multiverse &multiverse, FILE *out);
   prv void printNodeHeader (
