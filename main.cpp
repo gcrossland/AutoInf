@@ -479,6 +479,7 @@ void runVelocityrun (int argc, char **argv, Vm &vm, Multiverse &multiverse, Mult
   };
   printStats(initialRoundCount, getUserTime(), getVmTime());
 
+  iu nullChangeCount = 0;
   for (iu round = initialRoundCount; true; ++round) {
     if (waiterFuture.wait_for(std::chrono::nanoseconds::zero()) == future_status::ready) {
       printf("  stopping\n");
@@ -509,11 +510,17 @@ void runVelocityrun (int argc, char **argv, Vm &vm, Multiverse &multiverse, Mult
     }
 
     if (nodesSize1 == nodesSize0) {
-      printf("  node count unchanged\n");
+      ++nullChangeCount;
+      printf("  node count unchanged (%d %s)\n", nullChangeCount, nullChangeCount == 1 ? "time" : "times");
       fflush(stdout);
+      if (nullChangeCount >= 32) {
+        return;
+      }
       if (!runCommandLine(vm, multiverse, nullChangeCommandLine, message)) {
         return;
       }
+    } else {
+      nullChangeCount = 0;
     }
 
     double tTotal2 = getUserTime();
