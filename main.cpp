@@ -803,6 +803,7 @@ Value NodeMetricsListener::getValue (size_t i) const {
   return i == 0 ? scoreValue : i == 1 ? wordValue : visitageValue;
 }
 
+const Value MultiverseMetricsListener::PER_TURN_VISITAGE_MODIFIER = -0;
 const vector<Value> MultiverseMetricsListener::NEW_LOCATION_VISITAGE_MODIFIERS = {20, 13, 8, 5};
 const Value MultiverseMetricsListener::OLD_LOCATION_VISITAGE_MODIFIER = -200;
 
@@ -864,6 +865,7 @@ MultiverseMetricsListener::VisitageChain::VisitageChain (
 }
 
 void MultiverseMetricsListener::VisitageChain::increment (NodeMetricsListener *listener) {
+  visitageValue += PER_TURN_VISITAGE_MODIFIER;
   if (listener->locationHash == locationHash) {
     DW(, "DDDD   location didn't change");
     if (newLocationVisitageModifiersI != NEW_LOCATION_VISITAGE_MODIFIERS.end()) {

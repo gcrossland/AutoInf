@@ -42,6 +42,7 @@ class NodeMetricsListener : public autoinf::Multiverse::Node::Listener {
 class MultiverseMetricsListener : public autoinf::Multiverse::Listener {
   pub typedef NodeMetricsListener::Value Value;
 
+  prv static const Value PER_TURN_VISITAGE_MODIFIER;
   prv static const std::vector<Value> NEW_LOCATION_VISITAGE_MODIFIERS;
   prv static const Value OLD_LOCATION_VISITAGE_MODIFIER;
 
