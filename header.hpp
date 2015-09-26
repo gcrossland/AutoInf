@@ -96,6 +96,7 @@ class NodeView : public NodeMetricsListener {
   pub static constexpr size_t NON_INDEX = static_cast<size_t>(-1);
   pub autoinf::Multiverse::ActionId primeParentChildIndex;
   pub bool isDeadEnd;
+  pub bool isAntiselected;
 
   pub NodeView ();
   pub template<typename _Walker> void beWalked (_Walker &w);
@@ -105,8 +106,11 @@ class MultiverseView : public MultiverseMetricsListener {
   pub std::vector<autoinf::Multiverse::Node *> nodesByIndex;
   pub std::unordered_set<autoinf::Multiverse::Node *> selectedNodes;
   pub std::unordered_set<autoinf::Multiverse::Node *> verboseNodes;
-  pub bool elideDeadEndNodes = false;
-  pub size_t maxDepth = core::numeric_limits<size_t>::max();
+  pub bool elideDeadEndNodes;
+  pub bool elideAntiselectedNodes;
+  pub size_t maxDepth;
+  prv bool deadEndnessIsDirty;
+  prv bool antiselectednessIsDirty;
 
   pub MultiverseView (autofrotz::zword scoreAddr);
 
@@ -117,9 +121,12 @@ class MultiverseView : public MultiverseMetricsListener {
 
   pub virtual std::unique_ptr<autoinf::Multiverse::Node::Listener> createNodeListener () override;
   pub void multiverseChanged (const autoinf::Multiverse &multiverse);
+  pub void selectionChanged ();
   prv void studyNodes (const autoinf::Multiverse &multiverse);
   prv void studyNode (autoinf::Multiverse::Node *node, autoinf::Multiverse::Node *parentNode, autoinf::Multiverse::ActionId childIndex);
-  prv void markDeadEndNodes ();
+  prv void markDeadEndAndAntiselectedNodes ();
+  prv void markDeadEndNode (autoinf::Multiverse::Node *node, NodeView *nodeView);
+  prv void markAntiselectedNode (autoinf::Multiverse::Node *node, NodeView *nodeView);
   pub void printNodes (const autoinf::Multiverse &multiverse, FILE *out);
   prv void printNodeHeader (
     char8_t nodeIndexRenderingPrefix, char8_t nodeIndexRenderingSuffix, autoinf::Multiverse::Node *node, autoinf::Multiverse::ActionId actionId,

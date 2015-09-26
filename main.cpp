@@ -538,6 +538,7 @@ bool runCommandLine (Vm &vm, Multiverse &multiverse, const u8string &in, u8strin
   unordered_set<Node *> &selectedNodes = view->selectedNodes;
   unordered_set<Node *> &verboseNodes = view->verboseNodes;
   bool &elideDeadEndNodes = view->elideDeadEndNodes;
+  bool &elideAntiselectedNodes = view->elideAntiselectedNodes;
   size_t &maxDepth = view->maxDepth;
 
   const char8_t *inI = in.data();
@@ -562,13 +563,13 @@ bool runCommandLine (Vm &vm, Multiverse &multiverse, const u8string &in, u8strin
         }
         return true;
       }
-    } else if (line == u8("N") || line == u8("n")) {
-      elideDeadEndNodes = false;
     } else if (line == u8("D") || line == u8("d")) {
-      elideDeadEndNodes = true;
-    } else if (line == u8("W") || line == u8("w")) {
+      elideDeadEndNodes = !elideDeadEndNodes;
+    } else if (line == u8("N") || line == u8("n")) {
+      elideAntiselectedNodes = !elideAntiselectedNodes;
+    } else if (line == u8("B") || line == u8("b")) {
       maxDepth = numeric_limits<size_t>::max();
-    } else if (line.size() > 2 && (line[0] == U'W' || line[0] == U'w') && line[1] == U'-') {
+    } else if (line.size() > 2 && (line[0] == U'B' || line[0] == U'b') && line[1] == U'-') {
       is n = getNaturalNumber(line.data() + 2, line.data() + line.size());
       if (n >= 0) {
         maxDepth = static_cast<iu>(n);
@@ -578,14 +579,17 @@ bool runCommandLine (Vm &vm, Multiverse &multiverse, const u8string &in, u8strin
       for (const auto &node : nodesByIndex) {
         selectedNodes.insert(node);
       }
+      view->selectionChanged();
     } else if (line == u8("U") || line == u8("u")) {
       for (const auto &node : nodesByIndex) {
         if (node->getState()) {
           selectedNodes.insert(node);
         }
       }
+      view->selectionChanged();
     } else if (line == u8("C") || line == u8("c")) {
       selectedNodes.clear();
+      view->selectionChanged();
     } else if (line == u8("I") || line == u8("i")) {
       unordered_set<Node *> nextSelectedNodes(nodesByIndex.size() - selectedNodes.size());
       for (const auto &node : nodesByIndex) {
@@ -594,6 +598,7 @@ bool runCommandLine (Vm &vm, Multiverse &multiverse, const u8string &in, u8strin
         }
       }
       selectedNodes = move(nextSelectedNodes);
+      view->selectionChanged();
     } else if (line.size() > 3 && (line[0] == U'V' || line[0] == U'v') && line[1] == U'-') {
       char8_t valueName = line[2];
       size_t valueIndex;
@@ -647,6 +652,7 @@ bool runCommandLine (Vm &vm, Multiverse &multiverse, const u8string &in, u8strin
               unprocessedCount += !!node->getState();
               selectedNodes.insert(node);
             }
+            view->selectionChanged();
 
             char8_t b[1024];
             char *t = reinterpret_cast<char *>(b);
@@ -732,6 +738,7 @@ bool runCommandLine (Vm &vm, Multiverse &multiverse, const u8string &in, u8strin
             selectedNodes.erase(pos);
           }
         }
+        view->selectionChanged();
       }
     }
   }
@@ -769,14 +776,18 @@ void updateMultiverseDisplay (Multiverse &multiverse, const char *outPathName, c
     printf("%s", message.c_str());
   }
   printf(
-    "Show All _Nodes         Hide _Dead End Nodes    Sho_w Nodes n Deep[-<n>]\n"
-    "Select _All             Select _Unprocesseds\n"
-    "_Clear Selection        _Invert Selection\n"
-    "Shrink Selection to Highest _Valued-<n>\n"
-    "_Show Output            _Hide Output\n"
-    "_Process                Co_llapse               _Terminate\n"
-    "Sav_e As-<name>         _Open File-<name>\n"
-    ">"
+    "%cHide _Dead End Nodes       %cHide A_ntiselected Nodes\n"
+    "%cHide Nodes _Beyond Depth[-<n>]\n"
+    " Select _All                 Select _Unprocesseds\n"
+    " _Clear Selection            _Invert Selection\n"
+    " Shrink Selection to Highest_Valued-<n>\n"
+    " _Show Output                _Hide Output\n"
+    " _Process                    Co_llapse                   _Terminate\n"
+    " Sav_e As-<name>             _Open File-<name>\n"
+    ">",
+    view->elideDeadEndNodes ? '*' : ' ',
+    view->elideAntiselectedNodes ? '*' : ' ',
+    view->maxDepth != numeric_limits<size_t>::max() ? '*' : ' '
   );
   fflush(stdout);
 }
@@ -1045,19 +1056,18 @@ Value MultiverseMetricsListener::getMaxScoreValue () const {
 constexpr size_t NodeView::NON_INDEX;
 
 NodeView::NodeView () :
-  index(NON_INDEX - 1), primeParentChildIndex(Multiverse::NON_ID), isDeadEnd(false)
+  index(NON_INDEX - 1), primeParentChildIndex(Multiverse::NON_ID), isDeadEnd(false), isAntiselected(false)
 {
 }
 
 template<typename _Walker> void NodeView::beWalked (_Walker &w) {
-  DS();
   w.process(*static_cast<NodeMetricsListener *>(this));
-  w.process(index);
-  w.process(primeParentChildIndex);
-  w.process(isDeadEnd);
 }
 
-MultiverseView::MultiverseView (zword scoreAddr) : MultiverseMetricsListener(scoreAddr), elideDeadEndNodes(false), maxDepth(numeric_limits<size_t>::max()) {
+MultiverseView::MultiverseView (zword scoreAddr) :
+  MultiverseMetricsListener(scoreAddr), elideDeadEndNodes(false), elideAntiselectedNodes(false), maxDepth(numeric_limits<size_t>::max()),
+  deadEndnessIsDirty(true), antiselectednessIsDirty(true)
+{
 }
 
 tuple<void *, size_t> MultiverseView::deduceNodeListenerType (Node::Listener *listener) {
@@ -1086,8 +1096,14 @@ void MultiverseView::multiverseChanged (const Multiverse &multiverse) {
   nodesByIndex.clear();
   selectedNodes.clear();
   verboseNodes.clear();
+  deadEndnessIsDirty = true;
+  antiselectednessIsDirty = true;
 
   studyNodes(multiverse);
+}
+
+void MultiverseView::selectionChanged () {
+  antiselectednessIsDirty = true;
 }
 
 void MultiverseView::studyNodes (const Multiverse &multiverse) {
@@ -1122,8 +1138,6 @@ void MultiverseView::studyNodes (const Multiverse &multiverse) {
     passBegin = passEnd;
     passEnd = nodesByIndex.size();
   } while (passBegin != passEnd);
-
-  markDeadEndNodes();
 }
 
 void MultiverseView::studyNode (Node *node, Node *primeParentNode, ActionId childIndex) {
@@ -1139,35 +1153,79 @@ void MultiverseView::studyNode (Node *node, Node *primeParentNode, ActionId chil
   }
 }
 
-void MultiverseView::markDeadEndNodes () {
+void MultiverseView::markDeadEndAndAntiselectedNodes () {
+  bool doDeadEndness = deadEndnessIsDirty && elideDeadEndNodes;
+  bool doAntiselectedness = antiselectednessIsDirty && elideAntiselectedNodes;
+  if (!doDeadEndness && !doAntiselectedness) {
+    return;
+  }
+
   for (auto i = nodesByIndex.rbegin(), end = nodesByIndex.rend(); i != end; ++i) {
     Node *node = *i;
     NodeView *nodeView = static_cast<NodeView *>(node->getListener());
 
-    if (node->getState()) {
-      DA(!nodeView->isDeadEnd);
-      continue;
+    if (doDeadEndness) {
+      markDeadEndNode(node, nodeView);
     }
-
-    bool interesting = false;
-    for (size_t i = 0, end = node->getChildrenSize(); i != end; ++i) {
-      Node *childNode = get<2>(node->getChild(i));
-      NodeView *childNodeView = static_cast<NodeView *>(childNode->getListener());
-
-      if (childNode->getPrimeParentNode() == node && !childNodeView->isDeadEnd) {
-        interesting = true;
-        break;
-      }
+    if (doAntiselectedness) {
+      markAntiselectedNode(node, nodeView);
     }
-    if (interesting) {
-      continue;
-    }
+  }
 
-    nodeView->isDeadEnd = true;
+  if (doDeadEndness) {
+    deadEndnessIsDirty = false;
+  }
+  if (doAntiselectedness) {
+    antiselectednessIsDirty = false;
   }
 }
 
+void MultiverseView::markDeadEndNode (Node *node, NodeView *nodeView) {
+  if (node->getState()) {
+    DA(!nodeView->isDeadEnd);
+    return;
+  }
+
+  bool isDeadEnd = true;
+  for (size_t i = 0, end = node->getChildrenSize(); i != end; ++i) {
+    Node *childNode = get<2>(node->getChild(i));
+    NodeView *childNodeView = static_cast<NodeView *>(childNode->getListener());
+
+    if (childNode->getPrimeParentNode() == node && !childNodeView->isDeadEnd) {
+      isDeadEnd = false;
+      break;
+    }
+  }
+  nodeView->isDeadEnd = isDeadEnd;
+}
+
+void MultiverseView::markAntiselectedNode (Node *node, NodeView *nodeView) {
+  if (selectedNodes.empty()) {
+    nodeView->isAntiselected = true;
+    return;
+  }
+
+  if (contains(selectedNodes, node)) {
+    nodeView->isAntiselected = false;
+    return;
+  }
+
+  bool isAntiselected = true;
+  for (size_t i = 0, end = node->getChildrenSize(); i != end; ++i) {
+    Node *childNode = get<2>(node->getChild(i));
+    NodeView *childNodeView = static_cast<NodeView *>(childNode->getListener());
+
+    if (childNode->getPrimeParentNode() == node && !childNodeView->isAntiselected) {
+      isAntiselected = false;
+      break;
+    }
+  }
+  nodeView->isAntiselected = isAntiselected;
+}
+
 void MultiverseView::printNodes (const Multiverse &multiverse, FILE *out) {
+  markDeadEndAndAntiselectedNodes();
+
   u8string prefix;
   printNodeAsNonleaf(0, nullptr, multiverse.getRoot(), nullptr, Multiverse::NON_ID, multiverse.getActionSet(), prefix, out);
 }
@@ -1267,20 +1325,9 @@ void MultiverseView::printNodeAsNonleaf (
     DA(&node->getChild(node->getChildIndex(childActionId)) == &child);
     NodeView *childNodeView = static_cast<NodeView *>(childNode->getListener());
 
-    auto fmt = NONE;
-    if (elideDeadEndNodes) {
-      if (!(childNode->getPrimeParentNode() == node && childNodeView->primeParentChildIndex == i && !childNodeView->isDeadEnd)) {
-        fmt = NONE;
-      } else {
-        fmt = NONLEAF;
-      }
-    } else {
-      if (!(childNode->getPrimeParentNode() == node && childNodeView->primeParentChildIndex == i)) {
-        fmt = LEAF;
-      } else {
-        fmt = NONLEAF;
-      }
-    }
+    bool elided = (elideDeadEndNodes && childNodeView->isDeadEnd) || (elideAntiselectedNodes && childNodeView->isAntiselected);
+    bool elision = elideDeadEndNodes || elideAntiselectedNodes;
+    auto fmt = (childNode->getPrimeParentNode() == node && childNodeView->primeParentChildIndex == i && !elided) ? NONLEAF : !elision ? LEAF : NONE;
     fmts[i] = fmt;
     if (fmt != NONE) {
       fmtsEnd = i + 1;
