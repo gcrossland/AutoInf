@@ -95,7 +95,7 @@ class NodeView : public NodeMetricsListener {
   pub size_t index;
   pub static constexpr size_t NON_INDEX = static_cast<size_t>(-1);
   pub autoinf::Multiverse::ActionId primeParentChildIndex;
-  pub bool allChildrenAreNonPrime;
+  pub bool isDeadEnd;
 
   pub NodeView ();
   pub template<typename _Walker> void beWalked (_Walker &w);

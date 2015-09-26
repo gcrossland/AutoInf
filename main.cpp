@@ -1045,7 +1045,7 @@ Value MultiverseMetricsListener::getMaxScoreValue () const {
 constexpr size_t NodeView::NON_INDEX;
 
 NodeView::NodeView () :
-  index(NON_INDEX - 1), primeParentChildIndex(Multiverse::NON_ID), allChildrenAreNonPrime(false)
+  index(NON_INDEX - 1), primeParentChildIndex(Multiverse::NON_ID), isDeadEnd(false)
 {
 }
 
@@ -1054,7 +1054,7 @@ template<typename _Walker> void NodeView::beWalked (_Walker &w) {
   w.process(*static_cast<NodeMetricsListener *>(this));
   w.process(index);
   w.process(primeParentChildIndex);
-  w.process(allChildrenAreNonPrime);
+  w.process(isDeadEnd);
 }
 
 MultiverseView::MultiverseView (zword scoreAddr) : MultiverseMetricsListener(scoreAddr), elideDeadEndNodes(false), maxDepth(numeric_limits<size_t>::max()) {
@@ -1145,7 +1145,7 @@ void MultiverseView::markDeadEndNodes () {
     NodeView *nodeView = static_cast<NodeView *>(node->getListener());
 
     if (node->getState()) {
-      DA(!nodeView->allChildrenAreNonPrime);
+      DA(!nodeView->isDeadEnd);
       continue;
     }
 
@@ -1154,7 +1154,7 @@ void MultiverseView::markDeadEndNodes () {
       Node *childNode = get<2>(node->getChild(i));
       NodeView *childNodeView = static_cast<NodeView *>(childNode->getListener());
 
-      if (childNode->getPrimeParentNode() == node && !childNodeView->allChildrenAreNonPrime) {
+      if (childNode->getPrimeParentNode() == node && !childNodeView->isDeadEnd) {
         interesting = true;
         break;
       }
@@ -1163,7 +1163,7 @@ void MultiverseView::markDeadEndNodes () {
       continue;
     }
 
-    nodeView->allChildrenAreNonPrime = true;
+    nodeView->isDeadEnd = true;
   }
 }
 
@@ -1269,7 +1269,7 @@ void MultiverseView::printNodeAsNonleaf (
 
     auto fmt = NONE;
     if (elideDeadEndNodes) {
-      if (!(childNode->getPrimeParentNode() == node && childNodeView->primeParentChildIndex == i && !childNodeView->allChildrenAreNonPrime)) {
+      if (!(childNode->getPrimeParentNode() == node && childNodeView->primeParentChildIndex == i && !childNodeView->isDeadEnd)) {
         fmt = NONE;
       } else {
         fmt = NONLEAF;
