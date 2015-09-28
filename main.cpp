@@ -699,7 +699,7 @@ bool runCommandLine (Vm &vm, Multiverse &multiverse, const u8string &in, u8strin
       view->multiverseChanged(multiverse);
     } else if (line.size() > 2 && (line[0] == U'E' || line[0] == U'e') && line[1] == U'-') {
       u8string name(line.data() + 2, line.data() + line.size());
-      multiverse.save(reinterpret_cast<const char *>(name.c_str()));
+      multiverse.save(reinterpret_cast<const char *>(name.c_str()), vm);
     } else if (line.size() > 2 && (line[0] == U'O' || line[0] == U'o') && line[1] == U'-') {
       u8string name(line.data() + 2, line.data() + line.size());
       multiverse.load(reinterpret_cast<const char *>(name.c_str()), vm);

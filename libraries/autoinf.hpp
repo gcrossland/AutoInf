@@ -474,8 +474,8 @@ class Multiverse {
     std::unordered_map<Node *, Node *> &r_nodeCollapseTargets,
     std::unordered_map<Node *, Signature> &r_survivingNodePrevSignatures
   );
-  pub void save (const char *pathName);
-  pub void load (const char *pathName, const autofrotz::Vm &vm);
+  pub void save (const char *pathName, const autofrotz::Vm &vm);
+  pub void load (const char *pathName, autofrotz::Vm &r_vm);
   prv template<typename _Walker> void derefAndProcessNodeListener (Node::Listener *&listener, _Walker &w);
 
   pub class Listener {

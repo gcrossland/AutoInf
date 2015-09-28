@@ -763,6 +763,7 @@ Multiverse::Multiverse (
 {
   DS();
   DPRE(r_vm.isAlive());
+  DPRE(r_vm.getWordSet());
   DPRE(!!this->listener);
 
   doAction(r_vm, initialInput, r_initialOutput, u8("VM died while running the initial input"));
@@ -1016,7 +1017,7 @@ Multiverse::Node *Multiverse::collapseNode (
   }
 }
 
-void Multiverse::save (const char *pathName) {
+void Multiverse::save (const char *pathName, const Vm &vm) {
   DS();
   FILE *h = fopen(pathName, "wb");
   if (h == nullptr) {
@@ -1043,11 +1044,12 @@ void Multiverse::save (const char *pathName) {
   Node::Listener *listener = nullptr;
   derefAndProcessNodeListener(listener, s);
 
+  s.process(*const_cast<Bitset *>(vm.getWordSet()));
   s.process(ignoredBytes);
   s.derefAndProcess(rootNode);
 }
 
-void Multiverse::load (const char *pathName, const Vm &vm) {
+void Multiverse::load (const char *pathName, Vm &r_vm) {
   DS();
   FILE *h = fopen(pathName, "rb");
   if (h == nullptr) {
@@ -1079,10 +1081,12 @@ void Multiverse::load (const char *pathName, const Vm &vm) {
       }
     }
 
+    Bitset wordSet;
+    s.process(wordSet);
     s.process(ignoredBytes);
     s.derefAndProcess(rootNode);
 
-    ignoredByteRangeset = Rangeset(ignoredBytes, vm.getDynamicMemorySize());
+    ignoredByteRangeset = Rangeset(ignoredBytes, r_vm.getDynamicMemorySize());
     unordered_set<Node *> seenNodes;
     rootNode->forEach([&] (Node *node) -> bool {
       if (contains(seenNodes, node)) {
@@ -1093,6 +1097,8 @@ void Multiverse::load (const char *pathName, const Vm &vm) {
       nodes.emplace(ref(node->getSignature()), node);
       return true;
     });
+
+    r_vm.setWordSet(move(wordSet));
     // TODO validate result
   } catch (...) {
     nthrow(PlainException(u8("loading failed")));
