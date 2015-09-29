@@ -556,13 +556,13 @@ void Multiverse::Node::addChild (ActionId actionId, u8string &&output, Node *nod
 
   children.emplace_back(actionId, move(output), node);
 
-  bool primeParentChanged = node->updatePrimeParent(this);
+  bool primeParentChanged = node->updatePrimeParent(this, false);
   if (primeParentChanged) {
     multiverse.listener->subtreePrimeAncestorsUpdated(multiverse, node);
   }
 }
 
-bool Multiverse::Node::updatePrimeParent (Node *newParentNode) {
+bool Multiverse::Node::updatePrimeParent (Node *newParentNode, bool changedAbove) {
   DS();
   DW(, "checking if Node with sig of hash ", signature.hash(), " needs its prime parent updated");
   DPRE(!!newParentNode);
@@ -617,7 +617,14 @@ bool Multiverse::Node::updatePrimeParent (Node *newParentNode) {
 
   if (changed) {
     primeParentNode = newParentNode;
+    changedAbove = true;
+  } else {
+    if (changedAbove && primeParentNode != newParentNode) {
+      changedAbove = false;
+    }
+  }
 
+  if (changedAbove) {
     DW(, "  updating children (that have a different parent)...");
     unordered_set<Node *> seenNodes(children.size());
     for (auto &e : children) {
@@ -627,7 +634,7 @@ bool Multiverse::Node::updatePrimeParent (Node *newParentNode) {
       }
       seenNodes.emplace(childNode);
 
-      childNode->updatePrimeParent(this);
+      childNode->updatePrimeParent(this, changedAbove);
     }
   }
 

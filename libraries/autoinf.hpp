@@ -393,7 +393,7 @@ class Multiverse {
     pub const std::tuple<ActionId, core::u8string, Node *> &getChild (size_t i) const;
     pub size_t getChildIndex (ActionId id) const;
     pub void addChild (ActionId actionId, core::u8string &&output, Node *node, const Multiverse &multiverse);
-    prv bool updatePrimeParent (Node *newParentNode);
+    prv bool updatePrimeParent (Node *newParentNode, bool changedAbove);
     pub void removeChild (size_t i);
     pub void changeChild (size_t i, Node *node);
     pub void childrenUpdated (const Multiverse &multiverse);
