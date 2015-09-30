@@ -884,13 +884,15 @@ void MultiverseMetricsListener::VisitageChain::increment (NodeMetricsListener *l
     }
   } else {
     locationHash = listener->locationHash;
-    if (contains(visitedLocationHashes, locationHash)) {
+    auto begin = visitedLocationHashes.begin();
+    auto end = visitedLocationHashes.end();
+    if (find(begin, end, locationHash) != end) {
       DW(, "DDDD   location changed to one we've visted");
       newLocationVisitageModifiersI = NEW_LOCATION_VISITAGE_MODIFIERS.end();
       visitageValue += OLD_LOCATION_VISITAGE_MODIFIER;
     } else {
       DW(, "DDDD   location changed to one we've not visted");
-      visitedLocationHashes.emplace(locationHash);
+      visitedLocationHashes.emplace_back(locationHash);
       newLocationVisitageModifiersI = NEW_LOCATION_VISITAGE_MODIFIERS.begin();
       DA(!NEW_LOCATION_VISITAGE_MODIFIERS.empty());
       visitageValue += *newLocationVisitageModifiersI++;
@@ -948,6 +950,23 @@ void MultiverseMetricsListener::setVisitageValue (const Node *node, NodeMetricsL
   listener->visitageValue = r_chain.getVisitageValue();
 }
 
+size_t MultiverseMetricsListener::checkVisitageValueRecursively (const Node *node, NodeMetricsListener *listener, VisitageChain chain) {
+  DA(!node->getPrimeParentNode() || static_cast<NodeMetricsListener *>(node->getPrimeParentNode()->getListener())->visitageValue == chain.getVisitageValue());
+  chain.increment(listener);
+  DA(listener->visitageValue == chain.getVisitageValue());
+  size_t c = 1;
+
+  for (size_t i = 0, end = node->getChildrenSize(); i != end; ++i) {
+    Node *childNode = get<2>(node->getChild(i));
+    if (childNode->getPrimeParentNode() == node && childNode->getPrimeParentArcChildIndex() == i) {
+      NodeMetricsListener *childListener = static_cast<NodeMetricsListener *>(childNode->getListener());
+      c += checkVisitageValueRecursively(childNode, childListener, chain);
+    }
+  }
+
+  return c;
+}
+
 void MultiverseMetricsListener::nodeChildrenUpdated (const Multiverse &multiverse, const Node *node) {
   NodeMetricsListener *listener = static_cast<NodeMetricsListener *>(node->getListener());
 
@@ -975,6 +994,11 @@ void MultiverseMetricsListener::nodesProcessed (const Multiverse &multiverse) {
     listener->wordValue = NodeMetricsListener::NON_VALUE;
   });
   setWordValueRecursively(rootNode, static_cast<NodeMetricsListener *>(rootNode->getListener()), multiverse.size(), stats.get(), 0);
+
+  #ifndef NDEBUG
+  size_t c = checkVisitageValueRecursively(rootNode, static_cast<NodeMetricsListener *>(rootNode->getListener()), getVisitageChain(nullptr));
+  DA(c == multiverse.size());
+  #endif
 }
 
 template<typename F> unique_ptr<size_t []> MultiverseMetricsListener::getWordStats (const Multiverse &multiverse, const F &nodeFunctor) {

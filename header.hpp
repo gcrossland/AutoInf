@@ -60,7 +60,7 @@ class MultiverseMetricsListener : public autoinf::Multiverse::Listener {
   prv void setVisitageData (NodeMetricsListener *listener, const core::u8string &output);
   pub virtual void subtreePrimeAncestorsUpdated (const autoinf::Multiverse &multiverse, const autoinf::Multiverse::Node *node) override;
   prv class VisitageChain {
-    prv std::unordered_set<size_t> visitedLocationHashes;
+    prv std::vector<size_t> visitedLocationHashes;
     prv size_t locationHash;
     prv std::vector<Value>::const_iterator newLocationVisitageModifiersI;
     prv Value visitageValue;
@@ -77,6 +77,7 @@ class MultiverseMetricsListener : public autoinf::Multiverse::Listener {
   prv VisitageChain getVisitageChain (const autoinf::Multiverse::Node *node);
   prv void setVisitageValueRecursively (const autoinf::Multiverse::Node *node, NodeMetricsListener *listener, VisitageChain chain);
   prv void setVisitageValue (const autoinf::Multiverse::Node *node, NodeMetricsListener *listener, VisitageChain &r_chain);
+  prv size_t checkVisitageValueRecursively (const autoinf::Multiverse::Node *node, NodeMetricsListener *listener, VisitageChain chain);
   pub virtual void nodeChildrenUpdated (const autoinf::Multiverse &multiverse, const autoinf::Multiverse::Node *node) override;
   prv void setWordData (const autoinf::Multiverse::Node *node, NodeMetricsListener *listener, const autoinf::Multiverse::ActionSet &actionSet);
   pub virtual void nodesProcessed (const autoinf::Multiverse &multiverse) override;
