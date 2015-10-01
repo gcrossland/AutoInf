@@ -422,23 +422,24 @@ void runCmd (int argc, char **argv, Vm &vm, Multiverse &multiverse, MultiverseVi
 }
 
 void runVelocityrun (int argc, char **argv, Vm &vm, Multiverse &multiverse, MultiverseView *view) {
-  if (argc != 7 && argc != 8) {
-    throw PlainException(u8("command lines to be run initially, each round, on max score change, on no nodes being processed and on user exit must be specified"));
+  if (argc != 8 && argc != 9) {
+    throw PlainException(u8("command lines to be run initially, each round, on no change in node count, on max score change, on new words being used and on user exit must be specified"));
   }
   // TODO uargs
-  u8string initialCommandLine(reinterpret_cast<char8_t *>(argv[2]));
-  u8string roundCommandLine(reinterpret_cast<char8_t *>(argv[3]));
-  u8string maxScoreChangeCommandLine(reinterpret_cast<char8_t *>(argv[4]));
-  u8string nullChangeCommandLine(reinterpret_cast<char8_t *>(argv[5]));
-  u8string stopCommandLine(reinterpret_cast<char8_t *>(argv[6]));
+  u8string initialCommandLineTemplate(reinterpret_cast<char8_t *>(argv[2]));
+  u8string roundCommandLineTemplate(reinterpret_cast<char8_t *>(argv[3]));
+  u8string nullChangeCommandLineTemplate(reinterpret_cast<char8_t *>(argv[4]));
+  u8string maxScoreChangeCommandLineTemplate(reinterpret_cast<char8_t *>(argv[5]));
+  u8string wordsChangeCommandLineTemplate(reinterpret_cast<char8_t *>(argv[6]));
+  u8string stopCommandLineTemplate(reinterpret_cast<char8_t *>(argv[7]));
   iu initialRoundCount = 0;
   double initialTTotal = 0;
   double initialTVm = 0;
-  if (argc == 8) {
+  if (argc == 9) {
     int v0;
     float v1;
     float v2;
-    if (sscanf(argv[7], "%d,%f,%f", &v0, &v1, &v2) != 3 || v0 < 0) {
+    if (sscanf(argv[8], "%d,%f,%f", &v0, &v1, &v2) != 3 || v0 < 0) {
       throw PlainException(u8("invalid initial stats state specified"));
     }
     initialRoundCount = static_cast<unsigned int>(v0);
@@ -459,7 +460,7 @@ void runVelocityrun (int argc, char **argv, Vm &vm, Multiverse &multiverse, Mult
   // waiterThread.join();
   //});
 
-  if (!runCommandLine(vm, multiverse, initialCommandLine, message)) {
+  if (!runCommandLineTemplate(vm, multiverse, initialCommandLineTemplate, 0, message)) {
     return;
   }
 
@@ -485,30 +486,22 @@ void runVelocityrun (int argc, char **argv, Vm &vm, Multiverse &multiverse, Mult
       printf("  stopping\n");
       fflush(stdout);
       waiterFuture.get();
-      runCommandLine(vm, multiverse, stopCommandLine, message);
+      runCommandLineTemplate(vm, multiverse, stopCommandLineTemplate, round, message);
       return;
     }
 
-    Value maxScoreValue0 = view->getMaxScoreValue();
     size_t nodesSize0 = view->nodesByIndex.size();
-    if (!runCommandLine(vm, multiverse, roundCommandLine, message)) {
+    Value maxScoreValue0 = view->getMaxScoreValue();
+    Bitset words0(view->getInterestingChildActionWords(multiverse));
+    if (!runCommandLineTemplate(vm, multiverse, roundCommandLineTemplate, round + 1, message)) {
       return;
     }
-    Value maxScoreValue1 = view->getMaxScoreValue();
-    size_t nodesSize1 = view->nodesByIndex.size();
 
     double tTotal1 = getUserTime();
     double tVm1 = getVmTime();
     printStats(round + 1, tTotal1, tVm1);
 
-    if (maxScoreValue1 != maxScoreValue0) {
-      printf("  max score changed\n");
-      fflush(stdout);
-      if (!runCommandLine(vm, multiverse, maxScoreChangeCommandLine, message)) {
-        return;
-      }
-    }
-
+    size_t nodesSize1 = view->nodesByIndex.size();
     if (nodesSize1 == nodesSize0) {
       ++nullChangeCount;
       printf("  node count unchanged (%d %s)\n", nullChangeCount, nullChangeCount == 1 ? "time" : "times");
@@ -516,11 +509,36 @@ void runVelocityrun (int argc, char **argv, Vm &vm, Multiverse &multiverse, Mult
       if (nullChangeCount >= 32) {
         return;
       }
-      if (!runCommandLine(vm, multiverse, nullChangeCommandLine, message)) {
+
+      if (!runCommandLineTemplate(vm, multiverse, nullChangeCommandLineTemplate, round + 1, message)) {
         return;
       }
+
+      tTotal1 = getUserTime();
+      tVm1 = getVmTime();
+      printStats(round + 1, tTotal1, tVm1);
     } else {
       nullChangeCount = 0;
+    }
+
+    Value maxScoreValue1 = view->getMaxScoreValue();
+    Bitset words1(view->getInterestingChildActionWords(multiverse));
+    if (maxScoreValue1 != maxScoreValue0) {
+      printf("  max score changed\n");
+      fflush(stdout);
+      if (!runCommandLineTemplate(vm, multiverse, maxScoreChangeCommandLineTemplate, round + 1, message)) {
+        return;
+      }
+    }
+    words1.andNot(words0);
+    if (!words1.empty()) {
+      u8string wordList;
+      appendWordList(wordList, words1, multiverse);
+      printf("  words added (%s)\n", wordList.c_str());
+      fflush(stdout);
+      if (!runCommandLineTemplate(vm, multiverse, wordsChangeCommandLineTemplate, round + 1, message)) {
+        return;
+      }
     }
 
     double tTotal2 = getUserTime();
@@ -529,6 +547,41 @@ void runVelocityrun (int argc, char **argv, Vm &vm, Multiverse &multiverse, Mult
     tVm0 -= (tVm2 - tVm1);
 
     message.clear();
+  }
+}
+
+bool runCommandLineTemplate (Vm &r_vm, Multiverse &r_multiverse, const u8string &inTemplate, iu roundCount, u8string &r_message) {
+  char8_t b[1024];
+  sprintf(reinterpret_cast<char *>(b), "%u", static_cast<unsigned int>(roundCount));
+  u8string sub(b);
+
+  u8string in;
+
+  size_t i = 0;
+  while (true) {
+    size_t i0 = i;
+    i = inTemplate.find(U'%', i);
+    if (i == u8string::npos) {
+      in.append(inTemplate, i0, u8string::npos);
+      break;
+    }
+    in.append(inTemplate, i0, i - i0);
+    in.append(sub);
+    ++i;
+  }
+
+  return runCommandLine(r_vm, r_multiverse, in, r_message);
+}
+
+void appendWordList (u8string &r_o, const Bitset &words, const Multiverse &multiverse) {
+  auto &actionSet = multiverse.getActionSet();
+  bool first = true;
+  for (size_t i = words.getNextSetBit(0); i != Bitset::NON_INDEX; i = words.getNextSetBit(i + 1)) {
+    if (!first) {
+      r_o.append(u8(", "));
+    }
+    r_o.append(actionSet.getWord(i));
+    first = false;
   }
 }
 
@@ -544,6 +597,8 @@ bool runCommandLine (Vm &vm, Multiverse &multiverse, const u8string &in, u8strin
   const char8_t *inI = in.data();
   const char8_t *inEnd = inI + in.size();
   while (inI != inEnd) {
+    Bitset seenWords0(view->getInterestingChildActionWords(multiverse));
+
     const char8_t *inPartBegin = inI = skipSpaces(inI, inEnd);
     const char8_t *inPartEnd = inI = skipNonSpaces(inI, inEnd);
     u8string line(inPartBegin, inPartEnd);
@@ -741,6 +796,14 @@ bool runCommandLine (Vm &vm, Multiverse &multiverse, const u8string &in, u8strin
         view->selectionChanged();
       }
     }
+
+    Bitset newWords(view->getInterestingChildActionWords(multiverse));
+    newWords.andNot(seenWords0);
+    if (!newWords.empty()) {
+      message.append(u8("New words: "));
+      appendWordList(message, newWords, multiverse);
+      message.append(u8("\n\n"));
+    }
   }
 
   return true;
@@ -818,7 +881,10 @@ const Value MultiverseMetricsListener::PER_TURN_VISITAGE_MODIFIER = -0;
 const vector<Value> MultiverseMetricsListener::NEW_LOCATION_VISITAGE_MODIFIERS = {20, 13, 8, 5};
 const Value MultiverseMetricsListener::OLD_LOCATION_VISITAGE_MODIFIER = -200;
 
-MultiverseMetricsListener::MultiverseMetricsListener (zword scoreAddr) : scoreAddr(scoreAddr), maxScoreValue(numeric_limits<Value>::min()) {
+MultiverseMetricsListener::MultiverseMetricsListener (zword scoreAddr) :
+  scoreAddr(scoreAddr), maxScoreValue(numeric_limits<Value>::min()),
+  interestingChildActionWordsIsDirty(false)
+{
 }
 
 void MultiverseMetricsListener::nodeReached (const Multiverse &multiverse, Node::Listener *listener_, ActionId parentActionId, const u8string &output, const Signature &signature, const Vm &vm) {
@@ -976,6 +1042,7 @@ void MultiverseMetricsListener::nodeChildrenUpdated (const Multiverse &multivers
 void MultiverseMetricsListener::setWordData (const Node *node, NodeMetricsListener *listener, const Multiverse::ActionSet &actionSet) {
   DA(!node->getState());
   Bitset &words = listener->interestingChildActionWords;
+  bool canUpdate = !interestingChildActionWordsIsDirty && words.empty();
   words.clear();
   for (size_t i = 0, end = node->getChildrenSize(); i != end; ++i) {
     auto action = actionSet.get(get<0>(node->getChild(i)));
@@ -984,6 +1051,12 @@ void MultiverseMetricsListener::setWordData (const Node *node, NodeMetricsListen
     }
   }
   words.compact();
+
+  if (canUpdate) {
+    interestingChildActionWords |= words;
+  } else {
+    interestingChildActionWordsIsDirty = true;
+  }
 }
 
 void MultiverseMetricsListener::nodesProcessed (const Multiverse &multiverse) {
@@ -1070,11 +1143,26 @@ void MultiverseMetricsListener::loaded (const Multiverse &multiverse) {
     }
   }
   this->maxScoreValue = maxScoreValue;
+
+  interestingChildActionWordsIsDirty = true;
 }
 
 Value MultiverseMetricsListener::getMaxScoreValue () const {
   DPRE(maxScoreValue != numeric_limits<Value>::min());
   return maxScoreValue;
+}
+
+const Bitset &MultiverseMetricsListener::getInterestingChildActionWords (const Multiverse &multiverse) {
+  if (interestingChildActionWordsIsDirty) {
+    interestingChildActionWords.clear();
+    for (const Node *node : multiverse) {
+      NodeMetricsListener *listener = static_cast<NodeMetricsListener *>(node->getListener());
+      interestingChildActionWords |= listener->interestingChildActionWords;
+    }
+    interestingChildActionWordsIsDirty = false;
+  }
+
+  return interestingChildActionWords;
 }
 
 constexpr size_t NodeView::NON_INDEX;
