@@ -49,7 +49,6 @@ class MultiverseMetricsListener : public autoinf::Multiverse::Listener {
   prv static const Value OLD_LOCATION_VISITAGE_MODIFIER;
 
   prv const autofrotz::zword scoreAddr;
-  prv Value maxScoreValue;
   prv bitset::Bitset interestingChildActionWords;
   prv bool interestingChildActionWordsIsDirty;
 
@@ -91,7 +90,7 @@ class MultiverseMetricsListener : public autoinf::Multiverse::Listener {
   pub void virtual nodesCollapsed (const autoinf::Multiverse &multiverse) override;
   pub void virtual loaded (const autoinf::Multiverse &multiverse) override;
 
-  pub Value getMaxScoreValue () const;
+  pub Value getMaxScoreValue (const autoinf::Multiverse &multiverse) const;
   pub const bitset::Bitset &getInterestingChildActionWords (const autoinf::Multiverse &multiverse);
 
   friend class NodeMetricsListener;

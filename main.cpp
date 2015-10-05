@@ -475,7 +475,7 @@ void runVelocityrun (int argc, char **argv, Vm &vm, Multiverse &multiverse, Mult
 
   printf("\"Number of rounds\",\"total time\",\"VM time\",\"max score\",\"node count\"\n");
   auto printStats = [&] (iu roundCount, double tTotal1, double tVm1) {
-    printf("%d,%f,%f,%d,%d\n", static_cast<int>(roundCount), tTotal1 - tTotal0, tVm1 - tVm0, static_cast<int>(view->getMaxScoreValue()), static_cast<int>(view->nodesByIndex.size()));
+    printf("%d,%f,%f,%d,%d\n", static_cast<int>(roundCount), tTotal1 - tTotal0, tVm1 - tVm0, static_cast<int>(view->getMaxScoreValue(multiverse)), static_cast<int>(view->nodesByIndex.size()));
     fflush(stdout);
   };
   printStats(initialRoundCount, getUserTime(), getVmTime());
@@ -491,7 +491,7 @@ void runVelocityrun (int argc, char **argv, Vm &vm, Multiverse &multiverse, Mult
     }
 
     size_t nodesSize0 = view->nodesByIndex.size();
-    Value maxScoreValue0 = view->getMaxScoreValue();
+    Value maxScoreValue0 = view->getMaxScoreValue(multiverse);
     Bitset words0(view->getInterestingChildActionWords(multiverse));
     if (!runCommandLineTemplate(vm, multiverse, roundCommandLineTemplate, round + 1, message)) {
       return;
@@ -521,7 +521,7 @@ void runVelocityrun (int argc, char **argv, Vm &vm, Multiverse &multiverse, Mult
       nullChangeCount = 0;
     }
 
-    Value maxScoreValue1 = view->getMaxScoreValue();
+    Value maxScoreValue1 = view->getMaxScoreValue(multiverse);
     Bitset words1(view->getInterestingChildActionWords(multiverse));
     if (maxScoreValue1 != maxScoreValue0) {
       printf("  max score changed\n");
@@ -882,8 +882,7 @@ const vector<Value> MultiverseMetricsListener::NEW_LOCATION_VISITAGE_MODIFIERS =
 const Value MultiverseMetricsListener::OLD_LOCATION_VISITAGE_MODIFIER = -200;
 
 MultiverseMetricsListener::MultiverseMetricsListener (zword scoreAddr) :
-  scoreAddr(scoreAddr), maxScoreValue(numeric_limits<Value>::min()),
-  interestingChildActionWordsIsDirty(false)
+  scoreAddr(scoreAddr), interestingChildActionWordsIsDirty(false)
 {
 }
 
@@ -900,9 +899,6 @@ void MultiverseMetricsListener::setScoreValue (NodeMetricsListener *listener, co
   const zbyte *m = vm.getDynamicMemory();
   listener->scoreValue = static_cast<make_signed<zword>::type>(static_cast<zword>(static_cast<zword>(m[scoreAddr] << 8) | m[scoreAddr + 1]));
   DW(, "DDDD game score is ",listener->scoreValue);
-  if (listener->scoreValue > maxScoreValue) {
-    maxScoreValue = listener->scoreValue;
-  }
 }
 
 void MultiverseMetricsListener::setVisitageData (NodeMetricsListener *listener, const u8string &output) {
@@ -1135,20 +1131,19 @@ void MultiverseMetricsListener::nodesCollapsed (const Multiverse &multiverse) {
 }
 
 void MultiverseMetricsListener::loaded (const Multiverse &multiverse) {
-  Value maxScoreValue = numeric_limits<Value>::min();
-  for (const Node *node : multiverse) {
-    NodeMetricsListener *listener = static_cast<NodeMetricsListener *>(node->getListener());
-    if (listener->scoreValue > maxScoreValue) {
-      maxScoreValue = listener->scoreValue;
-    }
-  }
-  this->maxScoreValue = maxScoreValue;
-
   interestingChildActionWordsIsDirty = true;
 }
 
-Value MultiverseMetricsListener::getMaxScoreValue () const {
-  DPRE(maxScoreValue != numeric_limits<Value>::min());
+Value MultiverseMetricsListener::getMaxScoreValue (const Multiverse &multiverse) const {
+  Value maxScoreValue = numeric_limits<Value>::min();
+  for (const Node *node : multiverse) {
+    if (node->getState()) {
+      NodeMetricsListener *listener = static_cast<NodeMetricsListener *>(node->getListener());
+      if (listener->scoreValue > maxScoreValue) {
+        maxScoreValue = listener->scoreValue;
+      }
+    }
+  }
   return maxScoreValue;
 }
 
