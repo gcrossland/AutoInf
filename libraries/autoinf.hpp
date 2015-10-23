@@ -20,23 +20,6 @@ extern const core::Version VERSION;
 ----------------------------------------------------------------------------- */
 extern DC();
 
-// XXXX move to core (along with core::hash())
-static size_t hashImpl (const iu8f *i, const iu8f *end) {
-  size_t r = 0;
-  for (; i != end; ++i) {
-    r = 31 * r + *i;
-  }
-  return r;
-}
-
-template<typename _T> class Hasher {
-  pub size_t operator() (const _T &s) const noexcept {
-    return s.hash();
-  }
-};
-
-
-
 // TODO proper checking (in debug mode) output iterator framework
 class FileOutputIterator : public std::iterator<std::output_iterator_tag, void, void, void, void> {
   prv FILE *h;
@@ -197,7 +180,6 @@ class Signature {
 
   prv static const iu8f ESCAPE = 200;
   prv core::string<iu8f> b;
-  prv size_t h;
 
   pub Signature ();
   pub explicit Signature (size_t sizeHint);
@@ -208,8 +190,8 @@ class Signature {
   pub template<typename _InputIterator> explicit Signature (const Deserialiser<_InputIterator> &);
   pub template<typename _Walker> void beWalked (_Walker &w);
 
-  pub size_t hash () const noexcept;
   pub size_t getSizeHint () const noexcept;
+  friend size_t hashSlow (const Signature &o) noexcept;
   friend bool operator== (const Signature &l, const Signature &r) noexcept;
   pub Iterator begin () const;
   pub Iterator end () const;
@@ -370,11 +352,11 @@ class Multiverse {
     prv std::unique_ptr<Listener> listener;
     prv Node *primeParentNode;
     prv bool primeParentNodeInvalid;
-    prv Signature signature;
+    prv core::HashWrapper<Signature> signature;
     prv std::unique_ptr<autofrotz::State> state;
     prv std::vector<std::tuple<ActionId, core::u8string, Node *>> children;
 
-    pub Node (std::unique_ptr<Listener> &&listener, Node *primeParentNode, Signature &&signature, autofrotz::State &&state);
+    pub Node (std::unique_ptr<Listener> &&listener, Node *primeParentNode, core::HashWrapper<Signature> &&signature, autofrotz::State &&state);
     Node (const Node &) = delete;
     Node &operator= (const Node &) = delete;
     Node (Node &&) = delete;
@@ -385,8 +367,8 @@ class Multiverse {
     pub Listener *getListener () const;
     pub Node *getPrimeParentNode () const;
     pub size_t getPrimeParentArcChildIndex () const;
-    pub const Signature &getSignature () const;
-    pub Signature setSignature (Signature &&signature);
+    pub const core::HashWrapper<Signature> &getSignature () const;
+    pub core::HashWrapper<Signature> setSignature (core::HashWrapper<Signature> &&signature);
     pub const autofrotz::State *getState () const;
     pub void clearState ();
     pub size_t getChildrenSize () const;
@@ -409,7 +391,7 @@ class Multiverse {
   };
 
   pub class NodeIterator {
-    prv std::unordered_map<std::reference_wrapper<const Signature>, Node *, Hasher<Signature>>::const_iterator i;
+    prv std::unordered_map<std::reference_wrapper<const core::HashWrapper<Signature>>, Node *>::const_iterator i;
 
     pub NodeIterator ();
     prv NodeIterator (decltype(i) &&i);
@@ -437,7 +419,7 @@ class Multiverse {
   prv bitset::Bitset ignoredBytes;
   prv Rangeset ignoredByteRangeset;
   prv Node *rootNode;
-  prv std::unordered_map<std::reference_wrapper<const Signature>, Node *, Hasher<Signature>> nodes; // XXXX make Node * unique_ptr?
+  prv std::unordered_map<std::reference_wrapper<const core::HashWrapper<Signature>>, Node *> nodes; // XXXX make Node * unique_ptr?
 
   pub Multiverse (
     autofrotz::Vm &r_vm, const core::u8string &initialInput, core::u8string &r_initialOutput,
@@ -470,9 +452,9 @@ class Multiverse {
   pub template<typename _I> void collapseNodes (_I nodesBegin, _I nodesEnd, const autofrotz::Vm &vm);
   prv Node *collapseNode (
     Node *node, const Rangeset &extraIgnoredByteRangeset,
-    std::unordered_map<std::reference_wrapper<const Signature>, Node *, Hasher<Signature>> &r_survivingNodes,
+    std::unordered_map<std::reference_wrapper<const core::HashWrapper<Signature>>, Node *> &r_survivingNodes,
     std::unordered_map<Node *, Node *> &r_nodeCollapseTargets,
-    std::unordered_map<Node *, Signature> &r_survivingNodePrevSignatures
+    std::unordered_map<Node *, core::HashWrapper<Signature>> &r_survivingNodePrevSignatures
   );
   pub void save (const char *pathName, const autofrotz::Vm &vm);
   pub void load (const char *pathName, autofrotz::Vm &r_vm);

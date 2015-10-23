@@ -7,8 +7,6 @@
 #include <utility>
 #include <unordered_set>
 
-#endif
-
 namespace autoinf {
 
 using core::numeric_limits;
@@ -25,6 +23,7 @@ using core::PlainException;
 using std::unique_ptr;
 using std::move;
 using std::ref;
+using std::cref;
 using autofrotz::zbyte;
 using autofrotz::zword;
 using std::deque;
@@ -49,5 +48,9 @@ using core::readIeu;
 using core::readIes;
 using std::unordered_set;
 using std::swap;
+using core::HashWrapper;
+using core::hashed;
 
 }
+
+#endif

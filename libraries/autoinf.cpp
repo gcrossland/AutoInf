@@ -119,22 +119,22 @@ bool operator!= (const FileInputIterator &l, const FileInputIterator &r) noexcep
 constexpr SerialiserBase::id SerialiserBase::NON_ID;
 constexpr SerialiserBase::id SerialiserBase::NULL_ID;
 
-Signature::Signature () : h(0) {
+Signature::Signature () {
 }
 
-Signature::Signature (size_t sizeHint) : b(sizeHint), h(0) {
-}
-
-size_t Signature::hash () const noexcept {
-  return h;
+Signature::Signature (size_t sizeHint) : b(sizeHint) {
 }
 
 size_t Signature::getSizeHint () const noexcept {
   return b.size();
 }
 
+size_t hashSlow (const Signature &o) noexcept {
+  return hashSlow(o.b);
+}
+
 bool operator== (const Signature &l, const Signature &r) noexcept {
-  return l.h == r.h && l.b == r.b;
+  return l.b == r.b;
 }
 
 Signature::Iterator Signature::begin () const {
@@ -191,11 +191,7 @@ void Signature::Writer::appendZeroBytes (iu byteCount) {
 void Signature::Writer::close () {
   flushZeroBytes();
   signature.b.shrink_to_fit();
-
-  const iu8f *i = signature.b.data();
-  signature.h = hashImpl(i, i + signature.b.size());
-
-  DW(, "finished writing sig of hash ", signature.h);
+  DW(, "finished writing sig of hash ", hashSlow(signature));
 }
 
 Signature::Iterator::Iterator () noexcept : i(nullptr), end(nullptr), currentByte(0), zeroByteCount(0) {
@@ -343,7 +339,8 @@ Multiverse::ActionSet::ActionSet (vector<ActionWord> &&words, vector<ActionTempl
   }
   DW(,"words are:"); for (auto &w : this->words) { DW(,"  **",w.c_str(),"**"); }
   this->templates.reserve(dewordingTemplates.size() + otherTemplates.size());
-  for (vector<ActionTemplate> *templates : {&dewordingTemplates, &otherTemplates}) {
+  auto l = {&dewordingTemplates, &otherTemplates};
+  for (vector<ActionTemplate> *templates : l) {
     for (ActionTemplate &templ : *templates) {
       this->templates.push_back(move(templ.segments));
     }
@@ -483,7 +480,7 @@ Multiverse::Rangeset::Rangeset (const Bitset &bitset, iu16 rangesEnd) : vector()
 
 Multiverse::Node *const Multiverse::Node::UNPARENTED = static_cast<Node *>(nullptr) + 1;
 
-Multiverse::Node::Node (unique_ptr<Listener> &&listener, Node *primeParentNode, Signature &&signature, State &&state) :
+Multiverse::Node::Node (unique_ptr<Listener> &&listener, Node *primeParentNode, HashWrapper<Signature> &&signature, State &&state) :
   listener(move(listener)), primeParentNode(primeParentNode), primeParentNodeInvalid(false), signature(move(signature)), state(), children()
 {
   if (!state.isEmpty()) {
@@ -513,12 +510,12 @@ size_t Multiverse::Node::getPrimeParentArcChildIndex () const {
   return 0;
 }
 
-const Signature &Multiverse::Node::getSignature () const {
+const HashWrapper<Signature> &Multiverse::Node::getSignature () const {
   return signature;
 }
 
-Signature Multiverse::Node::setSignature (Signature &&signature) {
-  Signature oldSignature(move(this->signature));
+HashWrapper<Signature> Multiverse::Node::setSignature (HashWrapper<Signature> &&signature) {
+  HashWrapper<Signature> oldSignature(move(this->signature));
   this->signature = move(signature);
   return oldSignature;
 }
@@ -804,7 +801,7 @@ Multiverse::Multiverse (
 
   unique_ptr<Node::Listener> nodeListener(this->listener->createNodeListener());
   this->listener->nodeReached(*this, nodeListener.get(), NON_ID, r_initialOutput, signature, r_vm);
-  unique_ptr<Node> node(new Node(move(nodeListener), nullptr, move(signature), move(state)));
+  unique_ptr<Node> node(new Node(move(nodeListener), nullptr, hashed(move(signature)), move(state)));
   rootNode = node.get();
   nodes.emplace(ref(rootNode->getSignature()), rootNode);
   this->listener->subtreePrimeAncestorsUpdated(*this, rootNode);
@@ -962,9 +959,9 @@ Multiverse::Node *Multiverse::getRoot () const {
 
 Multiverse::Node *Multiverse::collapseNode (
   Node *node, const Rangeset &extraIgnoredByteRangeset,
-  unordered_map<reference_wrapper<const Signature>, Node *, Hasher<Signature>> &r_survivingNodes,
+  unordered_map<reference_wrapper<const HashWrapper<Signature>>, Node *> &r_survivingNodes,
   unordered_map<Node *, Node *> &r_nodeCollapseTargets,
-  unordered_map<Node *, Signature> &r_survivingNodePrevSignatures
+  unordered_map<Node *, HashWrapper<Signature>> &r_survivingNodePrevSignatures
 ) {
   DS();
   DW(, "checking for collapse of node with sig of prev hash ", node->getSignature().hash());
@@ -977,8 +974,8 @@ Multiverse::Node *Multiverse::collapseNode (
     return *v;
   }
 
-  const Signature &prevSignature = node->getSignature();
-  Signature signature = recreateSignature(prevSignature, extraIgnoredByteRangeset);
+  const HashWrapper<Signature> &prevSignature = node->getSignature();
+  HashWrapper<Signature> signature(recreateSignature(prevSignature.get(), extraIgnoredByteRangeset));
   DW(, " this node now has signature ", signature.hash());
 
   auto v1 = find(r_survivingNodes, signature);

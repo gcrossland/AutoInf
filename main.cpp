@@ -32,7 +32,6 @@ using autoinf::Deserialiser;
 using autoinf::FileInputIterator;
 using autofrotz::zword;
 using autofrotz::zbyte;
-using std::hash;
 using autoinf::find;
 using autoinf::contains;
 using std::fill;
@@ -42,6 +41,7 @@ using std::thread;
 using std::future_status;
 using Value = NodeMetricsListener::Value;
 using std::make_signed;
+using core::hash;
 
 /* -----------------------------------------------------------------------------
 ----------------------------------------------------------------------------- */
@@ -887,7 +887,7 @@ MultiverseMetricsListener::MultiverseMetricsListener (zword scoreAddr) :
 }
 
 void MultiverseMetricsListener::nodeReached (const Multiverse &multiverse, Node::Listener *listener_, ActionId parentActionId, const u8string &output, const Signature &signature, const Vm &vm) {
-  DW(, "DDDD created new node with sig of hash ", signature.hash());
+  DW(, "DDDD created new node with sig of hash ", hashSlow(signature));
   NodeMetricsListener *listener = static_cast<NodeMetricsListener *>(listener_);
 
   setScoreValue(listener, vm);
@@ -919,7 +919,7 @@ void MultiverseMetricsListener::setVisitageData (NodeMetricsListener *listener, 
   const char8_t *locationEnd = outI;
   DW(, "DDDD location string is ", u8string(locationBegin, locationEnd).c_str());
 
-  listener->locationHash = autoinf::hashImpl(locationBegin, locationEnd);
+  listener->locationHash = hash(locationBegin, locationEnd);
   DW(, "DDDD location hash is ", listener->locationHash);
   DA(listener->visitageValue == NodeMetricsListener::NON_VALUE);
 }

@@ -506,8 +506,6 @@ template<typename _InputIterator> Signature::Signature (const Deserialiser<_Inpu
 template<typename _Walker> void Signature::beWalked (_Walker &w) {
   DS();
   w.process(b);
-  w.process(h);
-  // TODO validate result
 }
 
 template<typename ..._Ts> Multiverse::ActionTemplate::ActionTemplate (_Ts &&...ts) {
@@ -538,7 +536,14 @@ template<typename _Walker> void Multiverse::Node::beWalked (_Walker &w) {
   DS();
   w.process(listener);
   w.derefAndProcess(primeParentNode);
-  w.process(signature);
+  if (w.isSerialising()) {
+    w.process(const_cast<Signature &>(signature.get()));
+  } else {
+    Signature t;
+    w.process(t);
+    signature = hashed(move(t));
+  }
+  size_t tmp = 0; w.process(tmp); // XXXX temporary dummy member for backwards compat
   w.derefAndProcess(state);
   w.process(children, [] (tuple<ActionId, u8string, Node *> &o, _Walker &w) {
     DS();
@@ -559,10 +564,8 @@ template<typename _F, iff(std::is_convertible<_F, std::function<bool (Multiverse
 }
 
 template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd, Vm &r_vm) {
-  typedef tuple<Node *, ActionId, u8string, Signature, State, unique_ptr<Node::Listener>> result;
   DS();
-
-  deque<result> resultQueue;
+  deque<tuple<Node *, ActionId, u8string, HashWrapper<Signature>, State, unique_ptr<Node::Listener>>> resultQueue;
   mutex resultQueueLock;
   condition_variable resultQueueCondVar;
 
@@ -572,7 +575,7 @@ template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd,
       DS();
       DW(, "adding done result to queue");
       unique_lock<mutex> l(resultQueueLock);
-      resultQueue.emplace_back(nullptr, 0, u8string(), Signature(), State(), nullptr);
+      resultQueue.emplace_back(nullptr, 0, u8string(), HashWrapper<Signature>(), State(), nullptr);
       resultQueueCondVar.notify_one();
       DW(, "done adding done result to queue");
     });
@@ -608,7 +611,7 @@ template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd,
 
         doRestoreAction(r_vm, *parentState);
         doAction(r_vm, input, output, u8("VM died while doing action"));
-        Signature signature = createSignature(r_vm, ignoredByteRangeset);
+        HashWrapper<Signature> signature(createSignature(r_vm, ignoredByteRangeset));
 
         auto dewordingWord = action.getDewordingTarget();
         if (dewordingWord != NON_ID) {
@@ -625,7 +628,7 @@ template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd,
         }
 
         unique_ptr<Node::Listener> nodeListener = listener->createNodeListener();
-        listener->nodeReached(*this, nodeListener.get(), id, output, signature, r_vm);
+        listener->nodeReached(*this, nodeListener.get(), id, output, signature.get(), r_vm);
 
         DW(, "output from the action is **", output.c_str(), "**");
         try {
@@ -658,7 +661,7 @@ template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd,
       return !resultQueue.empty();
     });
     DW(, "M getting the next result:");
-    result rs = move(resultQueue.front());
+    auto rs = move(resultQueue.front());
     resultQueue.pop_front();
     l.unlock();
 
@@ -675,14 +678,14 @@ template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd,
     DW(, "M the result is a child for the node with sig of hash ", parentNode->getSignature().hash());
     ActionId parentActionId = get<1>(rs);
     u8string &resultOutput = get<2>(rs);
-    Signature &resultSignature = get<3>(rs);
+    HashWrapper<Signature> &resultSignature = get<3>(rs);
     State &resultState = get<4>(rs);
     unique_ptr<Node::Listener> &resultListener = get<5>(rs);
     DW(, "M the child is for the action of id ",parentActionId,"; the sig is of hash ", resultSignature.hash());
     DA(!(resultSignature == parentNode->getSignature()));
 
     Node *resultNode;
-    auto v = find(nodes, resultSignature);
+    auto v = find(nodes, cref(resultSignature));
     if (!v) {
       DW(, "M this is a new node for this multiverse!");
       unique_ptr<Node> n(new Node(move(resultListener), Node::UNPARENTED, move(resultSignature), move(resultState)));
@@ -747,12 +750,12 @@ template<typename _I> void Multiverse::collapseNodes (_I nodesBegin, _I nodesEnd
 
   Node *firstNode = *(nodesBegin++);
   DW(, "first node has sig of hash", firstNode->getSignature().hash());
-  const Signature &firstSignature = firstNode->getSignature();
+  const Signature &firstSignature = firstNode->getSignature().get();
   vector<Signature::Iterator> otherSignatureIs;
   for (; nodesBegin != nodesEnd; ++nodesBegin) {
     Node *node = *nodesBegin;
     DW(, "other node has sig of hash", node->getSignature().hash());
-    otherSignatureIs.emplace_back(node->getSignature().begin());
+    otherSignatureIs.emplace_back(node->getSignature().get().begin());
   }
   Bitset extraIgnoredBytes = createExtraIgnoredBytes(firstSignature, otherSignatureIs.begin(), otherSignatureIs.end(), vm);
 
@@ -764,7 +767,7 @@ template<typename _I> void Multiverse::collapseNodes (_I nodesBegin, _I nodesEnd
   Rangeset extraIgnoredByteRangeset(extraIgnoredBytes, vm.getDynamicMemorySize());
   decltype(nodes) survivingNodes(nodes.bucket_count());
   unordered_map<Node *, Node *> nodeCollapseTargets(nodes.bucket_count());
-  unordered_map<Node *, Signature> survivingNodePrevSignatures(nodes.bucket_count());
+  unordered_map<Node *, HashWrapper<Signature>> survivingNodePrevSignatures(nodes.bucket_count());
   // XXXX should have an obj per surviving node to hold this + the child undo data i.e. 'surviving node undo object'
 
   Node *t = collapseNode(rootNode, extraIgnoredByteRangeset, survivingNodes, nodeCollapseTargets, survivingNodePrevSignatures);
