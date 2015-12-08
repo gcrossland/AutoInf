@@ -1,9 +1,10 @@
 #include "autoinf.hpp"
+
+LIB_DEPENDENCIES
+
 #include "autoinf.using"
 
 namespace autoinf {
-
-const core::Version VERSION{LIB_MAJ, LIB_MIN}; DEPENDENCIES;
 
 /* -----------------------------------------------------------------------------
 ----------------------------------------------------------------------------- */
