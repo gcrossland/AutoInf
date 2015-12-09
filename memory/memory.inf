@@ -1,0 +1,169 @@
+global index;
+
+array t0->2846;
+
+constant SIZE 32;
+array z->SIZE;
+
+constant INCOUNT 32;
+array input->(INCOUNT+3);
+
+[ Main
+  l;
+
+  parse_hex_init();
+  for (l=0:l<SIZE:l++)
+  {
+    z->l=0;
+  }
+
+  print "z at ",z,"^";
+
+  input->0=INCOUNT;
+  index=0;
+  while (true)
+  {
+    report();
+
+    input->1=0;
+    @aread input 0 -> l;
+
+    if (input->1>0)
+    {
+      switch (input->2)
+      {
+      'q':
+        return;
+      'i':
+        l=parse_hex(input+3,input->1-1);
+        if (l<SIZE)
+        {
+          index=l;
+        }
+        else
+        {
+          print "Index out of bounds^";
+        }
+      'b':
+        z->index=parse_hex(input+3,input->1-1);
+      'w':
+        (z+index)-->0=parse_hex(input+3,input->1-1);
+      'm':
+        l=parse_hex(input+3,input->1-1);
+        (z+index)->1=l & $FF;
+        @log_shift l 0-8 -> l;
+        (z+index)->0=l;
+      's':
+        @save -> l;
+        switch (l)
+        {
+        0:
+          print "Save failed^";
+        1:
+          print "Save succeeded^";
+        2:
+          print "Restore succeeded^";
+        }
+      'r':
+        @restore -> l;
+        print "Restore failed^";
+      }
+    }
+  }
+];
+
+[ report
+  l;
+
+  for (l=0:l<(SIZE/2):l++)
+  {
+    print " ",(print_whex) z-->l;
+  }
+  print "^";
+];
+
+
+
+array parse_hex_digits->256;
+
+[ parse_hex_init
+  l;
+
+  for (l=0:l<256:l++)
+  {
+    parse_hex_digits->l=255;
+  }
+  parse_hex_digits->'0'=0;
+  parse_hex_digits->'1'=1;
+  parse_hex_digits->'2'=2;
+  parse_hex_digits->'3'=3;
+  parse_hex_digits->'4'=4;
+  parse_hex_digits->'5'=5;
+  parse_hex_digits->'6'=6;
+  parse_hex_digits->'7'=7;
+  parse_hex_digits->'8'=8;
+  parse_hex_digits->'9'=9;
+  parse_hex_digits->'a'=10;
+  parse_hex_digits->'b'=11;
+  parse_hex_digits->'c'=12;
+  parse_hex_digits->'d'=13;
+  parse_hex_digits->'e'=14;
+  parse_hex_digits->'f'=15;
+  parse_hex_digits->'A'=10;
+  parse_hex_digits->'B'=11;
+  parse_hex_digits->'C'=12;
+  parse_hex_digits->'D'=13;
+  parse_hex_digits->'E'=14;
+  parse_hex_digits->'F'=15;
+];
+
+[ parse_hex src len
+  val digit;
+
+  val=0;
+  for (:len~=0:len--)
+  {
+    digit=src->0;
+    src++;
+    digit=parse_hex_digits->digit;
+
+    if (digit==255)
+    {
+      return val;
+    }
+
+    @log_shift val 4 -> val;
+    val=val+digit;
+  }
+
+  return val;
+];
+
+
+
+array print_hex_digits->"0123456789ABCDEF";
+
+[ print_hex value nibbles
+  loop digit;
+
+  for (loop=0:loop<nibbles:loop++)
+  {
+    digit=value & $F;
+    @push digit;
+    @log_shift value 0-4 value;
+  }
+
+  for (loop=0:loop<nibbles:loop++)
+  {
+    @pull digit;
+    print (char) (print_hex_digits->digit);
+  }
+];
+
+[ print_whex value;
+  print_hex(value,4);
+];
+
+[ print_bhex value;
+  print_hex(value,2);
+];

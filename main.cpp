@@ -65,7 +65,7 @@ int main (int argc, char *argv[]) {
     const u8string saveActionInput(u8("save\n\1\n"));
     const u8string restoreActionInput(u8("restore\n\1\n"));
     u8string output;
-    Vm vm("104/104.z5", 70, height, undoDepth, true, output);
+    Vm vm("testgame/testgame.z5", 70, height, undoDepth, true, output);
     Multiverse multiverse(
       vm, u8("verbose\nfullscore\n"), output,
       [&saveActionInput] (Vm &r_vm) -> bool {

@@ -1,0 +1,261 @@
+Constant Story "TEST GAME";
+Constant Headline "^A Small Interactive State Space^
+Copyright Geoff Crossland 2006^";
+
+Constant TASKS_PROVIDED;
+Constant NUMBER_TASKS=3;
+Constant MAX_SCORE=15;
+Array task_scores -> 5 5 5;
+
+[ PrintTaskname no;
+  switch (no)
+  {
+  0:
+    "opening the hatch";
+  1:
+    "consuming the red sphere";
+  2:
+    "consuming the blue sphere";
+  }
+];
+
+Include "Parser";
+Include "VerbLib";
+
+[ Initialise;
+  location=MainRoom;
+  "^^^~See how many paths there are through my little universe,~
+  the voice echoed...^";
+];
+
+!  -------------------------------------------------------------------
+!  The main room
+!  -------------------------------------------------------------------
+Object MainRoom "Main Room"
+with description
+  "This dull location is enlivened only by the exits to the east and
+  west and the domed hatch at your feet.",
+with e_to
+  RedDoor,
+with w_to
+  BlueDoor,
+has light;
+
+Object -> domedhatch "domed hatch"
+with name
+  'dome' 'domed' 'hatch',
+with description
+  "The metal dome fixed to the ground, with a wheel handle on top,
+  looks akin to a watertight submarine hatch.",
+with add_to_scope domedhatch_wheelhandle,
+with after
+  [;
+    Open:
+      if (self hasnt general)
+      {
+        give self general;
+        give RedDoor open;
+        give BlueDoor open;
+        Achieved(0);
+      }
+      return false;
+  ],
+has scenery static container openable locked;
+
+Object -> domedhatch_wheelhandle "wheel handle"
+with name
+  'wheel' 'handle',
+with description
+  "You could probably turn it without mechanical help.",
+with before
+  [;
+    Pull:
+      <<Open domedhatch>>;
+    Turn:
+      if (domedhatch has open)
+      {
+        "There's no point in locking the hatch when its open.";
+      }
+      print "With some effort, you twist the wheel ";
+      if (domedhatch has locked)
+      {
+        print "anti-";
+        give domedhatch ~locked;
+      }
+      else
+      {
+        give domedhatch locked;
+      }
+      "clockwise.";
+  ],
+has scenery static;
+
+Object redsphere "red sphere" domedhatch
+with name
+  'red' 'sphere',
+with description
+  "It seems composed from one single mass and glows faintly red.",
+with before
+  [;
+    Touch:
+      "It feels slightly warm to the touch.";
+  ],
+with after
+  [;
+    Take:
+      <<Touch self>>;
+    Drop:
+      if (real_location==RedRoom)
+      {
+        give self general;
+        remove self;
+        Achieved(1);
+        print "As the sphere hits the ground, it is swallowed in a
+              brief crimson flame and disappears.^";
+        if (bluesphere has general)
+        {
+          exittunnel.openexit();
+        }
+        return true;
+      }
+  ];
+
+Object bluesphere "blue sphere" domedhatch
+with name
+  'blue' 'sphere',
+with description
+  "It is a translucent crystal, pale blue in the light.",
+with before
+  [;
+    Touch:
+      "There is a distant cold about it.";
+  ],
+with after
+  [;
+    Take:
+      <<Touch self>>;
+    Drop:
+      if (real_location==BlueRoom)
+      {
+        give self general;
+        remove self;
+        Achieved(2);
+        print "The sphere melts quickly, the water seeming to seep
+              through the floor.^";
+        if (redsphere has general)
+        {
+          exittunnel.openexit();
+        }
+        return true;
+      }
+  ];
+
+!  -------------------------------------------------------------------
+!  The east, red room
+!  -------------------------------------------------------------------
+Object RedDoor "East Door"
+with name
+  'east' 'door' 'red',
+description
+  "There is no handle on the east door, sugesting that it is operated
+  automatically, though no controls are present. The frame is red.",
+with when_closed
+  "A door would lead east, were it open.",
+with when_open
+  "A door leads to the east room.",
+with found_in
+  MainRoom RedRoom,
+with door_to
+  [;
+    if (self in MainRoom)
+    {
+      return RedRoom;
+    }
+    return MainRoom;
+  ],
+with door_dir
+  [;
+    if (self in MainRoom)
+    {
+      return e_to;
+    }
+    return w_to;
+  ],
+has static door;
+
+Object RedRoom "East Room"
+with description
+  "This is no more interesting than the main room, though the floor
+  here is covered in a diagonal red hatch pattern.",
+with w_to
+  RedDoor,
+has light;
+
+!  -------------------------------------------------------------------
+!  The west, blue room
+!  -------------------------------------------------------------------
+Object BlueDoor "West Door"
+with name
+  'west' 'door' 'blue',
+description
+  "There is no handle on the west door, sugesting that it is operated
+  automatically, though no controls are present. The frame is blue.",
+with when_closed
+  "A door would lead west, were it open.",
+with when_open
+  "A door leads to the west room.",
+with found_in
+  MainRoom BlueRoom,
+with door_to
+  [;
+    if (self in MainRoom)
+    {
+      return BlueRoom;
+    }
+    return MainRoom;
+  ],
+with door_dir
+  [;
+    if (self in MainRoom)
+    {
+      return w_to;
+    }
+    return e_to;
+  ],
+has static door;
+
+Object BlueRoom "West Room"
+with description
+  "This is another sparse room, decorated only by the blue swirling
+  pattern on the floor.",
+with e_to
+  BlueDoor,
+has light;
+
+!  -------------------------------------------------------------------
+!  The exit
+!  -------------------------------------------------------------------
+Object exittunnel "cylinder of light"
+with name
+  'light' 'cylinder' 'tunnel',
+with initial
+  "A cylinder of light, projected from the ceiling to the floor,
+  bathes the room in a purple glow.",
+with description
+  "The beam of light is quite wide enough for you to stand inside.",
+with openexit
+  [;
+    MainRoom.description="This location has exits to the east and
+                         west and a domed hatch at your feet.";
+    move self to MainRoom;
+    "^A rumbling can be heard from the main room.";
+  ],
+with after
+  [;
+    Enter:
+      deadflag=2;
+      return true;
+  ],
+has static enterable;
+
+Include "Grammar";
