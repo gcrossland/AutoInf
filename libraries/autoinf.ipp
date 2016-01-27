@@ -53,63 +53,71 @@ template<typename _OutputIterator> constexpr bool Serialiser<_OutputIterator>::i
   return true;
 }
 
-template<typename _OutputIterator> void Serialiser<_OutputIterator>::write (iu32 value) {
+template<typename _OutputIterator> void Serialiser<_OutputIterator>::writeIu (iu64 value) {
   DW(, "writing iu value ",value);
   writeIeu(i, value);
 }
 
-template<typename _OutputIterator> void Serialiser<_OutputIterator>::write (is32 value) {
+template<typename _OutputIterator> void Serialiser<_OutputIterator>::writeIs (is64 value) {
   DW(, "writing is value ",value);
   writeIes(i, value);
 }
 
-template<typename _OutputIterator> void Serialiser<_OutputIterator>::write (char8_t value) {
+template<typename _OutputIterator> void Serialiser<_OutputIterator>::writeChar8 (char8_t value) {
   DW(, "writing char8_t value ", u8string(1, value).c_str());
   *(i++) = value;
 }
 
-template<typename _OutputIterator> void Serialiser<_OutputIterator>::write (const char8_t *begin, const char8_t *end) {
+template<typename _OutputIterator> void Serialiser<_OutputIterator>::writeChar8s (const char8_t *begin, const char8_t *end) {
   DW(, "writing char8_t values ", u8string(begin, end).c_str());
   copy(begin, end, i);
 }
 
 template<typename _OutputIterator> void Serialiser<_OutputIterator>::process (bool &r_value) {
-  write(static_cast<iu32>(r_value));
+  writeIu(r_value);
 }
 
 template<typename _OutputIterator> void Serialiser<_OutputIterator>::process (iu8f &r_value) {
-  write(static_cast<iu32>(r_value));
+  writeIu(r_value);
 }
 
 template<typename _OutputIterator> void Serialiser<_OutputIterator>::process (is8f &r_value) {
-  write(static_cast<is32>(r_value));
+  writeIs(r_value);
 }
 
 template<typename _OutputIterator> void Serialiser<_OutputIterator>::process (iu16f &r_value) {
-  write(static_cast<iu32>(r_value));
+  writeIu(r_value);
 }
 
 template<typename _OutputIterator> void Serialiser<_OutputIterator>::process (is16f &r_value) {
-  write(static_cast<is32>(r_value));
+  writeIs(r_value);
 }
 
 template<typename _OutputIterator> void Serialiser<_OutputIterator>::process (iu32f &r_value) {
-  write(static_cast<iu32>(r_value));
+  writeIu(r_value);
 }
 
 template<typename _OutputIterator> void Serialiser<_OutputIterator>::process (is32f &r_value) {
-  write(static_cast<is32>(r_value));
+  writeIs(r_value);
+}
+
+template<typename _OutputIterator> void Serialiser<_OutputIterator>::process (iu64f &r_value) {
+  writeIu(r_value);
+}
+
+template<typename _OutputIterator> void Serialiser<_OutputIterator>::process (is64f &r_value) {
+  writeIs(r_value);
 }
 
 template<typename _OutputIterator> void Serialiser<_OutputIterator>::process (u8string &r_value) {
-  write(r_value.size());
-  write(r_value.data(), r_value.data() + r_value.size());
+  writeIu(r_value.size());
+  writeChar8s(r_value.data(), r_value.data() + r_value.size());
 }
 
 template<typename _OutputIterator> template<typename _T, typename _WalkingFunctor, iff(
   std::is_convertible<_WalkingFunctor, std::function<void (_T &, Serialiser<_OutputIterator> &)>>::value
 )> void Serialiser<_OutputIterator>::process (vector<_T> &r_value, const _WalkingFunctor &walkElement) {
-  write(r_value.size());
+  writeIu(r_value.size());
   for (_T &e : r_value) {
     walkElement(e, *this);
   }
@@ -118,9 +126,9 @@ template<typename _OutputIterator> template<typename _T, typename _WalkingFuncto
 template<typename _OutputIterator> void Serialiser<_OutputIterator>::process (Bitset &r_value) {
   // TODO pull out
   auto p = reinterpret_cast<string<iu> *>(&r_value);
-  write(p->size());
+  writeIu(p->size());
   for (iu *i = p->data(), *end = i + p->size(); i != end; ++i) {
-    write(*i);
+    writeIu(*i);
   }
 }
 
@@ -161,14 +169,14 @@ template<typename _OutputIterator> template<typename _T, typename _TypeDeduction
     allocations.emplace(allocationStart, tuple<id, void *>(nextId++, static_cast<char *>(allocationStart) + size));
     // TODO check that new entries to the allocations set don't overlap?
 
-    write(NON_ID);
-    write(type);
+    writeIu(NON_ID);
+    writeIu(type);
     walkReferent(o, allocationStart, type, *this);
   } else {
-    write(get<0>(get<1>(*allocationEntry)));
+    writeIu(get<0>(get<1>(*allocationEntry)));
     void *allocationStart = get<0>(*allocationEntry);
     size_t offset = static_cast<size_t>(static_cast<char *>(ptr) - static_cast<char *>(allocationStart));
-    write(offset);
+    writeIu(offset);
   }
 }
 
@@ -188,10 +196,10 @@ template<typename _OutputIterator> template<typename _T> void Serialiser<_Output
     DW(, "added allocation ", nextId, " - nonarray, nonpolymorphic, size ", sizeof(_T));
     allocations.emplace(ptr, tuple<id, void *>(nextId++, static_cast<char *>(ptr) + sizeof(_T)));
 
-    write(NON_ID);
+    writeIu(NON_ID);
     this->process(*o);
   } else {
-    write(get<0>(*allocation));
+    writeIu(get<0>(*allocation));
   }
 }
 
@@ -209,13 +217,13 @@ template<typename _OutputIterator> template<typename _T> void Serialiser<_Output
     DW(, "adding allocation ", nextId, " - array, size ", count, " of ", sizeof(_T));
     allocations.emplace(ptr, tuple<id, void *>(nextId++, static_cast<char *>(ptr) + size));
 
-    write(NON_ID);
-    write(count);
+    writeIu(NON_ID);
+    writeIu(count);
     for (_T *i = o, *end = o + count; i != end; ++i) {
       this->process(*i);
     }
   } else {
-    write(get<0>(*allocation));
+    writeIu(get<0>(*allocation));
   }
 }
 
@@ -243,8 +251,8 @@ template<typename _OutputIterator> template<typename _T, typename _P> void Seria
     allocationId = get<0>(get<1>(*allocationEntry));
     offset = static_cast<size_t>(static_cast<char *>(ptr) - static_cast<char *>(allocationStart));
   }
-  write(allocationId);
-  write(offset);
+  writeIu(allocationId);
+  writeIu(offset);
 }
 
 template<typename _OutputIterator> template<typename _T> void Serialiser<_OutputIterator>::process (_T *&o) {
@@ -326,6 +334,14 @@ template<typename _InputIterator> void Deserialiser<_InputIterator>::process (iu
 
 template<typename _InputIterator> void Deserialiser<_InputIterator>::process (is32f &r_value) {
   r_value = readIs<is32f>();
+}
+
+template<typename _InputIterator> void Deserialiser<_InputIterator>::process (iu64f &r_value) {
+  r_value = readIu<iu64f>();
+}
+
+template<typename _InputIterator> void Deserialiser<_InputIterator>::process (is64f &r_value) {
+  r_value = readIs<is64f>();
 }
 
 template<typename _InputIterator> void Deserialiser<_InputIterator>::process (u8string &r_value) {
