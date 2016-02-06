@@ -388,7 +388,7 @@ int main (int argc, char *argv[]) {
 
     return 0;
   } catch (exception &e) {
-    fprintf(stderr, "Error: %s\n", core::createExceptionMessage(e, false).c_str());
+    fprintf(stderr, "Error: %s\n", narrowise(core::createExceptionMessage(e, false)));
     return 1;
   }
 }
@@ -405,7 +405,7 @@ void runCmd (int argc, char **argv, Vm &vm, Multiverse &multiverse, MultiverseVi
   u8string in;
   while (true) {
     readLine(in);
-    size_t comment = in.find(U'#');
+    size_t comment = in.find(u8("#")[0]);
     if (comment != u8string::npos) {
       in.erase(comment);
     }
@@ -534,7 +534,7 @@ void runVelocityrun (int argc, char **argv, Vm &vm, Multiverse &multiverse, Mult
     if (!words1.empty()) {
       u8string wordList;
       appendWordList(wordList, words1, multiverse);
-      printf("  words added (%s)\n", wordList.c_str());
+      printf("  words added (%s)\n", narrowise(wordList));
       fflush(stdout);
       if (!runCommandLineTemplate(vm, multiverse, wordsChangeCommandLineTemplate, round + 1, message)) {
         return;
@@ -560,7 +560,7 @@ bool runCommandLineTemplate (Vm &r_vm, Multiverse &r_multiverse, const u8string 
   size_t i = 0;
   while (true) {
     size_t i0 = i;
-    i = inTemplate.find(U'%', i);
+    i = inTemplate.find(u8("%")[0], i);
     if (i == u8string::npos) {
       in.append(inTemplate, i0, u8string::npos);
       break;
@@ -605,7 +605,7 @@ bool runCommandLine (Vm &vm, Multiverse &multiverse, const u8string &in, u8strin
 
     if (line == u8("quit")) {
       return false;
-    } else if (line.size() > 1 && (line[0] == U'X' || line[0] == U'x')) {
+    } else if (line.size() > 1 && (line[0] == u8("X")[0] || line[0] == u8("x")[0])) {
       is n = getNaturalNumber(line.data() + 1, line.data() + line.size());
       if (n >= 0) {
         iu times = static_cast<iu>(n);
@@ -624,7 +624,7 @@ bool runCommandLine (Vm &vm, Multiverse &multiverse, const u8string &in, u8strin
       elideAntiselectedNodes = !elideAntiselectedNodes;
     } else if (line == u8("B") || line == u8("b")) {
       maxDepth = numeric_limits<size_t>::max();
-    } else if (line.size() > 2 && (line[0] == U'B' || line[0] == U'b') && line[1] == U'-') {
+    } else if (line.size() > 2 && (line[0] == u8("B")[0] || line[0] == u8("b")[0]) && line[1] == u8("-")[0]) {
       is n = getNaturalNumber(line.data() + 2, line.data() + line.size());
       if (n >= 0) {
         maxDepth = static_cast<iu>(n);
@@ -654,18 +654,18 @@ bool runCommandLine (Vm &vm, Multiverse &multiverse, const u8string &in, u8strin
       }
       selectedNodes = move(nextSelectedNodes);
       view->selectionChanged();
-    } else if (line.size() > 3 && (line[0] == U'V' || line[0] == U'v') && line[1] == U'-') {
+    } else if (line.size() > 3 && (line[0] == u8("V")[0] || line[0] == u8("v")[0]) && line[1] == u8("-")[0]) {
       char8_t valueName = line[2];
       size_t valueIndex;
-      if (valueName >= 'a' && valueName <= 'z' && (valueIndex = static_cast<size_t>(valueName - 'a')) < NodeMetricsListener::VALUE_COUNT) {
+      if (valueName >= u8("a")[0] && valueName <= u8("z")[0] && (valueIndex = static_cast<size_t>(valueName - u8("a")[0])) < NodeMetricsListener::VALUE_COUNT) {
         const char8_t *numBegin = line.data() + 3;
         const char8_t *numEnd = line.data() + line.size();
         bool undershoot = false;
         bool overshootOnEmpty =  false;
-        if (*(numEnd - 1) == U'-') {
+        if (*(numEnd - 1) == u8("-")[0]) {
           --numEnd;
           undershoot = true;
-        } else if (*(numEnd - 1) == U'|') {
+        } else if (*(numEnd - 1) == u8("|")[0]) {
           --numEnd;
           undershoot = true;
           overshootOnEmpty = true;
@@ -752,17 +752,17 @@ bool runCommandLine (Vm &vm, Multiverse &multiverse, const u8string &in, u8strin
         node->clearState();
       }
       view->multiverseChanged(multiverse);
-    } else if (line.size() > 2 && (line[0] == U'E' || line[0] == U'e') && line[1] == U'-') {
+    } else if (line.size() > 2 && (line[0] == u8("E")[0] || line[0] == u8("e")[0]) && line[1] == u8("-")[0]) {
       u8string name(line.data() + 2, line.data() + line.size());
       multiverse.save(reinterpret_cast<const char *>(name.c_str()), vm);
-    } else if (line.size() > 2 && (line[0] == U'O' || line[0] == U'o') && line[1] == U'-') {
+    } else if (line.size() > 2 && (line[0] == u8("O")[0] || line[0] == u8("o")[0]) && line[1] == u8("-")[0]) {
       u8string name(line.data() + 2, line.data() + line.size());
       multiverse.load(reinterpret_cast<const char *>(name.c_str()), vm);
       view->multiverseChanged(multiverse);
     } else {
       const char8_t *numBegin = line.data();
       const char8_t *numEnd = numBegin + line.size();
-      const char8_t *dash = find(numBegin, numEnd, U'-');
+      const char8_t *dash = find(numBegin, numEnd, u8("-")[0]);
 
       const size_t rX = static_cast<size_t>(-1);
       size_t r0 = rX;
@@ -836,7 +836,7 @@ void updateMultiverseDisplay (Multiverse &multiverse, const char *outPathName, c
   }
 
   if (!message.empty()) {
-    printf("%s", message.c_str());
+    printf("%s", narrowise(message));
   }
   printf(
     "%cHide _Dead End Nodes       %cHide A_ntiselected Nodes\n"
@@ -911,7 +911,7 @@ void MultiverseMetricsListener::setVisitageData (NodeMetricsListener *listener, 
       break;
     }
     const char8_t *i = outI + 1;
-    if (i == outEnd || *i == ' ') {
+    if (i == outEnd || *i == u8(" ")[0]) {
       break;
     }
     outI = i;
@@ -919,7 +919,7 @@ void MultiverseMetricsListener::setVisitageData (NodeMetricsListener *listener, 
   const char8_t *locationEnd = outI;
   DW(, "DDDD location string is ", u8string(locationBegin, locationEnd).c_str());
 
-  listener->locationHash = hash(locationBegin, locationEnd);
+  listener->locationHash = hashSlow(u8string(locationBegin, locationEnd));
   DW(, "DDDD location hash is ", listener->locationHash);
   DA(listener->visitageValue == NodeMetricsListener::NON_VALUE);
 }
@@ -1348,9 +1348,9 @@ void MultiverseView::printNodeHeader (
     fprintf(out, "* ");
   }
 
-  fprintf(out, "%c%u%c ", nodeIndexRenderingPrefix, nodeView->index, nodeIndexRenderingSuffix);
+  fprintf(out, "%c%u%c ", narrowise(nodeIndexRenderingPrefix), nodeView->index, narrowise(nodeIndexRenderingSuffix));
 
-  fprintf(out, "%s", renderActionInput(actionId, actionSet).c_str());
+  fprintf(out, "%s", narrowise(renderActionInput(actionId, actionSet)));
   fprintf(out, " [sig of hash &%08X]", node->getSignature().hash());
   fprintf(out, " metric values {");
   for (size_t i = 0; i != NodeView::VALUE_COUNT; ++i) {
@@ -1362,7 +1362,7 @@ void MultiverseView::printNodeHeader (
 u8string MultiverseView::renderActionInput (ActionId actionId, const Multiverse::ActionSet &actionSet) {
   u8string actionInput;
   if (actionId != Multiverse::NON_ID) {
-    actionInput.push_back(U'"');
+    actionInput.push_back(u8("\"")[0]);
     actionSet.get(actionId).getInput(actionInput);
     actionInput.erase(actionInput.size() - 1);
     actionInput.append(u8("\" ->"));
@@ -1377,15 +1377,15 @@ void MultiverseView::printNodeOutput (const u8string *output, const u8string &pr
 
   u8string o(*output);
   char8_t c;
-  while ((c = o.back()) == U'\n' || c == U'>') {
+  while ((c = o.back()) == u8("\n")[0] || c == u8(">")[0]) {
     o.pop_back();
   }
-  o.push_back(U'\n');
+  o.push_back(u8("\n")[0]);
 
   auto lineStart = o.cbegin();
   for (auto i = o.cbegin(), end = o.cend(); i != end; ++i) {
-    if (*i == U'\n') {
-      fprintf(out, "%s  %.*s\n", prefix.c_str(), static_cast<int>(i - lineStart), &*lineStart);
+    if (*i == u8("\n")[0]) {
+      fprintf(out, "%s  %.*s\n", narrowise(prefix), static_cast<int>(i - lineStart), narrowise(&*lineStart));
       lineStart = i + 1;
     }
   }
@@ -1395,7 +1395,7 @@ void MultiverseView::printNodeAsLeaf (
   size_t depth, const u8string *output, Node *node, Node *parentNode, ActionId actionId,
   const Multiverse::ActionSet &actionSet, u8string &r_prefix, FILE *out
 ) {
-  printNodeHeader(U'{', U'}', node, actionId, actionSet, out);
+  printNodeHeader(u8("{")[0], u8("}")[0], node, actionId, actionSet, out);
   fprintf(out, " / (elsewhere)\n");
   printNodeOutput(output, r_prefix, out);
 }
@@ -1404,7 +1404,7 @@ void MultiverseView::printNodeAsNonleaf (
   size_t depth, const u8string *output, Node *node, Node *parentNode, ActionId actionId,
   const Multiverse::ActionSet &actionSet, u8string &r_prefix, FILE *out
 ) {
-  printNodeHeader(U'(', U')', node, actionId, actionSet, out);
+  printNodeHeader(u8("(")[0], u8(")")[0], node, actionId, actionSet, out);
   if (node->getState()) {
     fprintf(out, " / unprocessed\n");
   } else {
@@ -1451,7 +1451,7 @@ void MultiverseView::printNodeAsNonleaf (
     const u8string &childOuput = get<1>(child);
     Node *childNode = get<2>(child);
 
-    fprintf(out, "%s%c-> ", r_prefix.c_str(), last ? '+' : '|');
+    fprintf(out, "%s%c-> ", narrowise(r_prefix), last ? '+' : '|');
     r_prefix.append(last ? u8("    ") : u8("|   "));
     (this->*(fmts[i] == LEAF ? &MultiverseView::printNodeAsLeaf : &MultiverseView::printNodeAsNonleaf))(depth, contains(verboseNodes, childNode) ? &childOuput : nullptr, childNode, node, childActionId, actionSet, r_prefix, out);
     r_prefix.resize(r_prefix.size() - 4);
@@ -1466,10 +1466,10 @@ size_t readLine (char8_t *b, size_t bSize) {
   size_t size = 0;
   for (; b[size] != 0; ++size) {
     if (b[size] >= 128) {
-      b[size] = '?';
+      b[size] = u8("?")[0];
     }
   }
-  if (size > 0 && b[size - 1] == '\n') {
+  if (size > 0 && b[size - 1] == u8("\n")[0]) {
     --size;
   }
   return size;
@@ -1482,12 +1482,12 @@ void readLine (u8string &r_out) {
 }
 
 const char8_t *skipSpaces (const char8_t *i, const char8_t *end) {
-  for (; i != end && *i == ' '; ++i);
+  for (; i != end && *i == u8(" ")[0]; ++i);
   return i;
 }
 
 const char8_t *skipNonSpaces (const char8_t *i, const char8_t *end) {
-  for (; i != end && *i != ' '; ++i);
+  for (; i != end && *i != u8(" ")[0]; ++i);
   return i;
 }
 
@@ -1498,7 +1498,7 @@ is getNaturalNumber (const char8_t *iBegin, const char8_t *iEnd) {
 
   char8_t in[iEnd - iBegin + 1];
   copy(iBegin, iEnd, in);
-  in[iEnd - iBegin] = U'\0';
+  in[iEnd - iBegin] = u8("\0")[0];
 
   const char8_t *inBegin = in;
   const char8_t *inEnd = inBegin + (iEnd - iBegin);
@@ -1509,6 +1509,18 @@ is getNaturalNumber (const char8_t *iBegin, const char8_t *iEnd) {
     return -1;
   }
   return static_cast<is>(number);
+}
+
+char narrowise (char8_t c) {
+  return static_cast<char>(c);
+}
+
+const char *narrowise (const char8_t *s) {
+  return reinterpret_cast<const char *>(s);
+}
+
+const char *narrowise (const u8string &s) {
+  return narrowise(s.c_str());
 }
 
 /* -----------------------------------------------------------------------------

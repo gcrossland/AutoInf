@@ -63,13 +63,11 @@ template<typename _OutputIterator> void Serialiser<_OutputIterator>::writeIs (is
   writeIes(i, value);
 }
 
-template<typename _OutputIterator> void Serialiser<_OutputIterator>::writeChar8 (char8_t value) {
-  DW(, "writing char8_t value ", u8string(1, value).c_str());
+template<typename _OutputIterator> void Serialiser<_OutputIterator>::writeOctet (iu8f value) {
   *(i++) = value;
 }
 
-template<typename _OutputIterator> void Serialiser<_OutputIterator>::writeChar8s (const char8_t *begin, const char8_t *end) {
-  DW(, "writing char8_t values ", u8string(begin, end).c_str());
+template<typename _OutputIterator> void Serialiser<_OutputIterator>::writeOctets (const iu8f *begin, const iu8f *end) {
   copy(begin, end, i);
 }
 
@@ -109,9 +107,16 @@ template<typename _OutputIterator> void Serialiser<_OutputIterator>::process (is
   writeIs(r_value);
 }
 
-template<typename _OutputIterator> void Serialiser<_OutputIterator>::process (u8string &r_value) {
+template<typename _OutputIterator> void Serialiser<_OutputIterator>::process (string<iu8f> &r_value) {
   writeIu(r_value.size());
-  writeChar8s(r_value.data(), r_value.data() + r_value.size());
+  writeOctets(r_value.data(), r_value.data() + r_value.size());
+}
+
+template<typename _OutputIterator> void Serialiser<_OutputIterator>::process (u8string &r_value) {
+  auto data = reinterpret_cast<const iu8f *>(r_value.data());
+  writeIu(r_value.size());
+  DW(, "writing char8_t values ", r_value.c_str());
+  writeOctets(data, data + r_value.size());
 }
 
 template<typename _OutputIterator> template<typename _T, typename _WalkingFunctor, iff(
@@ -289,23 +294,21 @@ template<typename _InputIterator> template<typename _i> _i Deserialiser<_InputIt
   return value;
 }
 
-template<typename _InputIterator> char8_t Deserialiser<_InputIterator>::readChar8 () {
+template<typename _InputIterator> iu8f Deserialiser<_InputIterator>::readOctet () {
   if (i == end) {
     throw PlainException(u8("input was truncated"));
   }
-  char8_t value = *(i++);
-  DW(, "reading char8_t value ", u8string(1, value).c_str());
+  iu8f value = *(i++);
   return value;
 }
 
-template<typename _InputIterator> void Deserialiser<_InputIterator>::readChar8s (char8_t *begin, size_t size) {
-  for (char8_t *i = begin, *end = i + size; i != end; ++i) {
+template<typename _InputIterator> void Deserialiser<_InputIterator>::readOctets (iu8f *begin, size_t size) {
+  for (iu8f *i = begin, *end = i + size; i != end; ++i) {
     if (this->i == this->end) {
       throw PlainException(u8("input was truncated"));
     }
     *i = *(this->i++);
   }
-  DW(, "reading char8_t values ", u8string(begin, begin + size).c_str());
 }
 
 template<typename _InputIterator> void Deserialiser<_InputIterator>::process (bool &r_value) {
@@ -344,10 +347,17 @@ template<typename _InputIterator> void Deserialiser<_InputIterator>::process (is
   r_value = readIs<is64f>();
 }
 
+template<typename _InputIterator> void Deserialiser<_InputIterator>::process (string<iu8f> &r_value) {
+  size_t size = readIu<size_t>();
+  r_value.resize_any(size);
+  readOctets(r_value.data(), size);
+}
+
 template<typename _InputIterator> void Deserialiser<_InputIterator>::process (u8string &r_value) {
   size_t size = readIu<size_t>();
   r_value.resize_any(size);
-  readChar8s(r_value.data(), size);
+  readOctets(reinterpret_cast<iu8f *>(r_value.data()), size);
+  DW(, "reading char8_t values ", r_value.c_str());
 }
 
 template<typename _InputIterator> template<typename _T, typename _WalkingFunctor, iff(

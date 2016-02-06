@@ -1,7 +1,7 @@
 /** @file */
 /* -----------------------------------------------------------------------------
    AutoInf Core Engine Library
-   © Geoff Crossland 2006, 2013-2015
+   © Geoff Crossland 2006, 2013-2016
 ----------------------------------------------------------------------------- */
 #ifndef AUTOINF_ALREADYINCLUDED
 #define AUTOINF_ALREADYINCLUDED
@@ -76,8 +76,8 @@ template<typename _OutputIterator> class Serialiser : public SerialiserBase {
 
   prv void writeIu (iu64 value);
   prv void writeIs (is64 value);
-  prv void writeChar8 (char8_t value);
-  prv void writeChar8s (const char8_t *begin, const char8_t *end);
+  prv void writeOctet (iu8f value);
+  prv void writeOctets (const iu8f *begin, const iu8f *end);
 
   pub void process (bool &r_value);
   pub void process (iu8f &r_value);
@@ -88,6 +88,7 @@ template<typename _OutputIterator> class Serialiser : public SerialiserBase {
   pub void process (is32f &r_value);
   pub void process (iu64f &r_value);
   pub void process (is64f &r_value);
+  pub void process (core::string<iu8f> &r_value);
   pub void process (core::u8string &r_value);
   // TODO do we really want custom walking code for each vector? surely we should just call process() for each member
   pub template<typename _T, typename _WalkingFunctor, iff(
@@ -135,8 +136,8 @@ template<typename _InputIterator> class Deserialiser : public SerialiserBase {
 
   prv template<typename _i> _i readIu ();
   prv template<typename _i> _i readIs ();
-  prv char8_t readChar8 ();
-  prv void readChar8s (char8_t *begin, size_t size);
+  prv iu8f readOctet ();
+  prv void readOctets (iu8f *begin, size_t size);
 
   pub void process (bool &r_value);
   pub void process (iu8f &r_value);
@@ -147,6 +148,7 @@ template<typename _InputIterator> class Deserialiser : public SerialiserBase {
   pub void process (is32f &r_value);
   pub void process (iu64f &r_value);
   pub void process (is64f &r_value);
+  pub void process (core::string<iu8f> &r_value);
   pub void process (core::u8string &r_value);
   pub template<typename _T, typename _WalkingFunctor, iff(
     std::is_convertible<_WalkingFunctor, std::function<void (_T &, Deserialiser<_InputIterator> &)>>::value

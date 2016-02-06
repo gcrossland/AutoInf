@@ -153,6 +153,9 @@ void readLine (core::u8string &r_out);
 const char8_t *skipSpaces (const char8_t *i, const char8_t *end);
 const char8_t *skipNonSpaces (const char8_t *i, const char8_t *end);
 is getNaturalNumber (const char8_t *iBegin, const char8_t *iEnd);
+char narrowise (char8_t c);
+const char *narrowise (const char8_t *s);
+const char *narrowise (const core::u8string &s);
 
 /* -----------------------------------------------------------------------------
 ----------------------------------------------------------------------------- */
