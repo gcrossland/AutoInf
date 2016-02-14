@@ -30,18 +30,6 @@ template<typename _I> _I operator+ (_I i, size_t o) {
 FileOutputIterator::FileOutputIterator (FILE *h) : h(h) {
 }
 
-FileOutputIterator::FileOutputIterator (FileOutputIterator &&o) : h(o.h) {
-  o.h = nullptr;
-}
-
-FileOutputIterator &FileOutputIterator::operator= (FileOutputIterator &&o) {
-  if (this != &o) {
-    this->h = o.h;
-    o.h = nullptr;
-  }
-  return *this;
-}
-
 FileOutputIterator &FileOutputIterator::operator= (iu8f v) {
   int r = fputc(v, h);
   if (r == EOF) {
@@ -70,19 +58,6 @@ FileInputIterator::FileInputIterator () : h(nullptr), v(42) {
 }
 
 FileInputIterator::FileInputIterator (iu8f v) : h(nullptr), v(v) {
-}
-
-FileInputIterator::FileInputIterator (FileInputIterator &&o) : h(o.h), v(o.v) {
-  o.h = nullptr;
-}
-
-FileInputIterator &FileInputIterator::operator= (FileInputIterator &&o) {
-  if (this != &o) {
-    this->h = o.h;
-    this->v = o.v;
-    o.h = nullptr;
-  }
-  return *this;
 }
 
 void FileInputIterator::advance () {

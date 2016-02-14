@@ -23,10 +23,6 @@ class FileOutputIterator : public std::iterator<std::output_iterator_tag, void, 
   prv FILE *h;
 
   pub explicit FileOutputIterator (FILE *h);
-  pub FileOutputIterator (const FileOutputIterator &) = default;
-  pub FileOutputIterator &operator= (const FileOutputIterator &) = default;
-  pub FileOutputIterator (FileOutputIterator &&o);
-  pub FileOutputIterator &operator= (FileOutputIterator &&o);
 
   pub FileOutputIterator &operator= (iu8f v);
   pub FileOutputIterator &operator* ();
@@ -41,10 +37,6 @@ class FileInputIterator : public std::iterator<std::input_iterator_tag, iu8f, vo
   pub explicit FileInputIterator (FILE *h);
   pub FileInputIterator ();
   prv FileInputIterator (iu8f v);
-  pub FileInputIterator (const FileInputIterator &) = default;
-  pub FileInputIterator &operator= (const FileInputIterator &) = default;
-  pub FileInputIterator (FileInputIterator &&o);
-  pub FileInputIterator &operator= (FileInputIterator &&o);
 
   prv void advance ();
   pub const iu8f &operator* () const noexcept;
@@ -187,10 +179,6 @@ class Signature {
 
   pub Signature ();
   pub explicit Signature (size_t sizeHint);
-  pub Signature (const Signature &) = default;
-  pub Signature &operator= (const Signature &) = default;
-  pub Signature (Signature &&) = default;
-  pub Signature &operator= (Signature &&) = default;
   pub template<typename _InputIterator> explicit Signature (const Deserialiser<_InputIterator> &);
   pub template<typename _Walker> void beWalked (_Walker &w);
 
@@ -227,10 +215,6 @@ class Signature {
 
     pub Iterator () noexcept;
     pub Iterator (const Signature &signature) noexcept;
-    pub Iterator (const Iterator &) = default;
-    pub Iterator &operator= (const Iterator &) = default;
-    pub Iterator (Iterator &&) = default;
-    pub Iterator &operator= (Iterator &&) = default;
 
     prv void advance () noexcept;
     prv void inc () noexcept;
@@ -260,10 +244,6 @@ class Multiverse {
     prv CategorySet categories;
 
     pub ActionWord (core::u8string &&word, CategorySet categories);
-    pub ActionWord (const ActionWord &) = default;
-    pub ActionWord &operator= (const ActionWord &) = default;
-    pub ActionWord (ActionWord &&) = default;
-    pub ActionWord &operator= (ActionWord &&) = default;
 
     friend class ActionSet;
   };
@@ -275,10 +255,6 @@ class Multiverse {
     pub template<typename ..._Ts> ActionTemplate (_Ts &&...ts);
     prv void init (core::u8string &&segment);
     prv template<typename ..._Ts> void init (core::u8string &&segment, ActionWord::CategorySet word, _Ts &&...ts);
-    pub ActionTemplate (const ActionTemplate &) = default;
-    pub ActionTemplate &operator= (const ActionTemplate &) = default;
-    pub ActionTemplate (ActionTemplate &&) = default;
-    pub ActionTemplate &operator= (ActionTemplate &&) = default;
 
     friend class ActionSet;
   };
@@ -302,10 +278,6 @@ class Multiverse {
       const std::vector<ActionWord> &words, const ActionTemplate &templ, Index templateWordI,
       core::string<Index> &r_specs, std::vector<size_t> &r_specBegins, core::string<Index> &r_spec
     );
-    pub ActionSet (const ActionSet &) = default;
-    pub ActionSet &operator= (const ActionSet &) = default;
-    pub ActionSet (ActionSet &&) = default;
-    pub ActionSet &operator= (ActionSet &&) = default;
 
     pub Index getWordsSize () const;
     pub const core::u8string &getWord (Index i) const;
@@ -314,16 +286,12 @@ class Multiverse {
 
     friend class Action;
     pub class Action {
-      prv Action (const ActionSet &actionSet, ActionId id, const Index *specI);
-      pub Action (const Action &) = default;
-      pub Action &operator= (const Action &) = default;
-      pub Action (Action &&) = default;
-      pub Action &operator= (Action &&) = default;
-
       prv const ActionSet &actionSet;
       prv ActionId id;
       prv const std::vector<core::u8string> &segments;
       prv const Index *specWordsBegin;
+
+      prv Action (const ActionSet &actionSet, ActionId id, const Index *specI);
 
       pub ActionId getDewordingTarget () const;
       pub size_t getWordCount () const;
@@ -342,10 +310,6 @@ class Multiverse {
 
   prv class Rangeset : public std::vector<RangesetPart> {
     pub Rangeset (const bitset::Bitset &bitset, iu16 size);
-    pub Rangeset (const Rangeset &) = default;
-    pub Rangeset &operator= (const Rangeset &) = default;
-    pub Rangeset (Rangeset &&) = default;
-    pub Rangeset &operator= (Rangeset &&) = default;
   };
 
   pub class Node {
@@ -390,6 +354,10 @@ class Multiverse {
 
     pub class Listener {
       prt Listener ();
+      Listener (const Listener &) = delete;
+      Listener &operator= (const Listener &) = delete;
+      Listener (Listener &&) = delete;
+      Listener &operator= (Listener &&) = delete;
       pub virtual ~Listener ();
     };
   };
@@ -399,10 +367,6 @@ class Multiverse {
 
     pub NodeIterator ();
     prv NodeIterator (decltype(i) &&i);
-    pub NodeIterator (const NodeIterator &) = default;
-    pub NodeIterator &operator= (const NodeIterator &) = default;
-    pub NodeIterator (NodeIterator &&) = default;
-    pub NodeIterator &operator= (NodeIterator &&) = default;
 
     pub Node *const &operator* () const;
     pub NodeIterator &operator++ ();
@@ -466,6 +430,10 @@ class Multiverse {
 
   pub class Listener {
     prt Listener ();
+    Listener (const Listener &) = delete;
+    Listener &operator= (const Listener &) = delete;
+    Listener (Listener &&) = delete;
+    Listener &operator= (Listener &&) = delete;
     pub virtual ~Listener ();
 
     pub virtual std::tuple<void *, size_t> deduceNodeListenerType (Node::Listener *listener) = 0;

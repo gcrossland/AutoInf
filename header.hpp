@@ -30,10 +30,6 @@ class NodeMetricsListener : public autoinf::Multiverse::Node::Listener {
   prv Value visitageValue;
 
   pub NodeMetricsListener ();
-  NodeMetricsListener (const NodeMetricsListener &) = delete;
-  NodeMetricsListener &operator= (const NodeMetricsListener &) = delete;
-  NodeMetricsListener (NodeMetricsListener &&) = delete;
-  NodeMetricsListener &operator= (NodeMetricsListener &&) = delete;
   pub template<typename _Walker> void beWalked (_Walker &w);
 
   pub Value getValue (size_t i) const;
@@ -53,10 +49,6 @@ class MultiverseMetricsListener : public autoinf::Multiverse::Listener {
   prv bool interestingChildActionWordsIsDirty;
 
   pub MultiverseMetricsListener (autofrotz::zword scoreAddr);
-  MultiverseMetricsListener (const MultiverseMetricsListener &) = delete;
-  MultiverseMetricsListener &operator= (const MultiverseMetricsListener &) = delete;
-  MultiverseMetricsListener (MultiverseMetricsListener &&) = delete;
-  MultiverseMetricsListener &operator= (MultiverseMetricsListener &&) = delete;
 
   pub virtual void nodeReached (const autoinf::Multiverse &multiverse, autoinf::Multiverse::Node::Listener *listener, autoinf::Multiverse::ActionId parentActionId, const core::u8string &output, const autoinf::Signature &signature, const autofrotz::Vm &vm) override;
   prv void setScoreValue (NodeMetricsListener *listener, const autofrotz::Vm &vm);
@@ -69,10 +61,6 @@ class MultiverseMetricsListener : public autoinf::Multiverse::Listener {
     prv Value visitageValue;
 
     pub VisitageChain (size_t locationHash, std::vector<Value>::const_iterator newLocationVisitageModifiersI, Value visitageValue);
-    pub VisitageChain (const VisitageChain &) = default;
-    pub VisitageChain &operator= (const VisitageChain &) = default;
-    pub VisitageChain (VisitageChain &&) = default;
-    pub VisitageChain &operator= (VisitageChain &&) = default;
 
     pub void increment (NodeMetricsListener *listener);
     pub Value getVisitageValue () const;
