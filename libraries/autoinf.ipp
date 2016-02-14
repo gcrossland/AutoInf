@@ -10,15 +10,28 @@ namespace autoinf {
 
 template<typename _F> class Finally {
   prv _F functor;
+  prv bool live;
 
-  pub Finally (_F &&functor) : functor(move(functor)) {
+  pub Finally (_F &&functor) : functor(move(functor)), live(true) {
   }
 
+  Finally (const Finally &) = delete;
+
+  Finally &operator= (const Finally &) = delete;
+
+  pub Finally (Finally &&o) : functor(move(o.functor)), live(o.live) {
+    o.live = false;
+  }
+
+  Finally &operator= (Finally &&) = delete;
+
   pub ~Finally () noexcept {
-    try {
-      functor();
-    } catch (...) {
-      // XXXX
+    if (live) {
+      try {
+        functor();
+      } catch (...) {
+        // XXXX
+      }
     }
   }
 };
