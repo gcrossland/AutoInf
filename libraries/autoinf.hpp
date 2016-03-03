@@ -18,6 +18,41 @@ namespace autoinf {
 ----------------------------------------------------------------------------- */
 extern DC();
 
+// XXXX move out
+#define noexcept_auto(...) noexcept(noexcept(__VA_ARGS__)) { __VA_ARGS__; }
+#define noexcept_auto_return(...) noexcept(noexcept(__VA_ARGS__)) { return __VA_ARGS__; }
+
+template<typename _T, iff(
+  std::is_same<bool, decltype(std::declval<const _T>().operator==(std::declval<const _T>()))>::value
+)> bool operator== (const _T &l, const _T &r) noexcept_auto_return(
+  l.operator==(r)
+);
+template<typename _T, iff(
+  std::is_same<bool, decltype(std::declval<const _T>().operator==(std::declval<const _T>()))>::value
+)> bool operator!= (const _T &l, const _T &r) noexcept_auto_return(
+  !l.operator==(r)
+)
+template<typename _T, iff(
+  std::is_same<bool, decltype(std::declval<const _T>().operator<(std::declval<const _T>()))>::value
+)> bool operator< (const _T &l, const _T &r) noexcept_auto_return(
+  l.operator<(r)
+)
+template<typename _T, iff(
+  std::is_same<bool, decltype(std::declval<const _T>().operator<(std::declval<const _T>()))>::value
+)> bool operator> (const _T &l, const _T &r) noexcept_auto_return(
+  r.operator<(l)
+)
+template<typename _T, iff(
+  std::is_same<bool, decltype(std::declval<const _T>().operator<(std::declval<const _T>()))>::value
+)> bool operator<= (const _T &l, const _T &r) noexcept_auto_return(
+  !r.operator<(l)
+)
+template<typename _T, iff(
+  std::is_same<bool, decltype(std::declval<const _T>().operator<(std::declval<const _T>()))>::value
+)> bool operator>= (const _T &l, const _T &r) noexcept_auto_return(
+  !l.operator<(r)
+)
+
 // TODO proper checking (in debug mode) output iterator framework
 class FileOutputIterator : public std::iterator<std::output_iterator_tag, void, void, void, void> {
   prv FILE *h;
@@ -42,8 +77,7 @@ class FileInputIterator : public std::iterator<std::input_iterator_tag, iu8f, vo
   pub const iu8f &operator* () const noexcept;
   pub FileInputIterator &operator++ ();
   pub FileInputIterator operator++ (int);
-  friend bool operator== (const FileInputIterator &l, const FileInputIterator &r) noexcept;
-  friend bool operator!= (const FileInputIterator &l, const FileInputIterator &r) noexcept;
+  pub bool operator== (const FileInputIterator &r) const noexcept;
 };
 
 class SerialiserBase {
@@ -183,8 +217,8 @@ class Signature {
   pub template<typename _Walker> void beWalked (_Walker &w);
 
   pub size_t getSizeHint () const noexcept;
-  friend size_t hashSlow (const Signature &o) noexcept;
-  friend bool operator== (const Signature &l, const Signature &r) noexcept;
+  pub size_t hashSlow () const noexcept;
+  pub bool operator== (const Signature &r) const noexcept;
   pub Iterator begin () const;
   pub Iterator end () const;
 
@@ -205,30 +239,77 @@ class Signature {
     pub void close ();
   };
 
-  // XXXX non-mutable ForwardIterator
   friend class Iterator;
-  pub class Iterator {
+  pub class Iterator : public std::iterator<std::forward_iterator_tag, iu8f> {
     prv const iu8f *i;
     prv const iu8f *end;
     prv iu8f currentByte;
     prv decltype(Writer::zeroByteCount) zeroByteCount;
 
     pub Iterator () noexcept;
-    pub Iterator (const Signature &signature) noexcept;
+    pub explicit Iterator (const Signature &signature) noexcept;
 
     prv void advance () noexcept;
     prv void inc () noexcept;
     pub const iu8f &operator* () const noexcept;
     pub Iterator &operator++ () noexcept;
     pub Iterator operator++ (int) noexcept;
-    friend bool operator== (const Iterator &l, const Iterator &r) noexcept;
-    friend bool operator!= (const Iterator &l, const Iterator &r) noexcept;
+    pub bool operator== (const Iterator &r) const noexcept;
     pub Iterator &operator+= (size_t r) noexcept;
     friend Iterator operator+ (Iterator l, size_t r) noexcept;
     pub void copy (Writer &r_writer, size_t r);
 
     friend class Writer;
   };
+};
+
+// XXXX move out
+// XXXX just have IteratorRevaluator static interface + have RevaluedIterator use an impl of that (rather than CRTP it)
+// XXXX -> if that were const _T &operator() (_Iterator &r_i), we could use lambdas for local revaluators
+template<
+  typename _Class,
+  typename _T,
+  typename _Iterator,
+  typename _IteratorClass = std::iterator<typename _Iterator::iterator_category, _T, typename _Iterator::difference_type, _T *, _T &>
+> class RevaluedIterator : public _IteratorClass {
+  prv typedef typename _IteratorClass::difference_type Distance;
+  prt _Iterator i;
+
+  prt RevaluedIterator ();
+  prt RevaluedIterator (_Iterator &&i);
+  prt RevaluedIterator (const RevaluedIterator &) = default;
+  prt RevaluedIterator &operator= (const RevaluedIterator &) = default;
+  prt RevaluedIterator (RevaluedIterator &&) = default;
+  prt RevaluedIterator &operator= (RevaluedIterator &&) = default;
+
+  pub bool operator== (const _Class &r) const noexcept_auto_return(
+    i == r.i
+  )
+  pub bool operator< (const _Class &r) const noexcept_auto_return(
+    i < r.i
+  )
+  pub const _T *operator-> () noexcept(noexcept(*(std::declval<_Class>())));
+  pub _Class &operator++ () noexcept(noexcept(++i));
+  pub _Class operator++ (int) noexcept(std::is_nothrow_copy_constructible<_Class>::value && noexcept(++i));
+  pub _Class &operator-- () noexcept(noexcept(--i));
+  pub _Class operator-- (int) noexcept(std::is_nothrow_copy_constructible<_Class>::value && noexcept(--i));
+  pub _Class &operator+= (const Distance &r) noexcept(noexcept(i += r));
+  friend _Class operator+ (_Class l, const Distance &r) noexcept_auto_return(
+    l.i += r,
+    l
+  )
+  friend _Class operator+ (const Distance &l, const _Class &r) noexcept_auto_return(
+    r + l
+  )
+  pub _Class &operator-= (const Distance &r) noexcept(noexcept(i -= r));
+  friend _Class operator- (_Class l, const Distance &r) noexcept_auto_return(
+    l.i -= r,
+    l
+  )
+  friend Distance operator- (const _Class &l, const _Class &r) noexcept_auto_return(
+    l.i - r.i
+  )
+  pub const _T &operator[] (const Distance &r) noexcept(noexcept(*(std::declval<_Class>() + r)));
 };
 
 class Multiverse {
@@ -362,17 +443,11 @@ class Multiverse {
     };
   };
 
-  pub class NodeIterator {
-    prv std::unordered_map<std::reference_wrapper<const core::HashWrapper<Signature>>, Node *>::const_iterator i;
-
+  pub class NodeIterator : public RevaluedIterator<NodeIterator, Node *, std::unordered_map<std::reference_wrapper<const core::HashWrapper<Signature>>, Node *>::const_iterator> {
     pub NodeIterator ();
     prv NodeIterator (decltype(i) &&i);
 
-    pub Node *const &operator* () const;
-    pub NodeIterator &operator++ ();
-    pub NodeIterator operator++ (int);
-    friend bool operator== (const NodeIterator &l, const NodeIterator &r);
-    friend bool operator!= (const NodeIterator &l, const NodeIterator &r);
+    pub Node *const &operator* ();
 
     friend class Multiverse;
   };

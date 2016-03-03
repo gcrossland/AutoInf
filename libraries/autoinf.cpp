@@ -84,12 +84,8 @@ FileInputIterator FileInputIterator::operator++ (int) {
   return v;
 }
 
-bool operator== (const FileInputIterator &l, const FileInputIterator &r) noexcept {
-  return l.h == r.h;
-}
-
-bool operator!= (const FileInputIterator &l, const FileInputIterator &r) noexcept {
-  return !(l == r);
+bool FileInputIterator::operator== (const FileInputIterator &r) const noexcept {
+  return h == r.h;
 }
 
 constexpr SerialiserBase::id SerialiserBase::NON_ID;
@@ -105,12 +101,12 @@ size_t Signature::getSizeHint () const noexcept {
   return b.size();
 }
 
-size_t hashSlow (const Signature &o) noexcept {
-  return hashSlow(o.b);
+size_t Signature::hashSlow () const noexcept {
+  return b.hashSlow();
 }
 
-bool operator== (const Signature &l, const Signature &r) noexcept {
-  return l.b == r.b;
+bool Signature::operator== (const Signature &r) const noexcept {
+  return b == r.b;
 }
 
 Signature::Iterator Signature::begin () const {
@@ -167,7 +163,7 @@ void Signature::Writer::appendZeroBytes (iu byteCount) {
 void Signature::Writer::close () {
   flushZeroBytes();
   signature.b.shrink_to_fit();
-  DW(, "finished writing sig of hash ", hashSlow(signature));
+  DW(, "finished writing sig of hash ", signature.hashSlow());
 }
 
 Signature::Iterator::Iterator () noexcept : i(nullptr), end(nullptr), currentByte(0), zeroByteCount(0) {
@@ -229,12 +225,8 @@ Signature::Iterator Signature::Iterator::operator++ (int) noexcept {
   return v;
 }
 
-bool operator== (const Signature::Iterator &l, const Signature::Iterator &r) noexcept {
-  return l.i == r.i && l.zeroByteCount == r.zeroByteCount;
-}
-
-bool operator!= (const Signature::Iterator &l, const Signature::Iterator &r) noexcept {
-  return !(l == r);
+bool Signature::Iterator::operator== (const Iterator &r) const noexcept {
+  return i == r.i && zeroByteCount == r.zeroByteCount;
 }
 
 Signature::Iterator &Signature::Iterator::operator+= (size_t r) noexcept {
@@ -707,28 +699,11 @@ Multiverse::Node::Listener::~Listener () {
 Multiverse::NodeIterator::NodeIterator () {
 }
 
-Multiverse::NodeIterator::NodeIterator (decltype(i) &&i) : i(move(i)) {
+Multiverse::NodeIterator::NodeIterator (decltype(i) &&i) : RevaluedIterator(move(i)) {
 }
 
-Multiverse::Node *const &Multiverse::NodeIterator::operator* () const {
+Multiverse::Node *const &Multiverse::NodeIterator::operator* () {
   return get<1>(*i);
-}
-
-Multiverse::NodeIterator &Multiverse::NodeIterator::operator++ () {
-  ++i;
-  return *this;
-}
-
-Multiverse::NodeIterator Multiverse::NodeIterator::operator++ (int) {
-  return NodeIterator(i++);
-}
-
-bool operator== (const Multiverse::NodeIterator &l, const Multiverse::NodeIterator &r) {
-  return l.i == r.i;
-}
-
-bool operator!= (const Multiverse::NodeIterator &l, const Multiverse::NodeIterator &r) {
-  return l.i != r.i;
 }
 
 Multiverse::Multiverse (

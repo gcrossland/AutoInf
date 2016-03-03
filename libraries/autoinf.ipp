@@ -547,6 +547,72 @@ template<typename _Walker> void Signature::beWalked (_Walker &w) {
   w.process(b);
 }
 
+template<
+  typename _Class, typename _T, typename _Iterator, typename _IteratorClass
+> RevaluedIterator<_Class, _T, _Iterator, _IteratorClass>::RevaluedIterator () : i() {
+}
+
+template<
+  typename _Class, typename _T, typename _Iterator, typename _IteratorClass
+> RevaluedIterator<_Class, _T, _Iterator, _IteratorClass>::RevaluedIterator (_Iterator &&i) : i(move(i)) {
+}
+
+template<
+  typename _Class, typename _T, typename _Iterator, typename _IteratorClass
+> const _T *RevaluedIterator<_Class, _T, _Iterator, _IteratorClass>::operator-> () noexcept(noexcept(*(std::declval<_Class>()))) {
+  return &(*(*static_cast<const _Class *>(this)));
+}
+
+template<
+  typename _Class, typename _T, typename _Iterator, typename _IteratorClass
+> _Class &RevaluedIterator<_Class, _T, _Iterator, _IteratorClass>::operator++ () noexcept(noexcept(++i)) {
+  ++i;
+  return *static_cast<_Class *>(this);
+}
+
+template<
+  typename _Class, typename _T, typename _Iterator, typename _IteratorClass
+> _Class RevaluedIterator<_Class, _T, _Iterator, _IteratorClass>::operator++ (int) noexcept(std::is_nothrow_copy_constructible<_Class>::value && noexcept(++i)) {
+  _Class o(*static_cast<_Class *>(this));
+  ++i;
+  return o;
+}
+
+template<
+  typename _Class, typename _T, typename _Iterator, typename _IteratorClass
+> _Class &RevaluedIterator<_Class, _T, _Iterator, _IteratorClass>::operator-- () noexcept(noexcept(--i)) {
+  --i;
+  return *static_cast<_Class *>(this);
+}
+
+template<
+  typename _Class, typename _T, typename _Iterator, typename _IteratorClass
+> _Class RevaluedIterator<_Class, _T, _Iterator, _IteratorClass>::operator-- (int) noexcept(std::is_nothrow_copy_constructible<_Class>::value && noexcept(--i)) {
+  _Class o(*static_cast<_Class *>(this));
+  --i;
+  return o;
+}
+
+template<
+  typename _Class, typename _T, typename _Iterator, typename _IteratorClass
+> _Class &RevaluedIterator<_Class, _T, _Iterator, _IteratorClass>::operator+= (const Distance &r) noexcept(noexcept(i += r)) {
+  i += r;
+  return *static_cast<_Class *>(this);
+}
+
+template<
+  typename _Class, typename _T, typename _Iterator, typename _IteratorClass
+> _Class &RevaluedIterator<_Class, _T, _Iterator, _IteratorClass>::operator-= (const Distance &r) noexcept(noexcept(i -= r)) {
+  i -= r;
+  return *static_cast<_Class *>(this);
+}
+
+template<
+  typename _Class, typename _T, typename _Iterator, typename _IteratorClass
+> const _T &RevaluedIterator<_Class, _T, _Iterator, _IteratorClass>::operator[] (const Distance &r) noexcept(noexcept(*(std::declval<_Class>() + r))) {
+  return *(*static_cast<const _Class *>(this) + r);
+}
+
 template<typename ..._Ts> Multiverse::ActionTemplate::ActionTemplate (_Ts &&...ts) {
   DS();
   segments.reserve((sizeof...(_Ts) + 1) / 2);

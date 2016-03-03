@@ -887,7 +887,7 @@ MultiverseMetricsListener::MultiverseMetricsListener (zword scoreAddr) :
 }
 
 void MultiverseMetricsListener::nodeReached (const Multiverse &multiverse, Node::Listener *listener_, ActionId parentActionId, const u8string &output, const Signature &signature, const Vm &vm) {
-  DW(, "DDDD created new node with sig of hash ", hashSlow(signature));
+  DW(, "DDDD created new node with sig of hash ", signature.hashSlow());
   NodeMetricsListener *listener = static_cast<NodeMetricsListener *>(listener_);
 
   setScoreValue(listener, vm);
@@ -919,7 +919,7 @@ void MultiverseMetricsListener::setVisitageData (NodeMetricsListener *listener, 
   const char8_t *locationEnd = outI;
   DW(, "DDDD location string is ", u8string(locationBegin, locationEnd).c_str());
 
-  listener->locationHash = hashSlow(u8string(locationBegin, locationEnd));
+  listener->locationHash = u8string(locationBegin, locationEnd).hashSlow();
   DW(, "DDDD location hash is ", listener->locationHash);
   DA(listener->visitageValue == NodeMetricsListener::NON_VALUE);
 }
@@ -1377,7 +1377,7 @@ void MultiverseView::printNodeOutput (const u8string *output, const u8string &pr
 
   u8string o(*output);
   char8_t c;
-  while ((c = o.back()) == u8("\n")[0] || c == u8(">")[0]) {
+  while (!o.empty() && ((c = o.back()) == u8("\n")[0] || c == u8(">")[0])) {
     o.pop_back();
   }
   o.push_back(u8("\n")[0]);
