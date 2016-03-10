@@ -580,7 +580,8 @@ void appendWordList (u8string &r_o, const Bitset &words, const Multiverse &multi
     if (!first) {
       r_o.append(u8(", "));
     }
-    r_o.append(actionSet.getWord(i));
+    auto word = actionSet.getWord(i);
+    r_o.append(word.begin(), word.end());
     first = false;
   }
 }
@@ -1089,7 +1090,8 @@ template<typename F> unique_ptr<size_t []> MultiverseMetricsListener::getWordSta
   }
   DW(, "DDDD word counts:");
   for (size_t i = 0, end = actionSet.getWordsSize(); i != end; ++i) {
-    DW(, "DDDD   ",actionSet.getWord(i).c_str()," - ",wordCounts[i]);
+    auto word = actionSet.getWord(i);
+    DW(, "DDDD   ",u8string(word.begin(), word.end()).c_str()," - ",wordCounts[i]);
   }
 
   return wordCounts;

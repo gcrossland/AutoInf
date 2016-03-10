@@ -613,6 +613,81 @@ template<
   return *(*static_cast<const _Class *>(this) + r);
 }
 
+template<typename _L> MultiList<_L>::SubList::SubList (Iterator &&begin, Iterator &&end) : b(begin), e(end) {
+}
+
+template<typename _L> typename MultiList<_L>::SubList::Size MultiList<_L>::SubList::size () const noexcept {
+  return static_cast<Size>(e - b);
+}
+
+template<typename _L> typename MultiList<_L>::SubList::Iterator MultiList<_L>::SubList::begin () const noexcept {
+  return b;
+}
+
+template<typename _L> typename MultiList<_L>::SubList::Iterator MultiList<_L>::SubList::end () const noexcept {
+  return e;
+}
+
+template<typename _L> MultiList<_L>::Iterator::Iterator () : RevaluedIterator<Iterator, SubList, vector<size_t>::const_iterator>(), listBegin() {
+}
+
+template<typename _L> MultiList<_L>::Iterator::Iterator (const MultiList<_L> &multiList) : RevaluedIterator<Iterator, SubList, vector<size_t>::const_iterator>(multiList.bounds.cbegin()), listBegin(static_cast<const _L &>(multiList.list).begin()) {
+}
+
+template<typename _L> typename MultiList<_L>::SubList MultiList<_L>::Iterator::operator* () const {
+  return SubList(listBegin + *this->i, listBegin + *(this->i + 1));
+}
+
+template<typename _L> MultiList<_L>::MultiList () {
+  bounds.emplace_back(0);
+}
+
+template<typename _L> template<typename _Walker> void MultiList<_L>::beWalked (_Walker &w) {
+  w.process(list);
+  w.process(bounds, [] (size_t &e, _Walker &w) {
+    w.process(e);
+  });
+}
+
+template<typename _L> size_t MultiList<_L>::size () const noexcept {
+  return bounds.size() - 1;
+}
+
+template<typename _L> typename MultiList<_L>::SubList MultiList<_L>::get (size_t i) const noexcept {
+  DPRE(i < size());
+  typename SubList::Iterator listBegin = static_cast<const _L &>(list).begin();
+  auto boundsI = bounds.begin() + i;
+  return SubList(listBegin + *boundsI, listBegin + *(boundsI + 1));
+}
+
+template<typename _L> typename MultiList<_L>::Iterator MultiList<_L>::begin () const {
+  return Iterator(*this);
+}
+
+template<typename _L> typename MultiList<_L>::Iterator MultiList<_L>::end () const {
+  return begin() + size();
+}
+
+template<typename _L> _L &MultiList<_L>::subList () {
+  return list;
+}
+
+template<typename _L> size_t MultiList<_L>::push () {
+  size_t i = size();
+  DPRE(bounds.back() <= list.size());
+  bounds.emplace_back(list.size());
+  return i;
+}
+
+template<typename _L> void MultiList<_L>::reserve (size_t capacity) {
+  bounds.reserve(capacity);
+}
+
+template<typename _L> _L &MultiList<_L>::compact () {
+  bounds.shrink_to_fit();
+  return list;
+}
+
 template<typename ..._Ts> Multiverse::ActionTemplate::ActionTemplate (_Ts &&...ts) {
   DS();
   segments.reserve((sizeof...(_Ts) + 1) / 2);

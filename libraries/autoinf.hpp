@@ -312,6 +312,47 @@ template<
   pub const _T &operator[] (const Distance &r) noexcept(noexcept(*(std::declval<_Class>() + r)));
 };
 
+// XXXX move out?
+template<typename _L> class MultiList {
+  pub class SubList {
+    pub typedef decltype(std::declval<const _L>().begin()) Iterator;
+    pub typedef decltype(std::declval<const _L>().size()) Size;
+
+    prv Iterator b;
+    prv Iterator e;
+
+    pub SubList (Iterator &&begin, Iterator &&end);
+
+    pub Size size () const noexcept;
+    pub Iterator begin () const noexcept;
+    pub Iterator end () const noexcept;
+  };
+
+  pub class Iterator : public RevaluedIterator<Iterator, SubList, std::vector<size_t>::const_iterator> {
+    prv typename SubList::Iterator listBegin;
+
+    pub Iterator ();
+    pub Iterator (const MultiList<_L> &multiList);
+
+    pub SubList operator* () const;
+  };
+
+  prv _L list;
+  prv std::vector<size_t> bounds;
+
+  pub MultiList ();
+  pub template<typename _Walker> void beWalked (_Walker &w);
+
+  pub size_t size () const noexcept;
+  pub SubList get (size_t i) const noexcept;
+  pub Iterator begin () const;
+  pub Iterator end () const;
+  pub _L &subList ();
+  pub size_t push ();
+  pub void reserve (size_t capacity);
+  pub _L &compact ();
+};
+
 class Multiverse {
   pub typedef iu16f ActionId;
   pub static constexpr ActionId NON_ID = static_cast<ActionId>(-1);
@@ -344,35 +385,34 @@ class Multiverse {
     pub typedef iu8f Index;
     pub class Action;
 
-    prv std::vector<core::u8string> words;
-    prv std::vector<std::vector<core::u8string>> templates;
-    prv Index dewordingTemplateCount;
-    prv core::string<Index> specs;
-    prv std::vector<size_t> specBegins;
+    prv MultiList<core::u8string> words;
+    prv MultiList<MultiList<core::u8string>> templates;
+    prv Index dewordingActionCount;
+    prv MultiList<core::string<Index>> specs;
 
-    pub ActionSet (std::vector<ActionWord> &&words, std::vector<ActionTemplate> &&dewordingTemplates, std::vector<ActionTemplate> &&otherTemplates);
+    pub ActionSet (const std::vector<ActionWord> &words, const std::vector<ActionTemplate> &dewordingTemplates, const std::vector<ActionTemplate> &otherTemplates);
     prv static void init (
       const std::vector<ActionWord> &words, Index nextTemplateI, const std::vector<ActionTemplate> &templates,
-      core::string<Index> &r_specs, std::vector<size_t> &r_specBegins
+      MultiList<core::string<Index>> &specs
     );
     prv static void initImpl (
       const std::vector<ActionWord> &words, const ActionTemplate &templ, Index templateWordI,
-      core::string<Index> &r_specs, std::vector<size_t> &r_specBegins, core::string<Index> &r_spec
+      MultiList<core::string<Index>> &specs, core::string<Index> &r_spec
     );
 
     pub Index getWordsSize () const;
-    pub const core::u8string &getWord (Index i) const;
+    pub MultiList<core::u8string>::SubList getWord (Index i) const;
     pub ActionId getSize () const;
     pub Action get (ActionId id) const;
 
     friend class Action;
     pub class Action {
       prv const ActionSet &actionSet;
-      prv ActionId id;
-      prv const std::vector<core::u8string> &segments;
-      prv const Index *specWordsBegin;
+      prv const MultiList<core::string<Index>>::SubList spec;
+      prv bool dewording;
 
-      prv Action (const ActionSet &actionSet, ActionId id, const Index *specI);
+      prv Action (const ActionSet &actionSet, ActionId id);
+      prv Action (const ActionSet &actionSet, ActionId id, MultiList<core::string<Index>>::SubList &&spec);
 
       pub ActionId getDewordingTarget () const;
       pub size_t getWordCount () const;
@@ -447,7 +487,7 @@ class Multiverse {
     pub NodeIterator ();
     prv NodeIterator (decltype(i) &&i);
 
-    pub Node *const &operator* ();
+    pub Node *const &operator* () const;
 
     friend class Multiverse;
   };
@@ -468,7 +508,7 @@ class Multiverse {
     autofrotz::Vm &r_vm, const core::u8string &initialInput, core::u8string &r_initialOutput,
     std::function<bool (autofrotz::Vm &r_vm)> &&saver, std::function<bool (autofrotz::Vm &r_vm)> &&restorer,
     const std::vector<std::vector<core::u8string>> &equivalentActionInputsSet,
-    std::vector<ActionWord> &&words, std::vector<ActionTemplate> &&dewordingTemplates, std::vector<ActionTemplate> &&otherTemplates,
+    const std::vector<ActionWord> &words, const std::vector<ActionTemplate> &dewordingTemplates, const std::vector<ActionTemplate> &otherTemplates,
     std::function<bool (const autofrotz::Vm &vm, const core::u8string &output)> &&deworder, std::unique_ptr<Listener> &&listener
   );
   prv static bitset::Bitset initIgnoredBytes (const autofrotz::Vm &vm);
