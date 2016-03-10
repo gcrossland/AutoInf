@@ -11,6 +11,7 @@
 #include <unordered_map>
 #include <functional>
 #include <map>
+#include <unordered_set>
 
 namespace autoinf {
 
@@ -353,6 +354,35 @@ template<typename _L> class MultiList {
   pub _L &compact ();
 };
 
+template<typename _c> class StringSet {
+  prv class Key {
+    pub static constexpr size_t PROPOSED = core::numeric_limits<size_t>::max();
+    pub static thread_local MultiList<core::string<_c>> *list;
+    pub static thread_local const _c *proposedBegin;
+    pub static thread_local const _c *proposedEnd;
+
+    pub size_t i;
+
+    pub explicit Key (size_t i);
+
+    pub size_t hashSlow () const noexcept;
+    pub bool operator== (const Key &r) const noexcept;
+  };
+
+  prv MultiList<core::string<_c>> list;
+  prv std::unordered_set<core::HashWrapper<Key>> set;
+
+  pub StringSet ();
+  pub template<typename _Walker> void beWalked (_Walker &w);
+
+  pub size_t size () const noexcept;
+  pub size_t push (const _c *begin, const _c *end);
+  pub typename MultiList<core::string<_c>>::SubList get (size_t i) const noexcept;
+  pub typedef std::vector<size_t> String;
+  pub void createStringByLines (const core::string<_c> &o, String &r_out);
+  pub void rebuildString (const String &o, core::string<_c> &r_out) const;
+};
+
 class Multiverse {
   pub typedef iu16f ActionId;
   pub static constexpr ActionId NON_ID = static_cast<ActionId>(-1);
@@ -443,7 +473,7 @@ class Multiverse {
     prv bool primeParentNodeInvalid;
     prv core::HashWrapper<Signature> signature;
     prv std::unique_ptr<autofrotz::State> state;
-    prv std::vector<std::tuple<ActionId, core::u8string, Node *>> children;
+    prv std::vector<std::tuple<ActionId, StringSet<char8_t>::String, Node *>> children;
 
     pub Node (std::unique_ptr<Listener> &&listener, Node *primeParentNode, core::HashWrapper<Signature> &&signature, autofrotz::State &&state);
     Node (const Node &) = delete;
@@ -461,9 +491,9 @@ class Multiverse {
     pub const autofrotz::State *getState () const;
     pub void clearState ();
     pub size_t getChildrenSize () const;
-    pub const std::tuple<ActionId, core::u8string, Node *> &getChild (size_t i) const;
+    pub const std::tuple<ActionId, StringSet<char8_t>::String, Node *> &getChild (size_t i) const;
     pub size_t getChildIndex (ActionId id) const;
-    pub void addChild (ActionId actionId, core::u8string &&output, Node *node, const Multiverse &multiverse);
+    pub void addChild (ActionId actionId, const core::u8string &output, Node *node, Multiverse &multiverse);
     prv bool updatePrimeParent (Node *newParentNode, bool changedAbove);
     pub void removeChild (size_t i);
     pub void changeChild (size_t i, Node *node);
@@ -501,6 +531,7 @@ class Multiverse {
   prv std::unique_ptr<Listener> listener;
   prv bitset::Bitset ignoredBytes;
   prv Rangeset ignoredByteRangeset;
+  prv StringSet<char8_t> outputLines;
   prv Node *rootNode;
   prv std::unordered_map<std::reference_wrapper<const core::HashWrapper<Signature>>, Node *> nodes; // XXXX make Node * unique_ptr?
 
@@ -520,6 +551,7 @@ class Multiverse {
 
   pub const ActionSet &getActionSet () const;
   pub Listener *getListener () const;
+  pub const StringSet<char8_t> &getOutputLines () const;
   pub static void doAction (autofrotz::Vm &r_vm, core::u8string::const_iterator inputBegin, core::u8string::const_iterator inputEnd, core::u8string &r_output, const char8_t *deathExceptionMsg);
   pub static void doAction (autofrotz::Vm &r_vm, const core::u8string &input, core::u8string &r_output, const char8_t *deathExceptionMsg);
   prv void doSaveAction (autofrotz::Vm &r_vm, autofrotz::State &r_state);

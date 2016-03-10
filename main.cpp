@@ -42,6 +42,7 @@ using std::future_status;
 using Value = NodeMetricsListener::Value;
 using std::make_signed;
 using core::hash;
+using autoinf::StringSet;
 
 /* -----------------------------------------------------------------------------
 ----------------------------------------------------------------------------- */
@@ -1336,12 +1337,12 @@ void MultiverseView::printNodes (const Multiverse &multiverse, FILE *out) {
   markDeadEndAndAntiselectedNodes();
 
   u8string prefix;
-  printNodeAsNonleaf(0, nullptr, multiverse.getRoot(), nullptr, Multiverse::NON_ID, multiverse.getActionSet(), prefix, out);
+  printNodeAsNonleaf(0, nullptr, multiverse.getRoot(), nullptr, Multiverse::NON_ID, multiverse, prefix, out);
 }
 
 void MultiverseView::printNodeHeader (
   char8_t nodeIndexRenderingPrefix, char8_t nodeIndexRenderingSuffix, Node *node, ActionId actionId,
-  const Multiverse::ActionSet &actionSet, FILE *out
+  const Multiverse &multiverse, FILE *out
 ) {
   NodeView *nodeView = static_cast<NodeView *>(node->getListener());
 
@@ -1352,7 +1353,7 @@ void MultiverseView::printNodeHeader (
 
   fprintf(out, "%c%u%c ", narrowise(nodeIndexRenderingPrefix), nodeView->index, narrowise(nodeIndexRenderingSuffix));
 
-  fprintf(out, "%s", narrowise(renderActionInput(actionId, actionSet)));
+  fprintf(out, "%s", narrowise(renderActionInput(actionId, multiverse.getActionSet())));
   fprintf(out, " [sig of hash &%08X]", node->getSignature().hash());
   fprintf(out, " metric values {");
   for (size_t i = 0; i != NodeView::VALUE_COUNT; ++i) {
@@ -1372,12 +1373,13 @@ u8string MultiverseView::renderActionInput (ActionId actionId, const Multiverse:
   return actionInput;
 }
 
-void MultiverseView::printNodeOutput (const u8string *output, const u8string &prefix, FILE *out) {
+void MultiverseView::printNodeOutput (const StringSet<char8_t>::String *output, const Multiverse &multiverse, const u8string &prefix, FILE *out) {
   if (!output) {
     return;
   }
 
-  u8string o(*output);
+  u8string o;
+  multiverse.getOutputLines().rebuildString(*output, o);
   char8_t c;
   while (!o.empty() && ((c = o.back()) == u8("\n")[0] || c == u8(">")[0])) {
     o.pop_back();
@@ -1394,26 +1396,26 @@ void MultiverseView::printNodeOutput (const u8string *output, const u8string &pr
 }
 
 void MultiverseView::printNodeAsLeaf (
-  size_t depth, const u8string *output, Node *node, Node *parentNode, ActionId actionId,
-  const Multiverse::ActionSet &actionSet, u8string &r_prefix, FILE *out
+  size_t depth, const StringSet<char8_t>::String *output, Node *node, Node *parentNode, ActionId actionId,
+  const Multiverse &multiverse, u8string &r_prefix, FILE *out
 ) {
-  printNodeHeader(u8("{")[0], u8("}")[0], node, actionId, actionSet, out);
+  printNodeHeader(u8("{")[0], u8("}")[0], node, actionId, multiverse, out);
   fprintf(out, " / (elsewhere)\n");
-  printNodeOutput(output, r_prefix, out);
+  printNodeOutput(output, multiverse, r_prefix, out);
 }
 
 void MultiverseView::printNodeAsNonleaf (
-  size_t depth, const u8string *output, Node *node, Node *parentNode, ActionId actionId,
-  const Multiverse::ActionSet &actionSet, u8string &r_prefix, FILE *out
+  size_t depth, const StringSet<char8_t>::String *output, Node *node, Node *parentNode, ActionId actionId,
+  const Multiverse &multiverse, u8string &r_prefix, FILE *out
 ) {
-  printNodeHeader(u8("(")[0], u8(")")[0], node, actionId, actionSet, out);
+  printNodeHeader(u8("(")[0], u8(")")[0], node, actionId, multiverse, out);
   if (node->getState()) {
     fprintf(out, " / unprocessed\n");
   } else {
     size_t c = node->getChildrenSize();
     fprintf(out, " / %u %s\n", c, c == 1 ? "child" : "children");
   }
-  printNodeOutput(output, r_prefix, out);
+  printNodeOutput(output, multiverse, r_prefix, out);
 
   DA(depth <= maxDepth);
   if (depth == maxDepth) {
@@ -1450,12 +1452,12 @@ void MultiverseView::printNodeAsNonleaf (
 
     auto &child = node->getChild(i);
     ActionId childActionId = get<0>(child);
-    const u8string &childOuput = get<1>(child);
+    const StringSet<char8_t>::String &childOuput = get<1>(child);
     Node *childNode = get<2>(child);
 
     fprintf(out, "%s%c-> ", narrowise(r_prefix), last ? '+' : '|');
     r_prefix.append(last ? u8("    ") : u8("|   "));
-    (this->*(fmts[i] == LEAF ? &MultiverseView::printNodeAsLeaf : &MultiverseView::printNodeAsNonleaf))(depth, contains(verboseNodes, childNode) ? &childOuput : nullptr, childNode, node, childActionId, actionSet, r_prefix, out);
+    (this->*(fmts[i] == LEAF ? &MultiverseView::printNodeAsLeaf : &MultiverseView::printNodeAsNonleaf))(depth, contains(verboseNodes, childNode) ? &childOuput : nullptr, childNode, node, childActionId, multiverse, r_prefix, out);
     r_prefix.resize(r_prefix.size() - 4);
   }
 }

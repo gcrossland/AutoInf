@@ -123,17 +123,17 @@ class MultiverseView : public MultiverseMetricsListener {
   pub void printNodes (const autoinf::Multiverse &multiverse, FILE *out);
   prv void printNodeHeader (
     char8_t nodeIndexRenderingPrefix, char8_t nodeIndexRenderingSuffix, autoinf::Multiverse::Node *node, autoinf::Multiverse::ActionId actionId,
-    const autoinf::Multiverse::ActionSet &actionSet, FILE *out
+    const autoinf::Multiverse &multiverse, FILE *out
   );
   prv core::u8string renderActionInput (autoinf::Multiverse::ActionId actionId, const autoinf::Multiverse::ActionSet &actionSet);
-  prv void printNodeOutput (const core::u8string *output, const core::u8string &prefix, FILE *out);
+  prv void printNodeOutput (const autoinf::StringSet<char8_t>::String *output, const autoinf::Multiverse &multiverse, const core::u8string &prefix, FILE *out);
   prv void printNodeAsLeaf (
-    size_t depth, const core::u8string *output, autoinf::Multiverse::Node *node, autoinf::Multiverse::Node *parentNode, autoinf::Multiverse::ActionId actionId,
-    const autoinf::Multiverse::ActionSet &actionSet, core::u8string &r_prefix, FILE *out
+    size_t depth, const autoinf::StringSet<char8_t>::String *output, autoinf::Multiverse::Node *node, autoinf::Multiverse::Node *parentNode, autoinf::Multiverse::ActionId actionId,
+    const autoinf::Multiverse &multiverse, core::u8string &r_prefix, FILE *out
   );
   prv void printNodeAsNonleaf (
-    size_t depth, const core::u8string *output, autoinf::Multiverse::Node *node, autoinf::Multiverse::Node *parentNode, autoinf::Multiverse::ActionId actionId,
-    const autoinf::Multiverse::ActionSet &actionSet, core::u8string &r_prefix, FILE *out
+    size_t depth, const autoinf::StringSet<char8_t>::String *output, autoinf::Multiverse::Node *node, autoinf::Multiverse::Node *parentNode, autoinf::Multiverse::ActionId actionId,
+    const autoinf::Multiverse &multiverse, core::u8string &r_prefix, FILE *out
   );
 };
 

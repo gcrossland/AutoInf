@@ -512,25 +512,27 @@ size_t Multiverse::Node::getChildrenSize () const {
   return children.size();
 }
 
-const tuple<Multiverse::ActionId, u8string, Multiverse::Node *> &Multiverse::Node::getChild (size_t i) const {
+const tuple<Multiverse::ActionId, StringSet<char8_t>::String, Multiverse::Node *> &Multiverse::Node::getChild (size_t i) const {
   return children[i];
 }
 
 size_t Multiverse::Node::getChildIndex (ActionId id) const {
-  auto i = lower_bound(children.begin(), children.end(), id, [] (const tuple<ActionId, u8string, Node *> &elmt, const ActionId &target) {
+  auto i = lower_bound(children.begin(), children.end(), id, [] (const tuple<ActionId, StringSet<char8_t>::String, Node *> &elmt, const ActionId &target) {
     return get<0>(elmt) < target;
   });
   return (i == children.end() || get<0>(*i) != id) ? numeric_limits<size_t>::max() : static_cast<size_t>(i - children.begin());
 }
 
-void Multiverse::Node::addChild (ActionId actionId, u8string &&output, Node *node, const Multiverse &multiverse) {
+void Multiverse::Node::addChild (ActionId actionId, const u8string &output, Node *node, Multiverse &multiverse) {
   DW(, "adding to Node with sig of hash ", signature.hash(), " child of action id ", actionId, ":");
   DW(, "  output is **", output.c_str(), "**");
   DW(, "  dest. Node has sig of hash ", node->getSignature().hash());
   DPRE(!!state, "children cannot be added after all have been added");
   DPRE(children.empty() || get<0>(children.back()) < actionId, "children must be added in order of actionId");
 
-  children.emplace_back(actionId, move(output), node);
+  StringSet<char8_t>::String o;
+  multiverse.outputLines.createStringByLines(output, o);
+  children.emplace_back(actionId, move(o), node);
 
   bool primeParentChanged = node->updatePrimeParent(this, false);
   if (primeParentChanged) {
@@ -811,6 +813,10 @@ Multiverse::Listener *Multiverse::getListener () const {
   return listener.get();
 }
 
+const StringSet<char8_t> &Multiverse::getOutputLines () const {
+  return outputLines;
+}
+
 void Multiverse::doAction(Vm &r_vm, u8string::const_iterator inputBegin, u8string::const_iterator inputEnd, u8string &r_output, const char8_t *deathExceptionMsg) {
   DPRE(r_vm.isAlive());
 
@@ -1012,6 +1018,7 @@ void Multiverse::save (const char *pathName, const Vm &vm) {
 
   s.process(*const_cast<Bitset *>(vm.getWordSet()));
   s.process(ignoredBytes);
+  s.process(outputLines);
   s.derefAndProcess(rootNode);
 }
 
@@ -1029,6 +1036,7 @@ void Multiverse::load (const char *pathName, Vm &r_vm) {
 
   ignoredBytes.clear();
   ignoredByteRangeset.clear();
+  outputLines = StringSet<char8_t>();
   rootNode = nullptr;
   for (const auto &e : nodes) {
     delete get<1>(e);
@@ -1050,6 +1058,7 @@ void Multiverse::load (const char *pathName, Vm &r_vm) {
     Bitset wordSet;
     s.process(wordSet);
     s.process(ignoredBytes);
+    s.process(outputLines);
     s.derefAndProcess(rootNode);
 
     ignoredByteRangeset = Rangeset(ignoredBytes, r_vm.getDynamicMemorySize());

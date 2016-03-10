@@ -688,6 +688,128 @@ template<typename _L> _L &MultiList<_L>::compact () {
   return list;
 }
 
+template<typename _c> constexpr size_t StringSet<_c>::Key::PROPOSED;
+template<typename _c> thread_local MultiList<core::string<_c>> *StringSet<_c>::Key::list;
+template<typename _c> thread_local const _c *StringSet<_c>::Key::proposedBegin;
+template<typename _c> thread_local const _c *StringSet<_c>::Key::proposedEnd;
+
+template<typename _c> StringSet<_c>::Key::Key (size_t i) : i(i) {
+}
+
+template<typename _c> size_t StringSet<_c>::Key::hashSlow () const noexcept {
+  DPRE(list != nullptr);
+
+  const _c *begin;
+  const _c *end;
+  if (i == PROPOSED) {
+    DPRE(proposedBegin != nullptr);
+    DPRE(proposedEnd != nullptr);
+    begin = proposedBegin;
+    end = proposedEnd;
+  } else {
+    auto s = list->get(i);
+    begin = &*s.begin();
+    end = &*s.end();
+    DA(end - begin == s.size());
+  }
+
+  return hash(reinterpret_cast<const iu8f *>(begin), reinterpret_cast<const iu8f *>(end));
+}
+
+template<typename _c> bool StringSet<_c>::Key::operator== (const Key &r) const noexcept {
+  DPRE(list != nullptr);
+
+  if (i == r.i) {
+    return true;
+  }
+
+  if (i != PROPOSED && r.i != PROPOSED) {
+    return false;
+  }
+
+  size_t realI = i + r.i - PROPOSED;
+  DA((i == realI && r.i == PROPOSED) || (r.i == realI && i == PROPOSED));
+  DPRE(proposedBegin != nullptr);
+  DPRE(proposedEnd != nullptr);
+  auto s = list->get(realI);
+  return proposedEnd - proposedBegin == s.end() - s.begin() && equal(proposedBegin, proposedEnd, s.begin());
+}
+
+template<typename _c> StringSet<_c>::StringSet () {
+}
+
+template<typename _c> template<typename _Walker> void StringSet<_c>::beWalked (_Walker &w) {
+  w.process(list);
+  if (!w.isSerialising()) {
+    DPRE(Key::list == nullptr);
+    Key::list = &list;
+#ifndef NDEBUG
+    auto _ = finally([] () {
+      Key::list = nullptr;
+    });
+#endif
+
+    DPRE(set.empty());
+    for (size_t i = 0, end = list.size(); i != end; ++i) {
+      set.emplace(i);
+    }
+  }
+}
+
+template<typename _c> size_t StringSet<_c>::size () const noexcept {
+  return list.size();
+}
+
+template<typename _c> size_t StringSet<_c>::push (const _c *begin, const _c *end) {
+  DPRE(Key::list == nullptr);
+  Key::list = &list;
+  Key::proposedBegin = begin;
+  Key::proposedEnd = end;
+#ifndef NDEBUG
+  auto _ = finally([] () {
+    Key::list = nullptr;
+    Key::proposedBegin = nullptr;
+    Key::proposedEnd = nullptr;
+  });
+#endif
+
+  HashWrapper<Key> proposed(Key::PROPOSED);
+
+  auto e = set.find(proposed);
+  if (e != set.end()) {
+    return e->get().i;
+  }
+
+  list.subList().append(begin, end);
+  size_t i = list.push();
+  set.emplace(i);
+  return i;
+}
+
+template<typename _c> typename MultiList<string<_c>>::SubList StringSet<_c>::get (size_t i) const noexcept {
+  return list.get(i);
+}
+
+template<typename _c> void StringSet<_c>::createStringByLines (const string<_c> &o, String &r_out) {
+  auto i = o.data(), end = i + o.size(), lineBegin = i;
+  while (i != end) {
+    if (*(i++) == u8("\n")[0]) {
+      r_out.emplace_back(push(lineBegin, i));
+      lineBegin = i;
+    }
+  }
+  if (lineBegin != end) {
+    r_out.emplace_back(push(lineBegin, end));
+  }
+}
+
+template<typename _c> void StringSet<_c>::rebuildString (const String &o, string<_c> &r_out) const {
+  for (const auto &i : o) {
+    auto s = get(i);
+    r_out.append(s.begin(), s.end());
+  }
+}
+
 template<typename ..._Ts> Multiverse::ActionTemplate::ActionTemplate (_Ts &&...ts) {
   DS();
   segments.reserve((sizeof...(_Ts) + 1) / 2);
@@ -723,12 +845,13 @@ template<typename _Walker> void Multiverse::Node::beWalked (_Walker &w) {
     w.process(t);
     signature = hashed(move(t));
   }
-  size_t tmp = 0; w.process(tmp); // XXXX temporary dummy member for backwards compat
   w.derefAndProcess(state);
-  w.process(children, [] (tuple<ActionId, u8string, Node *> &o, _Walker &w) {
+  w.process(children, [] (tuple<ActionId, StringSet<char8_t>::String, Node *> &o, _Walker &w) {
     DS();
     w.process(get<0>(o));
-    w.process(get<1>(o));
+    w.process(get<1>(o), [] (size_t &e, _Walker &w) {
+      w.process(e);
+    });
     w.derefAndProcess(get<2>(o));
   });
   // TODO validate result
@@ -877,7 +1000,7 @@ template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd,
       resultNode = *v;
       DA(resultSignature == resultNode->getSignature());
     }
-    parentNode->addChild(parentActionId, move(resultOutput), resultNode, *this);
+    parentNode->addChild(parentActionId, resultOutput, resultNode, *this);
   }
 
   dispatcherFuture.get();

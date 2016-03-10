@@ -50,6 +50,8 @@ using std::unordered_set;
 using std::swap;
 using core::HashWrapper;
 using core::hashed;
+using core::hash;
+using std::equal;
 
 }
 
