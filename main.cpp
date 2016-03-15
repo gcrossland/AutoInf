@@ -1379,7 +1379,7 @@ void MultiverseView::printNodeOutput (const StringSet<char8_t>::String *output, 
   }
 
   u8string o;
-  multiverse.getOutputLines().rebuildString(*output, o);
+  multiverse.getOutputStringSet().rebuildString(*output, o);
   char8_t c;
   while (!o.empty() && ((c = o.back()) == u8("\n")[0] || c == u8(">")[0])) {
     o.pop_back();

@@ -458,6 +458,7 @@ Multiverse::Rangeset::Rangeset (const Bitset &bitset, iu16 rangesEnd) : vector()
 }
 
 Multiverse::Node *const Multiverse::Node::UNPARENTED = static_cast<Node *>(nullptr) + 1;
+const u8string Multiverse::Node::OUTPUT_LINE_TERMINATOR = u8("\n\n");
 
 Multiverse::Node::Node (unique_ptr<Listener> &&listener, Node *primeParentNode, HashWrapper<Signature> &&signature, State &&state) :
   listener(move(listener)), primeParentNode(primeParentNode), primeParentNodeInvalid(false), signature(move(signature)), state(), children()
@@ -530,9 +531,11 @@ void Multiverse::Node::addChild (ActionId actionId, const u8string &output, Node
   DPRE(!!state, "children cannot be added after all have been added");
   DPRE(children.empty() || get<0>(children.back()) < actionId, "children must be added in order of actionId");
 
-  StringSet<char8_t>::String o;
-  multiverse.outputLines.createStringByLines(output, o);
-  children.emplace_back(actionId, move(o), node);
+  thread_local StringSet<char8_t>::String o;
+  DA(o.empty());
+  multiverse.outputStringSet.createString(output, OUTPUT_LINE_TERMINATOR, o);
+  children.emplace_back(actionId, o, node);
+  o.clear();
 
   bool primeParentChanged = node->updatePrimeParent(this, false);
   if (primeParentChanged) {
@@ -813,8 +816,8 @@ Multiverse::Listener *Multiverse::getListener () const {
   return listener.get();
 }
 
-const StringSet<char8_t> &Multiverse::getOutputLines () const {
-  return outputLines;
+const StringSet<char8_t> &Multiverse::getOutputStringSet () const {
+  return outputStringSet;
 }
 
 void Multiverse::doAction(Vm &r_vm, u8string::const_iterator inputBegin, u8string::const_iterator inputEnd, u8string &r_output, const char8_t *deathExceptionMsg) {
@@ -1018,7 +1021,7 @@ void Multiverse::save (const char *pathName, const Vm &vm) {
 
   s.process(*const_cast<Bitset *>(vm.getWordSet()));
   s.process(ignoredBytes);
-  s.process(outputLines);
+  s.process(outputStringSet);
   s.derefAndProcess(rootNode);
 }
 
@@ -1036,7 +1039,7 @@ void Multiverse::load (const char *pathName, Vm &r_vm) {
 
   ignoredBytes.clear();
   ignoredByteRangeset.clear();
-  outputLines = StringSet<char8_t>();
+  outputStringSet = StringSet<char8_t>();
   rootNode = nullptr;
   for (const auto &e : nodes) {
     delete get<1>(e);
@@ -1058,7 +1061,7 @@ void Multiverse::load (const char *pathName, Vm &r_vm) {
     Bitset wordSet;
     s.process(wordSet);
     s.process(ignoredBytes);
-    s.process(outputLines);
+    s.process(outputStringSet);
     s.derefAndProcess(rootNode);
 
     ignoredByteRangeset = Rangeset(ignoredBytes, r_vm.getDynamicMemorySize());

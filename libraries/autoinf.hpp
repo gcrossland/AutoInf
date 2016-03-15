@@ -379,7 +379,7 @@ template<typename _c> class StringSet {
   pub size_t push (const _c *begin, const _c *end);
   pub typename MultiList<core::string<_c>>::SubList get (size_t i) const noexcept;
   pub typedef std::vector<size_t> String;
-  pub void createStringByLines (const core::string<_c> &o, String &r_out);
+  pub void createString (const core::string<_c> &o, const core::string<_c> &terminator, String &r_out);
   pub void rebuildString (const String &o, core::string<_c> &r_out) const;
 };
 
@@ -467,6 +467,7 @@ class Multiverse {
     pub class Listener;
 
     pub static Node *const UNPARENTED;
+    prv static const core::u8string OUTPUT_LINE_TERMINATOR;
 
     prv std::unique_ptr<Listener> listener;
     prv Node *primeParentNode;
@@ -531,7 +532,7 @@ class Multiverse {
   prv std::unique_ptr<Listener> listener;
   prv bitset::Bitset ignoredBytes;
   prv Rangeset ignoredByteRangeset;
-  prv StringSet<char8_t> outputLines;
+  prv StringSet<char8_t> outputStringSet;
   prv Node *rootNode;
   prv std::unordered_map<std::reference_wrapper<const core::HashWrapper<Signature>>, Node *> nodes; // XXXX make Node * unique_ptr?
 
@@ -551,7 +552,7 @@ class Multiverse {
 
   pub const ActionSet &getActionSet () const;
   pub Listener *getListener () const;
-  pub const StringSet<char8_t> &getOutputLines () const;
+  pub const StringSet<char8_t> &getOutputStringSet () const;
   pub static void doAction (autofrotz::Vm &r_vm, core::u8string::const_iterator inputBegin, core::u8string::const_iterator inputEnd, core::u8string &r_output, const char8_t *deathExceptionMsg);
   pub static void doAction (autofrotz::Vm &r_vm, const core::u8string &input, core::u8string &r_output, const char8_t *deathExceptionMsg);
   prv void doSaveAction (autofrotz::Vm &r_vm, autofrotz::State &r_state);

@@ -790,16 +790,19 @@ template<typename _c> typename MultiList<string<_c>>::SubList StringSet<_c>::get
   return list.get(i);
 }
 
-template<typename _c> void StringSet<_c>::createStringByLines (const string<_c> &o, String &r_out) {
-  auto i = o.data(), end = i + o.size(), lineBegin = i;
-  while (i != end) {
-    if (*(i++) == u8("\n")[0]) {
-      r_out.emplace_back(push(lineBegin, i));
-      lineBegin = i;
-    }
+template<typename _c> void StringSet<_c>::createString (const string<_c> &o, const string<_c> &terminator, String &r_out) {
+  const _c *data = o.data();
+  typename string<_c>::size_type begin = 0, end;
+
+  while ((end = o.find(terminator, begin)) != string<_c>::npos) {
+    end += terminator.size();
+    r_out.emplace_back(push(data + begin, data + end));
+    begin = end;
   }
-  if (lineBegin != end) {
-    r_out.emplace_back(push(lineBegin, end));
+
+  end = o.size();
+  if (begin != end) {
+    r_out.emplace_back(push(data + begin, data + end));
   }
 }
 
