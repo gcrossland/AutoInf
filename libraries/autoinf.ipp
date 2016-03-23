@@ -974,7 +974,8 @@ template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd,
     Node *parentNode = get<0>(rs);
     if (prevParentNode && parentNode != prevParentNode) {
       prevParentNode->clearState();
-      prevParentNode->childrenUpdated(*this);
+      prevParentNode->childrenUpdated();
+      listener->nodeProcessed(*this, prevParentNode);
     }
     prevParentNode = parentNode;
     if (!parentNode) {

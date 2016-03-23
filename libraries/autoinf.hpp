@@ -498,7 +498,7 @@ class Multiverse {
     prv bool updatePrimeParent (Node *newParentNode, bool changedAbove);
     pub void removeChild (size_t i);
     pub void changeChild (size_t i, Node *node);
-    pub void childrenUpdated (const Multiverse &multiverse);
+    pub void childrenUpdated ();
     pub void invalidatePrimeParent ();
     pub static void rebuildPrimeParents (Multiverse &multiverse);
 
@@ -592,8 +592,9 @@ class Multiverse {
     pub virtual std::unique_ptr<Node::Listener> createNodeListener () = 0;
     pub virtual void nodeReached (const Multiverse &multiverse, Node::Listener *listener, ActionId parentActionId, const core::u8string &output, const Signature &signature, const autofrotz::Vm &vm) = 0;
     pub virtual void subtreePrimeAncestorsUpdated (const Multiverse &multiverse, const Node *node) = 0;
-    pub virtual void nodeChildrenUpdated (const Multiverse &multiverse, const Node *node) = 0;
+    pub virtual void nodeProcessed (const Multiverse &multiverse, const Node *node) = 0;
     pub virtual void nodesProcessed (const Multiverse &multiverse) = 0;
+    pub virtual void nodeCollapsed (const Multiverse &multiverse, const Node *node, bool childrenUpdated) = 0;
     pub virtual void nodesCollapsed (const Multiverse &multiverse) = 0;
     pub virtual void loaded (const Multiverse &multiverse) = 0;
   };

@@ -632,12 +632,10 @@ void Multiverse::Node::changeChild (size_t i, Node *node) {
   get<2>(children[i]) = node;
 }
 
-void Multiverse::Node::childrenUpdated (const Multiverse &multiverse) {
+void Multiverse::Node::childrenUpdated () {
   DW(, "finished updating children (new count ", children.size(), ") on Node with sig of hash ", signature.hash());
   DPRE(!primeParentNodeInvalid);
   children.shrink_to_fit();
-  // DODGY might be part-way through collapsing nodes -> model tree is in some intermediate state (prime parent might be out of date etc.)
-  multiverse.listener->nodeChildrenUpdated(multiverse, this);
 }
 
 void Multiverse::Node::invalidatePrimeParent () {
@@ -984,8 +982,9 @@ Multiverse::Node *Multiverse::collapseNode (
       }
     }
     if (mutated) {
-      node->childrenUpdated(*this);
+      node->childrenUpdated();
     }
+    listener->nodeCollapsed(*this, node, mutated);
     node->invalidatePrimeParent();
 
     return node;

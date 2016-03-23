@@ -1031,7 +1031,7 @@ size_t MultiverseMetricsListener::checkVisitageValueRecursively (const Node *nod
   return c;
 }
 
-void MultiverseMetricsListener::nodeChildrenUpdated (const Multiverse &multiverse, const Node *node) {
+void MultiverseMetricsListener::nodeProcessed (const Multiverse &multiverse, const Node *node) {
   NodeMetricsListener *listener = static_cast<NodeMetricsListener *>(node->getListener());
 
   setWordData(node, listener, multiverse.getActionSet());
@@ -1127,6 +1127,12 @@ void MultiverseMetricsListener::setWordValue (const Node *node, NodeMetricsListe
   DW(, "       final local word value is ", value - r_wordValue);
   DW(, "       (parent word value is ", r_wordValue,")");
   listener->wordValue = r_wordValue = value;
+}
+
+void MultiverseMetricsListener::nodeCollapsed (const Multiverse &multiverse, const Node *node, bool childrenUpdated) {
+  if (childrenUpdated) {
+    nodeProcessed(multiverse, node);
+  }
 }
 
 void MultiverseMetricsListener::nodesCollapsed (const Multiverse &multiverse) {
