@@ -44,6 +44,7 @@ using Value = NodeMetricsListener::Value;
 using std::make_signed;
 using core::hash;
 using autoinf::StringSet;
+using std::deque;
 
 /* -----------------------------------------------------------------------------
 ----------------------------------------------------------------------------- */
@@ -1161,13 +1162,15 @@ void MultiverseMetricsListener::setWordValue (const Node *node, NodeMetricsListe
 }
 
 void MultiverseMetricsListener::setInparaValues (const Node *rootNode) {
-  vector<const Node *> nodes0, nodes1;
-  vector<const Node *> *nodesAtThisDepth = &nodes0, *nodesAtNextDepth = &nodes1;
+  deque<const Node *> nodes;
   Bitset inparasToThisDepth, inparasAtNextDepth;
-  nodesAtThisDepth->emplace_back(rootNode);
+  nodes.emplace_back(rootNode);
   static_cast<NodeMetricsListener *>(rootNode->getListener())->inparaValue = 0;
   do {
-    for (const Node *node : *nodesAtThisDepth) {
+    for (auto c = nodes.size(); c != 0; --c) {
+      const Node *node = nodes.front();
+      nodes.pop_front();
+
       NodeMetricsListener *listener = static_cast<NodeMetricsListener *>(node->getListener());
 
       for (size_t i = 0, end = node->getChildrenSize(); i != end; ++i) {
@@ -1189,15 +1192,15 @@ void MultiverseMetricsListener::setInparaValues (const Node *rootNode) {
           inparasAtNextDepth |= childListener->inparas;
           setInparaValue(childNode, childListener, listener->inparaValue, inparasToThisDepth);
 
-          nodesAtNextDepth->emplace_back(childNode);
+          if (childNode->getChildrenSize() != 0) {
+            nodes.emplace_back(childNode);
+          }
         }
       }
     }
-    nodesAtThisDepth->clear();
-    swap(nodesAtThisDepth, nodesAtNextDepth);
     inparasToThisDepth |= inparasAtNextDepth;
     inparasAtNextDepth.clear();
-  } while (!nodesAtThisDepth->empty());
+  } while (!nodes.empty());
 }
 
 void MultiverseMetricsListener::setInparaValue (const Node *node, NodeMetricsListener *listener, Value parentValue, const Bitset &inparasToThisDepth) {
