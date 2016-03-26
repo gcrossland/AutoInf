@@ -47,8 +47,8 @@ class MultiverseMetricsListener : public autoinf::Multiverse::Listener {
   prv static const std::vector<Value> NEW_LOCATION_VISITAGE_MODIFIERS;
   prv static const Value OLD_LOCATION_VISITAGE_MODIFIER;
 
+  prv static const double PER_TURN_INPARA_SCALE;
   prv static const Value NOVEL_INPARA_MODIFIER;
-  prv static const Value UNNOVEL_INPARA_MODIFIER;
 
   prv const autofrotz::zword scoreAddr;
   prv bitset::Bitset interestingChildActionWords;

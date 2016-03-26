@@ -45,6 +45,7 @@ using std::make_signed;
 using core::hash;
 using autoinf::StringSet;
 using std::deque;
+using std::max;
 
 /* -----------------------------------------------------------------------------
 ----------------------------------------------------------------------------- */
@@ -894,8 +895,8 @@ const Value MultiverseMetricsListener::PER_TURN_VISITAGE_MODIFIER = -0;
 const vector<Value> MultiverseMetricsListener::NEW_LOCATION_VISITAGE_MODIFIERS = {20, 13, 8, 5};
 const Value MultiverseMetricsListener::OLD_LOCATION_VISITAGE_MODIFIER = -200;
 
-const Value MultiverseMetricsListener::NOVEL_INPARA_MODIFIER = 10;
-const Value MultiverseMetricsListener::UNNOVEL_INPARA_MODIFIER = -2;
+const double MultiverseMetricsListener::PER_TURN_INPARA_SCALE = 0.66;
+const Value MultiverseMetricsListener::NOVEL_INPARA_MODIFIER = 100;
 
 MultiverseMetricsListener::MultiverseMetricsListener (zword scoreAddr) :
   scoreAddr(scoreAddr), interestingChildActionWordsIsDirty(false)
@@ -1209,7 +1210,7 @@ void MultiverseMetricsListener::setInparaValue (const Node *node, NodeMetricsLis
   t.andNot(inparasToThisDepth);
   bool novel = !t.empty();
   DA(parentValue != NodeMetricsListener::NON_VALUE);
-  listener->inparaValue = parentValue + (novel ? NOVEL_INPARA_MODIFIER : UNNOVEL_INPARA_MODIFIER);
+  listener->inparaValue = static_cast<Value>(parentValue * PER_TURN_INPARA_SCALE) + (novel ? NOVEL_INPARA_MODIFIER : 0);
 }
 
 void MultiverseMetricsListener::nodeCollapsed (const Multiverse &multiverse, const Node *node, bool childrenUpdated) {
