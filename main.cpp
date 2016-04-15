@@ -989,7 +989,7 @@ MultiverseMetricsListener::VisitageChain MultiverseMetricsListener::getVisitageC
     return VisitageChain(numeric_limits<size_t>::max(), NEW_LOCATION_VISITAGE_MODIFIERS.begin(), 0);
   }
 
-  DW(, "DDDD   looking at node with sig of hash ",node->getSignature().hash());
+  DW(, "DDDD   looking at node with sig of hash ",node->getSignature().hashFast());
   NodeMetricsListener *listener = static_cast<NodeMetricsListener *>(node->getListener());
 
   VisitageChain r = getVisitageChain(node->getPrimeParentNode());
@@ -1148,7 +1148,7 @@ void MultiverseMetricsListener::setWordValueRecursively (const Node *node, NodeM
 
 void MultiverseMetricsListener::setWordValue (const Node *node, NodeMetricsListener *listener, size_t nodesSize, const size_t *stats, Value &r_wordValue) {
   DA(listener->wordValue == NodeMetricsListener::NON_VALUE);
-  DW(, "DDDD calculating node word value for node with sig of hash ", node->getSignature().hash());
+  DW(, "DDDD calculating node word value for node with sig of hash ", node->getSignature().hashFast());
   DA((!node->getPrimeParentNode() && r_wordValue == 0) || r_wordValue == static_cast<NodeMetricsListener *>(node->getPrimeParentNode()->getListener())->wordValue);
 
   Value value = r_wordValue;
@@ -1353,7 +1353,7 @@ void MultiverseView::studyNodes (const Multiverse &multiverse) {
 
 void MultiverseView::studyNode (Node *node, Node *primeParentNode, ActionId childIndex) {
   DS();
-  DW(, "looking at node with sig of hash ",node->getSignature().hash());
+  DW(, "looking at node with sig of hash ",node->getSignature().hashFast());
   NodeView *nodeView = static_cast<NodeView *>(node->getListener());
 
   DA(!primeParentNode || (node->getPrimeParentNode() == primeParentNode && node->getPrimeParentArcChildIndex() == childIndex) == (nodeView->index == NodeView::NON_INDEX));
@@ -1455,7 +1455,7 @@ void MultiverseView::printNodeHeader (
   fprintf(out, "%c%u%c ", narrowise(nodeIndexRenderingPrefix), nodeView->index, narrowise(nodeIndexRenderingSuffix));
 
   fprintf(out, "%s", narrowise(renderActionInput(actionId, multiverse.getActionSet())));
-  fprintf(out, " [sig of hash &%08X]", node->getSignature().hash());
+  fprintf(out, " [sig of hash &%08X]", node->getSignature().hashFast());
   fprintf(out, " metric values {");
   for (size_t i = 0; i != NodeView::VALUE_COUNT; ++i) {
     fprintf(out, "%s%d", i == 0 ? "" : ", ", nodeView->getValue(i));

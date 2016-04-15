@@ -466,7 +466,7 @@ Multiverse::Node::Node (unique_ptr<Listener> &&listener, Node *primeParentNode, 
   if (!state.isEmpty()) {
     this->state.reset(new State(move(state)));
   }
-  DW(, "created new Node with sig of hash ", this->signature.hash());
+  DW(, "created new Node with sig of hash ", this->signature.hashFast());
 }
 
 Multiverse::Node::Listener *Multiverse::Node::getListener () const {
@@ -505,7 +505,7 @@ const State *Multiverse::Node::getState () const {
 }
 
 void Multiverse::Node::clearState () {
-  DW(, "done with trying to process Node with sig of hash ", signature.hash());
+  DW(, "done with trying to process Node with sig of hash ", signature.hashFast());
   state.reset();
 }
 
@@ -525,9 +525,9 @@ size_t Multiverse::Node::getChildIndex (ActionId id) const {
 }
 
 void Multiverse::Node::addChild (ActionId actionId, const u8string &output, Node *node, Multiverse &multiverse) {
-  DW(, "adding to Node with sig of hash ", signature.hash(), " child of action id ", actionId, ":");
+  DW(, "adding to Node with sig of hash ", signature.hashFast(), " child of action id ", actionId, ":");
   DW(, "  output is **", output.c_str(), "**");
-  DW(, "  dest. Node has sig of hash ", node->getSignature().hash());
+  DW(, "  dest. Node has sig of hash ", node->getSignature().hashFast());
   DPRE(!!state, "children cannot be added after all have been added");
   DPRE(children.empty() || get<0>(children.back()) < actionId, "children must be added in order of actionId");
 
@@ -545,7 +545,7 @@ void Multiverse::Node::addChild (ActionId actionId, const u8string &output, Node
 
 bool Multiverse::Node::updatePrimeParent (Node *newParentNode, bool changedAbove) {
   DS();
-  DW(, "checking if Node with sig of hash ", signature.hash(), " needs its prime parent updated");
+  DW(, "checking if Node with sig of hash ", signature.hashFast(), " needs its prime parent updated");
   DPRE(!!newParentNode);
   DPRE(!primeParentNodeInvalid);
 
@@ -633,7 +633,7 @@ void Multiverse::Node::changeChild (size_t i, Node *node) {
 }
 
 void Multiverse::Node::childrenUpdated () {
-  DW(, "finished updating children (new count ", children.size(), ") on Node with sig of hash ", signature.hash());
+  DW(, "finished updating children (new count ", children.size(), ") on Node with sig of hash ", signature.hashFast());
   DPRE(!primeParentNodeInvalid);
   children.shrink_to_fit();
 }
@@ -933,7 +933,7 @@ Multiverse::Node *Multiverse::collapseNode (
   unordered_map<Node *, HashWrapper<Signature>> &r_survivingNodePrevSignatures
 ) {
   DS();
-  DW(, "checking for collapse of node with sig of prev hash ", node->getSignature().hash());
+  DW(, "checking for collapse of node with sig of prev hash ", node->getSignature().hashFast());
 
   // If we've already processed the node (be it surviving or collapsed away),
   // just return its new target.
@@ -945,7 +945,7 @@ Multiverse::Node *Multiverse::collapseNode (
 
   const HashWrapper<Signature> &prevSignature = node->getSignature();
   HashWrapper<Signature> signature(recreateSignature(prevSignature.get(), extraIgnoredByteRangeset));
-  DW(, " this node now has signature ", signature.hash());
+  DW(, " this node now has signature ", signature.hashFast());
 
   auto v1 = find(r_survivingNodes, signature);
   if (v1) {

@@ -893,7 +893,7 @@ template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd,
       DW(, "looking at the next node:");
       DS();
       Node *parentNode = *nodesBegin;
-      DW(, "node has sig of hash ", parentNode->getSignature().hash(), " and ", parentNode->getChildrenSize(), " children");
+      DW(, "node has sig of hash ", parentNode->getSignature().hashFast(), " and ", parentNode->getChildrenSize(), " children");
       const State *parentState = parentNode->getState();
       if (!parentState) {
         DW(, "  node has already been processed, so skipping");
@@ -982,13 +982,13 @@ template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd,
       DW(, "M it's the end of the queue!");
       break;
     }
-    DW(, "M the result is a child for the node with sig of hash ", parentNode->getSignature().hash());
+    DW(, "M the result is a child for the node with sig of hash ", parentNode->getSignature().hashFast());
     ActionId parentActionId = get<1>(rs);
     u8string &resultOutput = get<2>(rs);
     HashWrapper<Signature> &resultSignature = get<3>(rs);
     State &resultState = get<4>(rs);
     unique_ptr<Node::Listener> &resultListener = get<5>(rs);
-    DW(, "M the child is for the action of id ",parentActionId,"; the sig is of hash ", resultSignature.hash());
+    DW(, "M the child is for the action of id ",parentActionId,"; the sig is of hash ", resultSignature.hashFast());
     DA(!(resultSignature == parentNode->getSignature()));
 
     Node *resultNode;
@@ -1056,12 +1056,12 @@ template<typename _I> void Multiverse::collapseNodes (_I nodesBegin, _I nodesEnd
   // of the given nodes).
 
   Node *firstNode = *(nodesBegin++);
-  DW(, "first node has sig of hash", firstNode->getSignature().hash());
+  DW(, "first node has sig of hash", firstNode->getSignature().hashFast());
   const Signature &firstSignature = firstNode->getSignature().get();
   vector<Signature::Iterator> otherSignatureIs;
   for (; nodesBegin != nodesEnd; ++nodesBegin) {
     Node *node = *nodesBegin;
-    DW(, "other node has sig of hash", node->getSignature().hash());
+    DW(, "other node has sig of hash", node->getSignature().hashFast());
     otherSignatureIs.emplace_back(node->getSignature().get().begin());
   }
   Bitset extraIgnoredBytes = createExtraIgnoredBytes(firstSignature, otherSignatureIs.begin(), otherSignatureIs.end(), vm);

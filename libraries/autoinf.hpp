@@ -19,41 +19,6 @@ namespace autoinf {
 ----------------------------------------------------------------------------- */
 extern DC();
 
-// XXXX move out
-#define noexcept_auto(...) noexcept(noexcept(__VA_ARGS__)) { __VA_ARGS__; }
-#define noexcept_auto_return(...) noexcept(noexcept(__VA_ARGS__)) { return __VA_ARGS__; }
-
-template<typename _T, iff(
-  std::is_same<bool, decltype(std::declval<const _T>().operator==(std::declval<const _T>()))>::value
-)> bool operator== (const _T &l, const _T &r) noexcept_auto_return(
-  l.operator==(r)
-);
-template<typename _T, iff(
-  std::is_same<bool, decltype(std::declval<const _T>().operator==(std::declval<const _T>()))>::value
-)> bool operator!= (const _T &l, const _T &r) noexcept_auto_return(
-  !l.operator==(r)
-)
-template<typename _T, iff(
-  std::is_same<bool, decltype(std::declval<const _T>().operator<(std::declval<const _T>()))>::value
-)> bool operator< (const _T &l, const _T &r) noexcept_auto_return(
-  l.operator<(r)
-)
-template<typename _T, iff(
-  std::is_same<bool, decltype(std::declval<const _T>().operator<(std::declval<const _T>()))>::value
-)> bool operator> (const _T &l, const _T &r) noexcept_auto_return(
-  r.operator<(l)
-)
-template<typename _T, iff(
-  std::is_same<bool, decltype(std::declval<const _T>().operator<(std::declval<const _T>()))>::value
-)> bool operator<= (const _T &l, const _T &r) noexcept_auto_return(
-  !r.operator<(l)
-)
-template<typename _T, iff(
-  std::is_same<bool, decltype(std::declval<const _T>().operator<(std::declval<const _T>()))>::value
-)> bool operator>= (const _T &l, const _T &r) noexcept_auto_return(
-  !l.operator<(r)
-)
-
 // TODO proper checking (in debug mode) output iterator framework
 class FileOutputIterator : public std::iterator<std::output_iterator_tag, void, void, void, void> {
   prv FILE *h;
