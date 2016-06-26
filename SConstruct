@@ -1,5 +1,8 @@
-import os, imp
-sconsutils = imp.load_source('sconsutils', os.path.join(os.pardir, os.pardir, "build", "sconsutils.py"))
+import sys
+try:
+  import sconsutils
+except ImportError:
+  raise ImportError("Failed to import sconsutils (is buildtools on PYTHONPATH?)"), None, sys.exc_traceback
 
 env = sconsutils.getEnv()
 env.Append(LINKFLAGS = {'gcc': ["-Wl,--stack,134217728"]}[env['tool']])
