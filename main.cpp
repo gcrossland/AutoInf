@@ -2,6 +2,7 @@
 #include <cstring>
 #include <unordered_set>
 #include <typeinfo>
+#include <climits>
 
 using autofrotz::Vm;
 using autoinf::Multiverse;
