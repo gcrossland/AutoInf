@@ -743,11 +743,11 @@ template<typename _c> template<typename _Walker> void StringSet<_c>::beWalked (_
   if (!w.isSerialising()) {
     DPRE(Key::list == nullptr);
     Key::list = &list;
-#ifndef NDEBUG
-    auto _ = finally([] () {
-      Key::list = nullptr;
-    });
-#endif
+    DI(
+      auto _ = finally([] () {
+        Key::list = nullptr;
+      });
+    )
 
     DPRE(set.empty());
     for (size_t i = 0, end = list.size(); i != end; ++i) {
@@ -765,13 +765,13 @@ template<typename _c> size_t StringSet<_c>::push (const _c *begin, const _c *end
   Key::list = &list;
   Key::proposedBegin = begin;
   Key::proposedEnd = end;
-#ifndef NDEBUG
-  auto _ = finally([] () {
-    Key::list = nullptr;
-    Key::proposedBegin = nullptr;
-    Key::proposedEnd = nullptr;
-  });
-#endif
+  DI(
+    auto _ = finally([] () {
+      Key::list = nullptr;
+      Key::proposedBegin = nullptr;
+      Key::proposedEnd = nullptr;
+    });
+  )
 
   HashWrapper<Key> proposed(Key::PROPOSED);
 
@@ -818,14 +818,8 @@ template<typename ..._Ts> Multiverse::ActionTemplate::ActionTemplate (_Ts &&...t
   segments.reserve((sizeof...(_Ts) + 1) / 2);
   words.reserve((sizeof...(_Ts) - 1) / 2);
   init(forward<_Ts>(ts)...);
-  DW(,"created an action template with segments");
-  for (auto &s : segments) {
-    DW(,"  ", s.c_str());
-  }
-  DW(,"and words");
-  for (auto &w : words) {
-    DW(,"  ", w);
-  }
+  DI(DW(,"created an action template with segments"); for (auto &s : segments) { DW(,"  ", s.c_str()); })
+  DI(DW(,"and words"); for (auto &w : words) { DW(,"  ", w); })
 }
 
 template<typename ..._Ts> void Multiverse::ActionTemplate::init (u8string &&segment, ActionWord::CategorySet word, _Ts &&...ts) {
@@ -1077,12 +1071,13 @@ template<typename _I> void Multiverse::collapseNodes (_I nodesBegin, _I nodesEnd
   unordered_map<Node *, HashWrapper<Signature>> survivingNodePrevSignatures(nodes.bucket_count());
   // XXXX should have an obj per surviving node to hold this + the child undo data i.e. 'surviving node undo object'
 
-  Node *t = collapseNode(rootNode, extraIgnoredByteRangeset, survivingNodes, nodeCollapseTargets, survivingNodePrevSignatures);
+  DI(Node *t =)
+  collapseNode(rootNode, extraIgnoredByteRangeset, survivingNodes, nodeCollapseTargets, survivingNodePrevSignatures);
+  DA(t == rootNode);
   DW(, "after collapsing all ",nodes.size()," nodes, there are ",survivingNodes.size()," surviving nodes");
 
   ignoredBytes |= move(extraIgnoredBytes);
   ignoredByteRangeset = Rangeset(ignoredBytes, vm.getDynamicMemorySize());
-  DA(t == rootNode);
   size_t dc = 0;
   for (const auto &i : nodes) {
     Node *node = get<1>(i);

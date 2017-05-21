@@ -59,7 +59,7 @@ void terminator () {
 int main (int argc, char *argv[]) {
   std::set_terminate(&terminator);
   try {
-    std::shared_ptr<core::debug::Stream> errs(new core::debug::Stream("LOG.TXT"));
+    DI(std::shared_ptr<core::debug::Stream> errs(new core::debug::Stream("LOG.TXT"));)
     DOPEN(, errs);
     autoinf::DOPEN(, errs);
     //autofrotz::DOPEN(, errs);
@@ -1098,10 +1098,7 @@ void MultiverseMetricsListener::nodesProcessed (const Multiverse &multiverse) {
   });
   setWordValueRecursively(rootNode, static_cast<NodeMetricsListener *>(rootNode->getListener()), multiverse.size(), stats.get(), 0);
 
-  #ifndef NDEBUG
-  size_t c = checkVisitageValueRecursively(rootNode, static_cast<NodeMetricsListener *>(rootNode->getListener()), getVisitageChain(nullptr));
-  DA(c == multiverse.size());
-  #endif
+  DA(multiverse.size() == checkVisitageValueRecursively(rootNode, static_cast<NodeMetricsListener *>(rootNode->getListener()), getVisitageChain(nullptr)));
 
   setInparaValues(rootNode);
 }
@@ -1533,7 +1530,7 @@ void MultiverseView::printNodeAsNonleaf (
   size_t fmtsEnd = 0;
   for (size_t i = 0, end = node->getChildrenSize(); i != end; ++i) {
     auto &child = node->getChild(i);
-    ActionId childActionId = get<0>(child);
+    DI(ActionId childActionId = get<0>(child);)
     Node *childNode = get<2>(child);
     DA(&node->getChild(node->getChildIndex(childActionId)) == &child);
     NodeView *childNodeView = static_cast<NodeView *>(childNode->getListener());

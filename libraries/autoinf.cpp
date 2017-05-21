@@ -305,7 +305,7 @@ Multiverse::ActionSet::ActionSet (const vector<ActionWord> &words, const vector<
     this->words.push();
   }
   this->words.compact().shrink_to_fit();
-  DW(,"words are:"); for (const auto &w : this->words) { DW(,"  **",u8string(w.begin(), w.end()).c_str(),"**"); }
+  DI(DW(,"words are:"); for (const auto &w : this->words) { DW(,"  **",u8string(w.begin(), w.end()).c_str(),"**"); })
   this->templates.reserve(dewordingTemplates.size() + otherTemplates.size());
   auto l = {&dewordingTemplates, &otherTemplates};
   for (const vector<ActionTemplate> *templates : l) {
@@ -319,7 +319,7 @@ Multiverse::ActionSet::ActionSet (const vector<ActionWord> &words, const vector<
     }
   }
   this->templates.compact().compact().shrink_to_fit();
-  DW(,"templates are:"); for (const auto &t : this->templates) { DWP(," "); for (const auto &w : t) { DWP(," *",u8string(w.begin(), w.end()).c_str(),"*"); } DWP(,""); }
+  DI(DW(,"templates are:"); for (const auto &t : this->templates) { DWP(," "); for (const auto &w : t) { DWP(," *",u8string(w.begin(), w.end()).c_str(),"*"); } DWP(,""); })
   DW(,"hence, action inputs are:");
   for (ActionId i = 0; i != getSize(); ++i) {
     u8string o;
@@ -646,11 +646,11 @@ void Multiverse::Node::invalidatePrimeParent () {
 void Multiverse::Node::rebuildPrimeParents (Multiverse &multiverse) {
   DS();
   DW(, "number of surviving nodes is ", multiverse.nodes.size());
-  #ifndef NDEBUG
-  for (Node *node : multiverse) {
-    DA(node->primeParentNodeInvalid);
-  }
-  #endif
+  DI(
+    for (Node *node : multiverse) {
+      DA(node->primeParentNodeInvalid);
+    }
+  )
 
   vector<Node *> reparentedNodes;
 
