@@ -11,7 +11,7 @@ int main (int argc, char *argv[]);
 class MultiverseView;
 void runCmd (int argc, char **argv, autofrotz::Vm &vm, autoinf::Multiverse &multiverse, MultiverseView *view);
 void runVelocityrun (int argc, char **argv, autofrotz::Vm &vm, autoinf::Multiverse &multiverse, MultiverseView *view);
-bool runCommandLineTemplate (autofrotz::Vm &r_vm, autoinf::Multiverse &r_multiverse, const core::u8string &r_in, iu roundCount, core::u8string &r_message);
+bool runCommandLineTemplate (autofrotz::Vm &r_vm, autoinf::Multiverse &r_multiverse, const core::u8string &r_in, iu roundCount, core::u8string &r_message, std::vector<std::tuple<core::u8string, iu>> &r_history);
 void appendWordList (core::u8string &r_o, const bitset::Bitset &words, const autoinf::Multiverse &multiverse);
 bool runCommandLine (autofrotz::Vm &vm, autoinf::Multiverse &multiverse, const core::u8string &in, core::u8string &message);
 void updateMultiverseDisplay (autoinf::Multiverse &multiverse, const char *outPathName, const core::u8string &message);

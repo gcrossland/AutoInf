@@ -453,6 +453,7 @@ void runVelocityrun (int argc, char **argv, Vm &vm, Multiverse &multiverse, Mult
   }
 
   u8string message;
+  vector<tuple<u8string, iu>> history;
 
   packaged_task<void ()> waiter([] () {
     u8string in;
@@ -465,7 +466,7 @@ void runVelocityrun (int argc, char **argv, Vm &vm, Multiverse &multiverse, Mult
   // waiterThread.join();
   //});
 
-  if (!runCommandLineTemplate(vm, multiverse, initialCommandLineTemplate, 0, message)) {
+  if (!runCommandLineTemplate(vm, multiverse, initialCommandLineTemplate, 0, message, history)) {
     return;
   }
 
@@ -491,15 +492,15 @@ void runVelocityrun (int argc, char **argv, Vm &vm, Multiverse &multiverse, Mult
       printf("  stopping\n");
       fflush(stdout);
       waiterFuture.get();
-      runCommandLineTemplate(vm, multiverse, stopCommandLineTemplate, round, message);
-      return;
+      runCommandLineTemplate(vm, multiverse, stopCommandLineTemplate, round, message, history);
+      break;
     }
 
     size_t nodesSize0 = view->nodesByIndex.size();
     Value maxScoreValue0 = view->getMaxScoreValue(multiverse);
     Bitset words0(view->getInterestingChildActionWords(multiverse));
-    if (!runCommandLineTemplate(vm, multiverse, roundCommandLineTemplate, round + 1, message)) {
-      return;
+    if (!runCommandLineTemplate(vm, multiverse, roundCommandLineTemplate, round + 1, message, history)) {
+      break;
     }
 
     double tTotal1 = getUserTime();
@@ -512,11 +513,11 @@ void runVelocityrun (int argc, char **argv, Vm &vm, Multiverse &multiverse, Mult
       printf("  node count unchanged (%d %s)\n", nullChangeCount, nullChangeCount == 1 ? "time" : "times");
       fflush(stdout);
       if (nullChangeCount >= 32) {
-        return;
+        break;
       }
 
-      if (!runCommandLineTemplate(vm, multiverse, nullChangeCommandLineTemplate, round + 1, message)) {
-        return;
+      if (!runCommandLineTemplate(vm, multiverse, nullChangeCommandLineTemplate, round + 1, message, history)) {
+        break;
       }
 
       tTotal1 = getUserTime();
@@ -531,8 +532,8 @@ void runVelocityrun (int argc, char **argv, Vm &vm, Multiverse &multiverse, Mult
     if (maxScoreValue1 != maxScoreValue0) {
       printf("  max score changed\n");
       fflush(stdout);
-      if (!runCommandLineTemplate(vm, multiverse, maxScoreChangeCommandLineTemplate, round + 1, message)) {
-        return;
+      if (!runCommandLineTemplate(vm, multiverse, maxScoreChangeCommandLineTemplate, round + 1, message, history)) {
+        break;
       }
     }
     words1.andNot(words0);
@@ -541,8 +542,8 @@ void runVelocityrun (int argc, char **argv, Vm &vm, Multiverse &multiverse, Mult
       appendWordList(wordList, words1, multiverse);
       printf("  words added (%s)\n", narrowise(wordList));
       fflush(stdout);
-      if (!runCommandLineTemplate(vm, multiverse, wordsChangeCommandLineTemplate, round + 1, message)) {
-        return;
+      if (!runCommandLineTemplate(vm, multiverse, wordsChangeCommandLineTemplate, round + 1, message, history)) {
+        break;
       }
     }
 
@@ -553,9 +554,15 @@ void runVelocityrun (int argc, char **argv, Vm &vm, Multiverse &multiverse, Mult
 
     message.clear();
   }
+
+  printf("\nCommands run:\n");
+  for (const auto &e : history) {
+    printf("x%d %s\n", static_cast<int>(get<1>(e)), narrowise(get<0>(e)));
+  }
+  fflush(stdout);
 }
 
-bool runCommandLineTemplate (Vm &r_vm, Multiverse &r_multiverse, const u8string &inTemplate, iu roundCount, u8string &r_message) {
+bool runCommandLineTemplate (Vm &r_vm, Multiverse &r_multiverse, const u8string &inTemplate, iu roundCount, u8string &r_message, vector<tuple<u8string, iu>> &r_history) {
   char8_t b[1024];
   sprintf(reinterpret_cast<char *>(b), "%u", static_cast<unsigned int>(roundCount));
   u8string sub(b);
@@ -573,6 +580,17 @@ bool runCommandLineTemplate (Vm &r_vm, Multiverse &r_multiverse, const u8string 
     in.append(inTemplate, i0, i - i0);
     in.append(sub);
     ++i;
+  }
+
+  if (in.empty()) {
+    return true;
+  }
+
+  tuple<u8string, iu> *e;
+  if (!r_history.empty() && get<0>(*(e = &r_history.back())) == in) {
+    ++get<1>(*e);
+  } else {
+    r_history.emplace_back(in, 1);
   }
 
   return runCommandLine(r_vm, r_multiverse, in, r_message);
