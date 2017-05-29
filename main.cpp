@@ -46,7 +46,7 @@ using std::make_signed;
 using core::hash;
 using autoinf::StringSet;
 using std::deque;
-using std::max;
+using std::swap;
 
 /* -----------------------------------------------------------------------------
 ----------------------------------------------------------------------------- */
@@ -865,7 +865,7 @@ constexpr size_t NodeMetricsListener::VALUE_COUNT;
 constexpr Value NodeMetricsListener::NON_VALUE;
 
 NodeMetricsListener::NodeMetricsListener () :
-  scoreValue(NON_VALUE), wordValue(NON_VALUE - 1), locationHash(0), visitageValue(NON_VALUE), inparaValue(NON_VALUE - 1)
+  scoreValue(NON_VALUE), wordValue(NON_VALUE - 1), locationHash(0), visitageValue(NON_VALUE), localOutputtageValue(false), outputtageValue(NON_VALUE - 1)
 {
 }
 
@@ -876,8 +876,8 @@ template<typename _Walker> void NodeMetricsListener::beWalked (_Walker &w) {
   w.process(wordValue);
   w.process(locationHash);
   w.process(visitageValue);
-  w.process(inparas);
-  w.process(inparaValue);
+  w.process(localOutputtageValue);
+  w.process(outputtageValue);
 }
 
 Value NodeMetricsListener::getValue (size_t i) const {
@@ -886,7 +886,8 @@ Value NodeMetricsListener::getValue (size_t i) const {
     &NodeMetricsListener::scoreValue,
     &NodeMetricsListener::wordValue,
     &NodeMetricsListener::visitageValue,
-    &NodeMetricsListener::inparaValue
+    &NodeMetricsListener::localOutputtageValue,
+    &NodeMetricsListener::outputtageValue
   };
   DA(sizeof(values) / sizeof(*values) == VALUE_COUNT);
   return this->*(values[i]);
@@ -896,8 +897,9 @@ const Value MultiverseMetricsListener::PER_TURN_VISITAGE_MODIFIER = -0;
 const vector<Value> MultiverseMetricsListener::NEW_LOCATION_VISITAGE_MODIFIERS = {20, 13, 8, 5};
 const Value MultiverseMetricsListener::OLD_LOCATION_VISITAGE_MODIFIER = -200;
 
-const double MultiverseMetricsListener::PER_TURN_INPARA_SCALE = 0.66;
-const Value MultiverseMetricsListener::NOVEL_INPARA_MODIFIER = 100;
+const size_t MultiverseMetricsListener::OUTPUTTAGE_CHILD_OUTPUT_PRESKIP = 1;
+const f64 MultiverseMetricsListener::PER_TURN_OUTPUTTAGE_SCALE = 0.66;
+const Value MultiverseMetricsListener::NOVEL_OUTPUTTAGE_MODIFIER = 100;
 
 MultiverseMetricsListener::MultiverseMetricsListener (zword scoreAddr) :
   scoreAddr(scoreAddr), interestingChildActionWordsIsDirty(false)
@@ -1051,7 +1053,6 @@ void MultiverseMetricsListener::nodeProcessed (const Multiverse &multiverse, con
   NodeMetricsListener *listener = static_cast<NodeMetricsListener *>(node->getListener());
 
   setWordData(node, listener, multiverse.getActionSet());
-  setInparaData(node, listener, multiverse.getActionSet());
 }
 
 void MultiverseMetricsListener::setWordData (const Node *node, NodeMetricsListener *listener, const ActionSet &actionSet) {
@@ -1074,21 +1075,6 @@ void MultiverseMetricsListener::setWordData (const Node *node, NodeMetricsListen
   }
 }
 
-void MultiverseMetricsListener::setInparaData (const Node *node, NodeMetricsListener *listener, const ActionSet &actionSet) {
-  for (size_t i = 0, end = node->getChildrenSize(); i != end; ++i) {
-    const auto &child = node->getChild(i);
-    const auto &childOutput = get<1>(child);
-    Node *childNode = get<2>(child);
-    NodeMetricsListener *childListener = static_cast<NodeMetricsListener *>(childNode->getListener());
-    Bitset &inparas = childListener->inparas;
-    if (!childOutput.empty()) {
-      for (auto i = childOutput.begin() + 1, end = childOutput.end(); i != end; ++i) {
-        inparas.setBit(*i);
-      }
-    }
-  }
-}
-
 void MultiverseMetricsListener::nodesProcessed (const Multiverse &multiverse) {
   const Node *rootNode = multiverse.getRoot();
 
@@ -1100,7 +1086,7 @@ void MultiverseMetricsListener::nodesProcessed (const Multiverse &multiverse) {
 
   DA(multiverse.size() == checkVisitageValueRecursively(rootNode, static_cast<NodeMetricsListener *>(rootNode->getListener()), getVisitageChain(nullptr)));
 
-  setInparaValues(rootNode);
+  setOutputtageValues(multiverse);
 }
 
 template<typename F> unique_ptr<size_t []> MultiverseMetricsListener::getWordStats (const Multiverse &multiverse, const F &nodeFunctor) {
@@ -1160,75 +1146,81 @@ void MultiverseMetricsListener::setWordValue (const Node *node, NodeMetricsListe
   listener->wordValue = r_wordValue = value;
 }
 
-void MultiverseMetricsListener::setInparaValues (const Node *rootNode) {
+void MultiverseMetricsListener::setOutputtageValues (const autoinf::Multiverse &multiverse) {
+  const Node *rootNode = multiverse.getRoot();
+
   deque<const Node *> nodes;
-  Bitset inparasToThisDepth, inparasAtNextDepth;
+  Bitset stringsToThisDepth, stringsToNextDepth;
+
+  NodeMetricsListener *listener = static_cast<NodeMetricsListener *>(rootNode->getListener());
+  listener->outputtageValue = NodeMetricsListener::NON_VALUE;
+  listener->localOutputtageValue = false;
   nodes.emplace_back(rootNode);
-  static_cast<NodeMetricsListener *>(rootNode->getListener())->inparaValue = 0;
+
   do {
+    swap(stringsToThisDepth, stringsToNextDepth);
+    stringsToNextDepth = stringsToThisDepth;
+
     for (auto c = nodes.size(); c != 0; --c) {
       const Node *node = nodes.front();
       nodes.pop_front();
 
-      NodeMetricsListener *listener = static_cast<NodeMetricsListener *>(node->getListener());
-
       for (size_t i = 0, end = node->getChildrenSize(); i != end; ++i) {
-        const Node *childNode = get<2>(node->getChild(i));
+        const auto &child = node->getChild(i);
+        const auto &childOutput = get<1>(child);
+        const Node *childNode = get<2>(child);
         NodeMetricsListener *childListener = static_cast<NodeMetricsListener *>(childNode->getListener());
-        if (childNode->getPrimeParentNode() == node) {
-          DA((childNode->getPrimeParentArcChildIndex() == i) != (childListener->inparaValue == NodeMetricsListener::NON_VALUE));
-          childListener->inparaValue = NodeMetricsListener::NON_VALUE;
-        } else {
-          DA(childListener->inparaValue != NodeMetricsListener::NON_VALUE);
+        DA((childNode->getPrimeParentNode() == node && childNode->getPrimeParentArcChildIndex() == i) == (childListener->outputtageValue != NodeMetricsListener::NON_VALUE));
+        if (childListener->outputtageValue != NodeMetricsListener::NON_VALUE) {
+          childListener->outputtageValue = NodeMetricsListener::NON_VALUE;
+          childListener->localOutputtageValue = false;
+          nodes.emplace_back(childNode);
         }
-      }
-
-      for (size_t i = 0, end = node->getChildrenSize(); i != end; ++i) {
-        const Node *childNode = get<2>(node->getChild(i));
-        NodeMetricsListener *childListener = static_cast<NodeMetricsListener *>(childNode->getListener());
-        DA((childNode->getPrimeParentNode() == node && childNode->getPrimeParentArcChildIndex() == i) == (childListener->inparaValue == NodeMetricsListener::NON_VALUE));
-        if (childListener->inparaValue == NodeMetricsListener::NON_VALUE) {
-          inparasAtNextDepth |= childListener->inparas;
-          setInparaValue(childNode, childListener, listener->inparaValue, inparasToThisDepth);
-
-          if (childNode->getChildrenSize() != 0) {
-            nodes.emplace_back(childNode);
+        if (childOutput.size() >= OUTPUTTAGE_CHILD_OUTPUT_PRESKIP) {
+          for (auto i = childOutput.begin() + OUTPUTTAGE_CHILD_OUTPUT_PRESKIP, end = childOutput.end(); i != end; ++i) {
+            size_t inpara = *i;
+            if (!stringsToThisDepth.getBit(inpara)) {
+              stringsToNextDepth.setBit(inpara);
+              childListener->localOutputtageValue = true;
+            }
           }
         }
       }
     }
-    inparasToThisDepth |= inparasAtNextDepth;
-    inparasAtNextDepth.clear();
   } while (!nodes.empty());
+
+  setOutputtageValueRecursively(rootNode, listener, 0);
 }
 
-void MultiverseMetricsListener::setInparaValue (const Node *node, NodeMetricsListener *listener, Value parentValue, const Bitset &inparasToThisDepth) {
-  thread_local Bitset t;
-  t = listener->inparas;
-  t.andNot(inparasToThisDepth);
-  bool novel = !t.empty();
+void MultiverseMetricsListener::setOutputtageValueRecursively (const Node *node, NodeMetricsListener *listener, Value parentValue) {
+  setOutputtageValue(node, listener, parentValue);
+
+  for (size_t i = 0, end = node->getChildrenSize(); i != end; ++i) {
+    Node *childNode = get<2>(node->getChild(i));
+    if (childNode->getPrimeParentNode() == node) {
+      NodeMetricsListener *childListener = static_cast<NodeMetricsListener *>(childNode->getListener());
+      DA((childNode->getPrimeParentArcChildIndex() == i) == (childListener->outputtageValue == NodeMetricsListener::NON_VALUE));
+      if (childListener->outputtageValue == NodeMetricsListener::NON_VALUE) {
+        setOutputtageValueRecursively(childNode, childListener, listener->outputtageValue);
+        DA(childListener->outputtageValue != NodeMetricsListener::NON_VALUE);
+      }
+    }
+  }
+}
+
+void MultiverseMetricsListener::setOutputtageValue (const Node *node, NodeMetricsListener *listener, Value parentValue) {
+  bool novel = listener->localOutputtageValue;
   DA(parentValue != NodeMetricsListener::NON_VALUE);
-  listener->inparaValue = static_cast<Value>(parentValue * PER_TURN_INPARA_SCALE) + (novel ? NOVEL_INPARA_MODIFIER : 0);
+  listener->outputtageValue = static_cast<Value>(parentValue * PER_TURN_OUTPUTTAGE_SCALE) + (novel ? NOVEL_OUTPUTTAGE_MODIFIER : 0);
 }
 
 void MultiverseMetricsListener::nodeCollapsed (const Multiverse &multiverse, const Node *node, bool childrenUpdated) {
   if (childrenUpdated) {
-    NodeMetricsListener *listener = static_cast<NodeMetricsListener *>(node->getListener());
-
-    setWordData(node, listener, multiverse.getActionSet());
+    nodeProcessed(multiverse, node);
   }
 }
 
 void MultiverseMetricsListener::nodesCollapsed (const Multiverse &multiverse) {
-  for (const Node *node : multiverse) {
-    NodeMetricsListener *listener = static_cast<NodeMetricsListener *>(node->getListener());
-    listener->inparas.clear();
-  }
-  for (const Node *node : multiverse) {
-    NodeMetricsListener *listener = static_cast<NodeMetricsListener *>(node->getListener());
-    setInparaData(node, listener, multiverse.getActionSet());
-  }
-
   nodesProcessed(multiverse);
 }
 

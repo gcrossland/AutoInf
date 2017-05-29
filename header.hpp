@@ -17,7 +17,7 @@ bool runCommandLine (autofrotz::Vm &vm, autoinf::Multiverse &multiverse, const c
 void updateMultiverseDisplay (autoinf::Multiverse &multiverse, const char *outPathName, const core::u8string &message);
 
 class NodeMetricsListener : public autoinf::Multiverse::Node::Listener {
-  pub static constexpr size_t VALUE_COUNT = 4;
+  pub static constexpr size_t VALUE_COUNT = 5;
   pub typedef is Value;
   pub static constexpr Value NON_VALUE = core::numeric_limits<Value>::max();
 
@@ -29,8 +29,8 @@ class NodeMetricsListener : public autoinf::Multiverse::Node::Listener {
   prv size_t locationHash;
   prv Value visitageValue;
 
-  prv bitset::Bitset inparas;
-  prv Value inparaValue;
+  prv Value localOutputtageValue;
+  prv Value outputtageValue;
 
   pub NodeMetricsListener ();
   pub template<typename _Walker> void beWalked (_Walker &w);
@@ -47,8 +47,9 @@ class MultiverseMetricsListener : public autoinf::Multiverse::Listener {
   prv static const std::vector<Value> NEW_LOCATION_VISITAGE_MODIFIERS;
   prv static const Value OLD_LOCATION_VISITAGE_MODIFIER;
 
-  prv static const double PER_TURN_INPARA_SCALE;
-  prv static const Value NOVEL_INPARA_MODIFIER;
+  prv static const size_t OUTPUTTAGE_CHILD_OUTPUT_PRESKIP;
+  prv static const f64 PER_TURN_OUTPUTTAGE_SCALE;
+  prv static const Value NOVEL_OUTPUTTAGE_MODIFIER;
 
   prv const autofrotz::zword scoreAddr;
   prv bitset::Bitset interestingChildActionWords;
@@ -77,13 +78,13 @@ class MultiverseMetricsListener : public autoinf::Multiverse::Listener {
   prv size_t checkVisitageValueRecursively (const autoinf::Multiverse::Node *node, NodeMetricsListener *listener, VisitageChain chain);
   pub virtual void nodeProcessed (const autoinf::Multiverse &multiverse, const autoinf::Multiverse::Node *node) override;
   prv void setWordData (const autoinf::Multiverse::Node *node, NodeMetricsListener *listener, const autoinf::Multiverse::ActionSet &actionSet);
-  prv void setInparaData (const autoinf::Multiverse::Node *node, NodeMetricsListener *listener, const autoinf::Multiverse::ActionSet &actionSet);
   pub virtual void nodesProcessed (const autoinf::Multiverse &multiverse) override;
   prv template<typename F> std::unique_ptr<size_t []> getWordStats (const autoinf::Multiverse &multiverse, const F &nodeFunctor);
   prv void setWordValueRecursively (const autoinf::Multiverse::Node *node, NodeMetricsListener *listener, size_t nodesSize, const size_t *stats, Value wordValue);
   prv void setWordValue (const autoinf::Multiverse::Node *node, NodeMetricsListener *listener, size_t nodesSize, const size_t *stats, Value &r_wordValue);
-  prv void setInparaValues (const autoinf::Multiverse::Node *rootNode);
-  prv void setInparaValue (const autoinf::Multiverse::Node *node, NodeMetricsListener *listener, Value parentValue, const bitset::Bitset &inparasToThisDepth);
+  prv void setOutputtageValues (const autoinf::Multiverse &multiverse);
+  prv void setOutputtageValueRecursively (const autoinf::Multiverse::Node *node, NodeMetricsListener *listener, Value parentValue);
+  prv void setOutputtageValue (const autoinf::Multiverse::Node *node, NodeMetricsListener *listener, Value parentValue);
   pub virtual void nodeCollapsed (const autoinf::Multiverse &multiverse, const autoinf::Multiverse::Node *node, bool childrenUpdated) override;
   pub void virtual nodesCollapsed (const autoinf::Multiverse &multiverse) override;
   pub void virtual loaded (const autoinf::Multiverse &multiverse) override;
