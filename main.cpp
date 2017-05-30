@@ -38,7 +38,6 @@ using autoinf::find;
 using autoinf::contains;
 using std::fill;
 using autoinf::finally;
-using std::packaged_task;
 using std::thread;
 using std::future_status;
 using Value = NodeMetricsListener::Value;
@@ -455,16 +454,13 @@ void runVelocityrun (int argc, char **argv, Vm &vm, Multiverse &multiverse, Mult
   u8string message;
   vector<tuple<u8string, iu>> history;
 
-  packaged_task<void ()> waiter([] () {
+  volatile bool stopRequested = false;
+  thread waiter([&] () {
     u8string in;
     readLine(in);
+    stopRequested = true;
   });
-  auto waiterFuture = waiter.get_future();
-  thread waiterThread(move(waiter));
-  // XXXX isn't this supposed to not work?
-  //auto _ = finally([&waiterThread] () {
-  // waiterThread.join();
-  //});
+  waiter.detach();
 
   if (!runCommandLineTemplate(vm, multiverse, initialCommandLineTemplate, 0, message, history)) {
     return;
@@ -488,10 +484,9 @@ void runVelocityrun (int argc, char **argv, Vm &vm, Multiverse &multiverse, Mult
 
   iu nullChangeCount = 0;
   for (iu round = initialRoundCount; true; ++round) {
-    if (waiterFuture.wait_for(std::chrono::nanoseconds::zero()) == future_status::ready) {
+    if (stopRequested) {
       printf("  stopping\n");
       fflush(stdout);
-      waiterFuture.get();
       runCommandLineTemplate(vm, multiverse, stopCommandLineTemplate, round, message, history);
       break;
     }
