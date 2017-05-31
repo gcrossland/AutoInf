@@ -52,6 +52,8 @@ using core::HashWrapper;
 using core::hashed;
 using core::hash;
 using std::equal;
+using core::offset;
+using ::operator+;  
 
 }
 

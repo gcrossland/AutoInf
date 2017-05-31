@@ -193,7 +193,7 @@ template<typename _OutputIterator> template<typename _T, typename _TypeDeduction
   } else {
     writeIu(get<0>(get<1>(*allocationEntry)));
     void *allocationStart = get<0>(*allocationEntry);
-    size_t offset = static_cast<size_t>(static_cast<char *>(ptr) - static_cast<char *>(allocationStart));
+    size_t offset = core::offset(static_cast<char *>(allocationStart), static_cast<char *>(ptr));
     writeIu(offset);
   }
 }
@@ -267,7 +267,7 @@ template<typename _OutputIterator> template<typename _T, typename _P> void Seria
     DPRE(ptr <= get<1>(get<1>(*allocationEntry)), "o must be within parent's allocation");
     DA(allocationStart <= ptr);
     allocationId = get<0>(get<1>(*allocationEntry));
-    offset = static_cast<size_t>(static_cast<char *>(ptr) - static_cast<char *>(allocationStart));
+    offset = core::offset(static_cast<char *>(allocationStart), static_cast<char *>(ptr));
   }
   writeIu(allocationId);
   writeIu(offset);
@@ -710,7 +710,7 @@ template<typename _c> size_t StringSet<_c>::Key::hashSlow () const noexcept {
     auto s = list->get(i);
     begin = &*s.begin();
     end = &*s.end();
-    DA(end - begin == s.size());
+    DA(offset(begin, end) == s.size());
   }
 
   return hash(reinterpret_cast<const iu8f *>(begin), reinterpret_cast<const iu8f *>(end));

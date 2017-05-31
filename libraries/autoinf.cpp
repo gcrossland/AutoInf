@@ -10,23 +10,6 @@ namespace autoinf {
 ----------------------------------------------------------------------------- */
 DC();
 
-// XXXX move to core
-/*
-// XXXX -> spanto templ fn with fwd precondition
-// XXXX -> can we overload ptr + size_t? it's not normally defined?
-ptrdiff_t ptrdiff (size_t s) {
-  return static_cast<ptrdiff_t>(s);
-}
-size_t size (ptrdiff_t s) {
-  DPRE(s >= 0, "s must be non-negative");
-  return static_cast<size_t>(s);
-}*/
-template<typename _I> _I operator+ (_I i, size_t o) {
-  return i + static_cast<ptrdiff_t>(o);
-}
-
-
-
 FileOutputIterator::FileOutputIterator (FILE *h) : h(h) {
 }
 
@@ -521,7 +504,7 @@ size_t Multiverse::Node::getChildIndex (ActionId id) const {
   auto i = lower_bound(children.begin(), children.end(), id, [] (const tuple<ActionId, StringSet<char8_t>::String, Node *> &elmt, const ActionId &target) {
     return get<0>(elmt) < target;
   });
-  return (i == children.end() || get<0>(*i) != id) ? numeric_limits<size_t>::max() : static_cast<size_t>(i - children.begin());
+  return (i == children.end() || get<0>(*i) != id) ? numeric_limits<size_t>::max() : offset(children.begin(), i);
 }
 
 void Multiverse::Node::addChild (ActionId actionId, const u8string &output, Node *node, Multiverse &multiverse) {

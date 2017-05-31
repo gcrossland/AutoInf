@@ -477,7 +477,7 @@ void runVelocityrun (int argc, char **argv, Vm &vm, Multiverse &multiverse, Mult
 
   printf("\"Number of rounds\",\"total time\",\"VM time\",\"max score\",\"node count\"\n");
   auto printStats = [&] (iu roundCount, double tTotal1, double tVm1) {
-    printf("%d,%f,%f,%d,%d\n", static_cast<int>(roundCount), tTotal1 - tTotal0, tVm1 - tVm0, static_cast<int>(view->getMaxScoreValue(multiverse)), static_cast<int>(view->nodesByIndex.size()));
+    printf("%u,%f,%f,%d,%u\n", roundCount, tTotal1 - tTotal0, tVm1 - tVm0, view->getMaxScoreValue(multiverse), static_cast<iu>(view->nodesByIndex.size()));
     fflush(stdout);
   };
   printStats(initialRoundCount, getUserTime(), getVmTime());
@@ -505,7 +505,7 @@ void runVelocityrun (int argc, char **argv, Vm &vm, Multiverse &multiverse, Mult
     size_t nodesSize1 = view->nodesByIndex.size();
     if (nodesSize1 == nodesSize0) {
       ++nullChangeCount;
-      printf("  node count unchanged (%d %s)\n", nullChangeCount, nullChangeCount == 1 ? "time" : "times");
+      printf("  node count unchanged (%u %s)\n", nullChangeCount, nullChangeCount == 1 ? "time" : "times");
       fflush(stdout);
       if (nullChangeCount >= 32) {
         break;
@@ -552,14 +552,14 @@ void runVelocityrun (int argc, char **argv, Vm &vm, Multiverse &multiverse, Mult
 
   printf("\nCommands run:\n");
   for (const auto &e : history) {
-    printf("x%d %s\n", static_cast<int>(get<1>(e)), narrowise(get<0>(e)));
+    printf("x%u %s\n", get<1>(e), narrowise(get<0>(e)));
   }
   fflush(stdout);
 }
 
 bool runCommandLineTemplate (Vm &r_vm, Multiverse &r_multiverse, const u8string &inTemplate, iu roundCount, u8string &r_message, vector<tuple<u8string, iu>> &r_history) {
   char8_t b[1024];
-  sprintf(reinterpret_cast<char *>(b), "%u", static_cast<unsigned int>(roundCount));
+  sprintf(reinterpret_cast<char *>(b), "%u", roundCount);
   u8string sub(b);
 
   u8string in;
@@ -721,7 +721,7 @@ bool runCommandLine (Vm &vm, Multiverse &multiverse, const u8string &in, u8strin
 
             selectedNodes.clear();
             size_t unprocessedCount = 0;
-            for (auto i = nodes.begin(), end = i + static_cast<ptrdiff_t>(count); i != end; ++i) { // XXXX sort out size_t -> ptrdiff_t
+            for (auto i = nodes.begin(), end = i + count; i != end; ++i) {
               Node *node = get<1>(*i);
               unprocessedCount += !!node->getState();
               selectedNodes.insert(node);
@@ -730,7 +730,7 @@ bool runCommandLine (Vm &vm, Multiverse &multiverse, const u8string &in, u8strin
 
             char8_t b[1024];
             char *t = reinterpret_cast<char *>(b);
-            t += sprintf(t, "Selected %d (%d unprocessed) (from %d) nodes", count, unprocessedCount, nodes.size());
+            t += sprintf(t, "Selected %u (%u unprocessed) (from %u) nodes", static_cast<iu>(count), static_cast<iu>(unprocessedCount), static_cast<iu>(nodes.size()));
             if (count != 0) {
               t += sprintf(t, " (threshold metric value %d)", get<0>(nodes[count - 1]));
             }
@@ -738,7 +738,7 @@ bool runCommandLine (Vm &vm, Multiverse &multiverse, const u8string &in, u8strin
             message.append(b);
           } else {
             char8_t b[1024];
-            sprintf(reinterpret_cast<char *>(b), "Selected %d nodes (selection unchanged)\n\n", selectedNodes.size());
+            sprintf(reinterpret_cast<char *>(b), "Selected %u nodes (selection unchanged)\n\n", static_cast<iu>(selectedNodes.size()));
             message.append(b);
           }
         }
@@ -1455,10 +1455,10 @@ void MultiverseView::printNodeHeader (
     fprintf(out, "* ");
   }
 
-  fprintf(out, "%c%u%c ", narrowise(nodeIndexRenderingPrefix), nodeView->index, narrowise(nodeIndexRenderingSuffix));
+  fprintf(out, "%c%u%c ", narrowise(nodeIndexRenderingPrefix), static_cast<iu>(nodeView->index), narrowise(nodeIndexRenderingSuffix));
 
   fprintf(out, "%s", narrowise(renderActionInput(actionId, multiverse.getActionSet())));
-  fprintf(out, " [sig of hash &%08X]", node->getSignature().hashFast());
+  fprintf(out, " [sig of hash &%08X]", static_cast<iu>(node->getSignature().hashFast()));
   fprintf(out, " metric values {");
   for (size_t i = 0; i != NodeView::VALUE_COUNT; ++i) {
     fprintf(out, "%s%d", i == 0 ? "" : ", ", nodeView->getValue(i));
@@ -1517,7 +1517,7 @@ void MultiverseView::printNodeAsNonleaf (
     fprintf(out, " / unprocessed\n");
   } else {
     size_t c = node->getChildrenSize();
-    fprintf(out, " / %u %s\n", c, c == 1 ? "child" : "children");
+    fprintf(out, " / %u %s\n", static_cast<iu>(c), c == 1 ? "child" : "children");
   }
   printNodeOutput(output, multiverse, r_prefix, out);
 
