@@ -1,7 +1,7 @@
 /** @file */
 /* -----------------------------------------------------------------------------
    AutoInf Core Engine Library
-   © Geoff Crossland 2006, 2013-2016
+   © Geoff Crossland 2006, 2013-2017
 ----------------------------------------------------------------------------- */
 #ifndef AUTOINF_ALREADYINCLUDED
 #define AUTOINF_ALREADYINCLUDED
@@ -279,10 +279,10 @@ template<
 };
 
 // XXXX move out?
-template<typename _L> class MultiList {
+template<typename _L, typename _Size = typename _L::size_type> class MultiList {
   pub class SubList {
-    pub typedef decltype(std::declval<const _L>().begin()) Iterator;
-    pub typedef decltype(std::declval<const _L>().size()) Size;
+    pub typedef typename _L::const_iterator Iterator;
+    pub typedef typename _L::size_type Size;
 
     prv Iterator b;
     prv Iterator e;
@@ -294,28 +294,31 @@ template<typename _L> class MultiList {
     pub Iterator end () const noexcept;
   };
 
-  pub class Iterator : public RevaluedIterator<Iterator, SubList, std::vector<size_t>::const_iterator> {
+  pub class Iterator : public RevaluedIterator<Iterator, SubList, typename std::vector<typename SubList::Size>::const_iterator> {
     prv typename SubList::Iterator listBegin;
 
     pub Iterator ();
-    pub Iterator (const MultiList<_L> &multiList);
+    pub Iterator (const MultiList<_L, _Size> &multiList);
 
     pub SubList operator* () const;
   };
 
+  pub typedef Iterator const_iterator;
+  pub typedef _Size size_type;
+
   prv _L list;
-  prv std::vector<size_t> bounds;
+  prv std::vector<typename SubList::Size> bounds;
 
   pub MultiList ();
   pub template<typename _Walker> void beWalked (_Walker &w);
 
-  pub size_t size () const noexcept;
-  pub SubList get (size_t i) const noexcept;
+  pub _Size size () const noexcept;
+  pub SubList get (_Size i) const noexcept;
   pub Iterator begin () const;
   pub Iterator end () const;
-  pub _L &subList ();
-  pub size_t push ();
-  pub void reserve (size_t capacity);
+  pub _L &subList () noexcept;
+  pub _Size push ();
+  pub void reserve (_Size capacity);
   pub _L &compact ();
 };
 
