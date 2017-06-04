@@ -263,24 +263,11 @@ void Multiverse::ActionTemplate::init (u8string &&segment) {
 
 Multiverse::ActionSet::ActionSet (const vector<ActionWord> &words, const vector<ActionTemplate> &dewordingTemplates, const vector<ActionTemplate> &otherTemplates) {
   DS();
-  if (words.size() >= numeric_limits<Index>::max()) {
-    throw PlainException(u8("the limit for the number of action words has been reached"));
-  }
-  if (dewordingTemplates.size() + otherTemplates.size() >= numeric_limits<Index>::max()) {
-    throw PlainException(u8("the limit for the number of action templates has been reached"));
-  }
   for (const ActionTemplate &templ : dewordingTemplates) {
-    DPRE(!templ.segments.empty(), "action templates must have at least one segment");
-    DPRE(templ.segments.size() - 1 == templ.words.size());
     if (templ.words.size() != 1) {
       throw PlainException(u8("dewording action templates must contain exactly one action word"));
     }
   }
-
-  init(words, 0, dewordingTemplates, specs);
-  dewordingActionCount = specs.size();
-  init(words, static_cast<Index>(dewordingTemplates.size()), otherTemplates, specs);
-  specs.compact().shrink_to_fit();
 
   this->words.reserve(words.size());
   for (const ActionWord &word : words) {
@@ -303,17 +290,24 @@ Multiverse::ActionSet::ActionSet (const vector<ActionWord> &words, const vector<
   }
   this->templates.compact().compact().shrink_to_fit();
   DI(DW(,"templates are:"); for (const auto &t : this->templates) { DWP(," "); for (const auto &w : t) { DWP(," *",u8string(w.begin(), w.end()).c_str(),"*"); } DWP(,""); })
-  DW(,"hence, action inputs are:");
-  for (ActionId i = 0; i != getSize(); ++i) {
-    u8string o;
-    get(i).getInput(o);
-    DW(,"  **",o.c_str(),"**");
-  }
+
+  init(words, 0, dewordingTemplates, specs);
+  dewordingActionCount = specs.size();
+  init(words, static_cast<Index>(dewordingTemplates.size()), otherTemplates, specs);
+  specs.compact().shrink_to_fit();
+  DI(
+    DW(,"hence, action inputs are:");
+    for (ActionId i = 0; i != getSize(); ++i) {
+      u8string o;
+      get(i).getInput(o);
+      DW(,"  **",o.c_str(),"**");
+    }
+  )
 }
 
 void Multiverse::ActionSet::init (
   const vector<ActionWord> &words, Index nextTemplateI, const vector<ActionTemplate> &templates,
-  MultiList<string<Index>> &specs
+  MultiList<string<Index>, ActionId> &specs
 ) {
   DS();
   string<Index> spec;
@@ -326,13 +320,10 @@ void Multiverse::ActionSet::init (
 
 void Multiverse::ActionSet::initImpl (
   const vector<ActionWord> &words, const ActionTemplate &templ, Index templateWordI,
-  MultiList<string<Index>> &specs, string<Index> &r_spec
+  MultiList<string<Index>, ActionId> &specs, string<Index> &r_spec
 ) {
   if (templateWordI == templ.words.size()) {
     DA(r_spec.size() == static_cast<size_t>(templateWordI) + 1);
-    if (specs.size() == numeric_limits<ActionId>::max()) {
-      throw PlainException(u8("the limit for the number of actions has been reached"));
-    }
     DWP(, "adding action ",specs.size()," (template ",r_spec[0]," with words"); for (size_t i = 1; i != r_spec.size(); ++i) { DWP(, " ", r_spec[i]); } DW(, ")");
     specs.subList().append(r_spec);
     specs.push();
@@ -355,7 +346,7 @@ Multiverse::ActionSet::Index Multiverse::ActionSet::getWordsSize () const {
   return words.size();
 }
 
-MultiList<core::u8string>::SubList Multiverse::ActionSet::getWord (Index i) const {
+MultiList<core::u8string, Multiverse::ActionSet::Index>::SubList Multiverse::ActionSet::getWord (Index i) const {
   return words.get(i);
 }
 
@@ -370,7 +361,7 @@ Multiverse::ActionSet::Action Multiverse::ActionSet::get (ActionId id) const {
 Multiverse::ActionSet::Action::Action (const ActionSet &actionSet, ActionId id) : Action(actionSet, id, actionSet.specs.get(id)) {
 }
 
-Multiverse::ActionSet::Action::Action (const ActionSet &actionSet, ActionId id, MultiList<core::string<Index>>::SubList &&spec) :
+Multiverse::ActionSet::Action::Action (const ActionSet &actionSet, ActionId id, MultiList<core::string<Index>, ActionId>::SubList &&spec) :
   actionSet(actionSet), spec(move(spec)), dewording(id < actionSet.dewordingActionCount)
 {
   DA(actionSet.templates.get(*this->spec.begin()).size() == this->spec.size());

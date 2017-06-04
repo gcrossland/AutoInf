@@ -383,34 +383,34 @@ class Multiverse {
     pub typedef iu8f Index;
     pub class Action;
 
-    prv MultiList<core::u8string> words;
-    prv MultiList<MultiList<core::u8string>> templates;
-    prv Index dewordingActionCount;
-    prv MultiList<core::string<Index>> specs;
+    prv MultiList<core::u8string, Index> words;
+    prv MultiList<MultiList<core::u8string, iu16f>, Index> templates;
+    prv ActionId dewordingActionCount;
+    prv MultiList<core::string<Index>, ActionId> specs;
 
     pub ActionSet (const std::vector<ActionWord> &words, const std::vector<ActionTemplate> &dewordingTemplates, const std::vector<ActionTemplate> &otherTemplates);
     prv static void init (
       const std::vector<ActionWord> &words, Index nextTemplateI, const std::vector<ActionTemplate> &templates,
-      MultiList<core::string<Index>> &specs
+      MultiList<core::string<Index>, ActionId> &specs
     );
     prv static void initImpl (
       const std::vector<ActionWord> &words, const ActionTemplate &templ, Index templateWordI,
-      MultiList<core::string<Index>> &specs, core::string<Index> &r_spec
+      MultiList<core::string<Index>, ActionId> &specs, core::string<Index> &r_spec
     );
 
     pub Index getWordsSize () const;
-    pub MultiList<core::u8string>::SubList getWord (Index i) const;
+    pub MultiList<core::u8string, Index>::SubList getWord (Index i) const;
     pub ActionId getSize () const;
     pub Action get (ActionId id) const;
 
     friend class Action;
     pub class Action {
       prv const ActionSet &actionSet;
-      prv const MultiList<core::string<Index>>::SubList spec;
+      prv const MultiList<core::string<Index>, ActionId>::SubList spec;
       prv bool dewording;
 
       prv Action (const ActionSet &actionSet, ActionId id);
-      prv Action (const ActionSet &actionSet, ActionId id, MultiList<core::string<Index>>::SubList &&spec);
+      prv Action (const ActionSet &actionSet, ActionId id, MultiList<core::string<Index>, ActionId>::SubList &&spec);
 
       pub ActionId getDewordingTarget () const;
       pub size_t getWordCount () const;
