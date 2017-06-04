@@ -695,15 +695,15 @@ template<typename _L, typename _Size> _L &MultiList<_L, _Size>::compact () {
   return list;
 }
 
-template<typename _c> constexpr size_t StringSet<_c>::Key::PROPOSED;
-template<typename _c> thread_local MultiList<core::string<_c>> *StringSet<_c>::Key::list;
-template<typename _c> thread_local const _c *StringSet<_c>::Key::proposedBegin;
-template<typename _c> thread_local const _c *StringSet<_c>::Key::proposedEnd;
+template<typename _c, typename _Size> constexpr _Size StringSet<_c, _Size>::Key::PROPOSED;
+template<typename _c, typename _Size> thread_local MultiList<core::string<_c>, _Size> *StringSet<_c, _Size>::Key::list;
+template<typename _c, typename _Size> thread_local const _c *StringSet<_c, _Size>::Key::proposedBegin;
+template<typename _c, typename _Size> thread_local const _c *StringSet<_c, _Size>::Key::proposedEnd;
 
-template<typename _c> StringSet<_c>::Key::Key (size_t i) : i(i) {
+template<typename _c, typename _Size> StringSet<_c, _Size>::Key::Key (_Size i) : i(i) {
 }
 
-template<typename _c> size_t StringSet<_c>::Key::hashSlow () const noexcept {
+template<typename _c, typename _Size> size_t StringSet<_c, _Size>::Key::hashSlow () const noexcept {
   DPRE(list != nullptr);
 
   const _c *begin;
@@ -723,7 +723,7 @@ template<typename _c> size_t StringSet<_c>::Key::hashSlow () const noexcept {
   return hash(reinterpret_cast<const iu8f *>(begin), reinterpret_cast<const iu8f *>(end));
 }
 
-template<typename _c> bool StringSet<_c>::Key::operator== (const Key &r) const noexcept {
+template<typename _c, typename _Size> bool StringSet<_c, _Size>::Key::operator== (const Key &r) const noexcept {
   DPRE(list != nullptr);
 
   if (i == r.i) {
@@ -734,7 +734,7 @@ template<typename _c> bool StringSet<_c>::Key::operator== (const Key &r) const n
     return false;
   }
 
-  size_t realI = i + r.i - PROPOSED;
+  _Size realI = i + r.i - PROPOSED;
   DA((i == realI && r.i == PROPOSED) || (r.i == realI && i == PROPOSED));
   DPRE(proposedBegin != nullptr);
   DPRE(proposedEnd != nullptr);
@@ -742,10 +742,10 @@ template<typename _c> bool StringSet<_c>::Key::operator== (const Key &r) const n
   return proposedEnd - proposedBegin == s.end() - s.begin() && equal(proposedBegin, proposedEnd, s.begin());
 }
 
-template<typename _c> StringSet<_c>::StringSet () {
+template<typename _c, typename _Size> StringSet<_c, _Size>::StringSet () {
 }
 
-template<typename _c> template<typename _Walker> void StringSet<_c>::beWalked (_Walker &w) {
+template<typename _c, typename _Size> template<typename _Walker> void StringSet<_c, _Size>::beWalked (_Walker &w) {
   w.process(list);
   if (!w.isSerialising()) {
     DPRE(Key::list == nullptr);
@@ -757,17 +757,17 @@ template<typename _c> template<typename _Walker> void StringSet<_c>::beWalked (_
     )
 
     DPRE(set.empty());
-    for (size_t i = 0, end = list.size(); i != end; ++i) {
+    for (_Size i = 0, end = list.size(); i != end; ++i) {
       set.emplace(i);
     }
   }
 }
 
-template<typename _c> size_t StringSet<_c>::size () const noexcept {
-  return list.size();
+template<typename _c, typename _Size> _Size StringSet<_c, _Size>::size () const noexcept {
+  return static_cast<_Size>(list.size());
 }
 
-template<typename _c> size_t StringSet<_c>::push (const _c *begin, const _c *end) {
+template<typename _c, typename _Size> _Size StringSet<_c, _Size>::push (const _c *begin, const _c *end) {
   DPRE(Key::list == nullptr);
   Key::list = &list;
   Key::proposedBegin = begin;
@@ -788,16 +788,16 @@ template<typename _c> size_t StringSet<_c>::push (const _c *begin, const _c *end
   }
 
   list.subList().append(begin, end);
-  size_t i = list.push();
+  _Size i = list.push();
   set.emplace(i);
   return i;
 }
 
-template<typename _c> typename MultiList<string<_c>>::SubList StringSet<_c>::get (size_t i) const noexcept {
+template<typename _c, typename _Size> typename MultiList<string<_c>, _Size>::SubList StringSet<_c, _Size>::get (_Size i) const noexcept {
   return list.get(i);
 }
 
-template<typename _c> void StringSet<_c>::createString (const string<_c> &o, const string<_c> &terminator, String &r_out) {
+template<typename _c, typename _Size> void StringSet<_c, _Size>::createString (const string<_c> &o, const string<_c> &terminator, String &r_out) {
   const _c *data = o.data();
   typename string<_c>::size_type begin = 0, end;
 
@@ -813,7 +813,7 @@ template<typename _c> void StringSet<_c>::createString (const string<_c> &o, con
   }
 }
 
-template<typename _c> void StringSet<_c>::rebuildString (const String &o, string<_c> &r_out) const {
+template<typename _c, typename _Size> void StringSet<_c, _Size>::rebuildString (const String &o, string<_c> &r_out) const {
   for (const auto &i : o) {
     auto s = get(i);
     r_out.append(s.begin(), s.end());
@@ -853,7 +853,7 @@ template<typename _Walker> void Multiverse::Node::beWalked (_Walker &w) {
   w.process(children, [] (tuple<ActionId, StringSet<char8_t>::String, Node *> &o, _Walker &w) {
     DS();
     w.process(get<0>(o));
-    w.process(get<1>(o), [] (size_t &e, _Walker &w) {
+    w.process(get<1>(o), [] (iu &e, _Walker &w) {
       w.process(e);
     });
     w.derefAndProcess(get<2>(o));

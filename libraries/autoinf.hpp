@@ -322,31 +322,31 @@ template<typename _L, typename _Size = typename _L::size_type> class MultiList {
   pub _L &compact ();
 };
 
-template<typename _c> class StringSet {
+template<typename _c, typename _Size = iu> class StringSet {
   prv class Key {
-    pub static constexpr size_t PROPOSED = core::numeric_limits<size_t>::max();
-    pub static thread_local MultiList<core::string<_c>> *list;
+    pub static constexpr _Size PROPOSED = core::numeric_limits<_Size>::max();
+    pub static thread_local MultiList<core::string<_c>, _Size> *list;
     pub static thread_local const _c *proposedBegin;
     pub static thread_local const _c *proposedEnd;
 
-    pub size_t i;
+    pub _Size i;
 
-    pub explicit Key (size_t i);
+    pub explicit Key (_Size i);
 
     pub size_t hashSlow () const noexcept;
     pub bool operator== (const Key &r) const noexcept;
   };
 
-  prv MultiList<core::string<_c>> list;
+  prv MultiList<core::string<_c>, _Size> list;
   prv std::unordered_set<core::HashWrapper<Key>> set;
 
   pub StringSet ();
   pub template<typename _Walker> void beWalked (_Walker &w);
 
-  pub size_t size () const noexcept;
-  pub size_t push (const _c *begin, const _c *end);
-  pub typename MultiList<core::string<_c>>::SubList get (size_t i) const noexcept;
-  pub typedef std::vector<size_t> String;
+  pub _Size size () const noexcept;
+  pub _Size push (const _c *begin, const _c *end);
+  pub typename MultiList<core::string<_c>, _Size>::SubList get (_Size i) const noexcept;
+  pub typedef std::vector<_Size> String;
   pub void createString (const core::string<_c> &o, const core::string<_c> &terminator, String &r_out);
   pub void rebuildString (const String &o, core::string<_c> &r_out) const;
 };
