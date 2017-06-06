@@ -911,8 +911,8 @@ const vector<Value> MultiverseMetricsListener::NEW_LOCATION_VISITAGE_MODIFIERS =
 const Value MultiverseMetricsListener::OLD_LOCATION_VISITAGE_MODIFIER = -200;
 
 const size_t MultiverseMetricsListener::OUTPUTTAGE_CHILD_OUTPUT_PRESKIP = 1;
-const f64 MultiverseMetricsListener::PER_TURN_OUTPUTTAGE_SCALE = 0.66;
-const Value MultiverseMetricsListener::NOVEL_OUTPUTTAGE_MODIFIER = 100;
+const f64 MultiverseMetricsListener::PER_TURN_OUTPUTTAGE_SCALE = 1;
+const Value MultiverseMetricsListener::NOVEL_OUTPUTTAGE_MODIFIER = 1;
 
 MultiverseMetricsListener::MultiverseMetricsListener (zword scoreAddr) :
   scoreAddr(scoreAddr), interestingChildActionWordsIsDirty(false)
