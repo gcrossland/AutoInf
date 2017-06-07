@@ -695,24 +695,25 @@ Multiverse::Node *const &Multiverse::NodeIterator::operator* () const {
 }
 
 Multiverse::Multiverse (
-  Vm &r_vm, const u8string &initialInput, u8string &r_initialOutput, function<bool (Vm &r_vm)> &&saver, function<bool (Vm &r_vm)> &&restorer,
+  Vm &vm, const u8string &initialInput, u8string &r_initialOutput, function<bool (Vm &r_vm)> &&saver, function<bool (Vm &r_vm)> &&restorer,
   const vector<vector<u8string>> &equivalentActionInputsSet,
   const vector<ActionSet::Word> &words, const vector<ActionSet::Template> &dewordingTemplates, const vector<ActionSet::Template> &otherTemplates,
   function<bool (const Vm &vm, const u8string &output)> &&deworder, unique_ptr<Listener> &&listener
 ) :
+  vm(vm),
   saver(saver), restorer(restorer), actionSet(words, dewordingTemplates, otherTemplates),
   deworder(move(deworder)), listener(move(listener)),
-  ignoredBytes(initIgnoredBytes(r_vm)), ignoredByteRangeset(ignoredBytes, r_vm.getDynamicMemorySize()), rootNode(nullptr)
+  ignoredBytes(initIgnoredBytes(vm)), ignoredByteRangeset(ignoredBytes, vm.getDynamicMemorySize()), rootNode(nullptr)
 {
   DS();
-  DPRE(r_vm.isAlive());
-  DPRE(r_vm.getWordSet());
+  DPRE(vm.isAlive());
+  DPRE(vm.getWordSet());
   DPRE(!!this->listener);
 
-  doAction(r_vm, initialInput, r_initialOutput, u8("VM died while running the initial input"));
-  Signature signature = createSignature(r_vm, ignoredByteRangeset);
+  doAction(vm, initialInput, r_initialOutput, u8("VM died while running the initial input"));
+  Signature signature = createSignature(vm, ignoredByteRangeset);
   State state;
-  doSaveAction(r_vm, state);
+  doSaveAction(state);
 
   Bitset extraIgnoredBytes;
   for (const auto &equivalentActionInputs : equivalentActionInputsSet) {
@@ -725,21 +726,21 @@ Multiverse::Multiverse (
     for (size_t i = 0, end = equivalentActionInputs.size(); i != end; ++i) {
       const u8string &actionInput = equivalentActionInputs[i];
       DW(, " doing **",actionInput.c_str(),"**");
-      doRestoreAction(r_vm, state);
-      doAction(r_vm, actionInput, tmp, u8("VM was dead after doing action"));
+      doRestoreAction(state);
+      doAction(vm, actionInput, tmp, u8("VM was dead after doing action"));
       DW(, " output was **",tmp.c_str(),"**");
       tmp.clear();
-      signatures[i] = createSignature(r_vm, ignoredByteRangeset);
+      signatures[i] = createSignature(vm, ignoredByteRangeset);
       signatureIs[i] = signatures[i].begin();
     }
-    extraIgnoredBytes |= createExtraIgnoredBytes(signatures[0], signatureIs + 1, signatureIs + equivalentActionInputs.size(), r_vm);
+    extraIgnoredBytes |= createExtraIgnoredBytes(signatures[0], signatureIs + 1, signatureIs + equivalentActionInputs.size(), vm);
   }
   ignoredBytes |= move(extraIgnoredBytes);
-  ignoredByteRangeset = Rangeset(ignoredBytes, r_vm.getDynamicMemorySize());
+  ignoredByteRangeset = Rangeset(ignoredBytes, vm.getDynamicMemorySize());
   signature = recreateSignature(signature, ignoredByteRangeset);
 
   unique_ptr<Node::Listener> nodeListener(this->listener->createNodeListener());
-  this->listener->nodeReached(*this, nodeListener.get(), ActionSet::NON_ID, r_initialOutput, signature, r_vm);
+  this->listener->nodeReached(*this, nodeListener.get(), ActionSet::NON_ID, r_initialOutput, signature, vm);
   unique_ptr<Node> node(new Node(move(nodeListener), nullptr, hashed(move(signature)), move(state)));
   rootNode = node.get();
   nodes.emplace(ref(rootNode->getSignature()), rootNode);
@@ -805,28 +806,28 @@ void Multiverse::doAction(Vm &r_vm, const u8string &input, u8string &r_output, c
   doAction(r_vm, input.begin(), input.end(), r_output, deathExceptionMsg);
 }
 
-void Multiverse::doSaveAction (Vm &r_vm, State &r_state) {
-  r_vm.setSaveState(&r_state);
+void Multiverse::doSaveAction (State &r_state) {
+  vm.setSaveState(&r_state);
   auto _ = finally([&] () {
-    r_vm.setSaveState(nullptr);
+    vm.setSaveState(nullptr);
   });
 
-  bool succeeded = saver(r_vm);
-  DPRE(r_vm.isAlive());
+  bool succeeded = saver(vm);
+  DPRE(vm.isAlive());
 
   if (!succeeded) {
     throw PlainException(u8("save action didn't cause saving"));
   }
 }
 
-void Multiverse::doRestoreAction (Vm &r_vm, const State &state) {
-  r_vm.setRestoreState(&state);
+void Multiverse::doRestoreAction (const State &state) {
+  vm.setRestoreState(&state);
   auto _ = finally([&] () {
-    r_vm.setRestoreState(nullptr);
+    vm.setRestoreState(nullptr);
   });
 
-  bool succeeded = restorer(r_vm);
-  DPRE(r_vm.isAlive());
+  bool succeeded = restorer(vm);
+  DPRE(vm.isAlive());
 
   if (!succeeded) {
     throw PlainException(u8("restore action didn't cause restoration"));
@@ -965,7 +966,7 @@ Multiverse::Node *Multiverse::collapseNode (
   }
 }
 
-void Multiverse::save (const char *pathName, const Vm &vm) {
+void Multiverse::save (const char *pathName) {
   DS();
   FILE *h = fopen(pathName, "wb");
   if (h == nullptr) {
@@ -998,7 +999,7 @@ void Multiverse::save (const char *pathName, const Vm &vm) {
   s.derefAndProcess(rootNode);
 }
 
-void Multiverse::load (const char *pathName, Vm &r_vm) {
+void Multiverse::load (const char *pathName) {
   DS();
   FILE *h = fopen(pathName, "rb");
   if (h == nullptr) {
@@ -1037,7 +1038,7 @@ void Multiverse::load (const char *pathName, Vm &r_vm) {
     s.process(outputStringSet);
     s.derefAndProcess(rootNode);
 
-    ignoredByteRangeset = Rangeset(ignoredBytes, r_vm.getDynamicMemorySize());
+    ignoredByteRangeset = Rangeset(ignoredBytes, vm.getDynamicMemorySize());
     unordered_set<Node *> seenNodes;
     rootNode->forEach([&] (Node *node) -> bool {
       if (contains(seenNodes, node)) {
@@ -1049,7 +1050,7 @@ void Multiverse::load (const char *pathName, Vm &r_vm) {
       return true;
     });
 
-    r_vm.setWordSet(move(wordSet));
+    vm.setWordSet(move(wordSet));
     // TODO validate result
   } catch (...) {
     nthrow(PlainException(u8("loading failed")));

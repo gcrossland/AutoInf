@@ -368,12 +368,12 @@ int main (int argc, char *argv[]) {
 
     struct {
       const char *name;
-      void (*impl)(int argc, char **argv, Vm &vm, Multiverse &multiverse, MultiverseView *view);
+      void (*impl)(int argc, char **argv, Multiverse &multiverse, MultiverseView *view);
     } modes[] = {{"cmd", runCmd}, {"velocityrun", runVelocityrun}};
     if (argc < 2) {
       throw PlainException(u8("no mode specified"));
     } else {
-      void (*impl)(int argc, char **argv, Vm &vm, Multiverse &multiverse, MultiverseView *view) = nullptr;
+      void (*impl)(int argc, char **argv, Multiverse &multiverse, MultiverseView *view) = nullptr;
       for (auto &mode : modes) {
         if (strcmp(argv[1], mode.name) == 0) {
           impl = mode.impl;
@@ -381,7 +381,7 @@ int main (int argc, char *argv[]) {
         }
       }
       if (impl) {
-        (*impl)(argc, argv, vm, multiverse, view);
+        (*impl)(argc, argv, multiverse, view);
       } else {
         throw PlainException(u8("no valid mode specified"));
       }
@@ -394,7 +394,7 @@ int main (int argc, char *argv[]) {
   }
 }
 
-void runCmd (int argc, char **argv, Vm &vm, Multiverse &multiverse, MultiverseView *view) {
+void runCmd (int argc, char **argv, Multiverse &multiverse, MultiverseView *view) {
   const char *outPathName = nullptr;
   if (argc == 3) {
     outPathName = argv[2];
@@ -411,7 +411,7 @@ void runCmd (int argc, char **argv, Vm &vm, Multiverse &multiverse, MultiverseVi
       in.erase(comment);
     }
 
-    bool done = !runCommandLine(vm, multiverse, in, message);
+    bool done = !runCommandLine(multiverse, in, message);
     in.clear();
     if (done) {
       break;
@@ -422,7 +422,7 @@ void runCmd (int argc, char **argv, Vm &vm, Multiverse &multiverse, MultiverseVi
   }
 }
 
-void runVelocityrun (int argc, char **argv, Vm &vm, Multiverse &multiverse, MultiverseView *view) {
+void runVelocityrun (int argc, char **argv, Multiverse &multiverse, MultiverseView *view) {
   if (argc != 8 && argc != 9) {
     throw PlainException(u8("command lines to be run initially, each round, on no change in node count, on max score change, on new words being used and on user exit must be specified"));
   }
@@ -459,14 +459,14 @@ void runVelocityrun (int argc, char **argv, Vm &vm, Multiverse &multiverse, Mult
   });
   waiter.detach();
 
-  if (!runCommandLineTemplate(vm, multiverse, initialCommandLineTemplate, 0, message, history)) {
+  if (!runCommandLineTemplate(multiverse, initialCommandLineTemplate, 0, message, history)) {
     return;
   }
 
   auto getUserTime = [] () -> double {
     return 0;
   };
-  auto getVmTime = [&vm] () -> double {
+  auto getVmTime = [] () -> double {
     return 0;
   };
   double tTotal0 = getUserTime() - initialTTotal;
@@ -484,14 +484,14 @@ void runVelocityrun (int argc, char **argv, Vm &vm, Multiverse &multiverse, Mult
     if (stopRequested) {
       printf("  stopping\n");
       fflush(stdout);
-      runCommandLineTemplate(vm, multiverse, stopCommandLineTemplate, round, message, history);
+      runCommandLineTemplate(multiverse, stopCommandLineTemplate, round, message, history);
       break;
     }
 
     size_t nodesSize0 = view->nodesByIndex.size();
     Value maxScoreValue0 = view->getMaxScoreValue(multiverse);
     Bitset words0(view->getInterestingChildActionWords(multiverse));
-    if (!runCommandLineTemplate(vm, multiverse, roundCommandLineTemplate, round + 1, message, history)) {
+    if (!runCommandLineTemplate(multiverse, roundCommandLineTemplate, round + 1, message, history)) {
       break;
     }
 
@@ -508,7 +508,7 @@ void runVelocityrun (int argc, char **argv, Vm &vm, Multiverse &multiverse, Mult
         break;
       }
 
-      if (!runCommandLineTemplate(vm, multiverse, nullChangeCommandLineTemplate, round + 1, message, history)) {
+      if (!runCommandLineTemplate(multiverse, nullChangeCommandLineTemplate, round + 1, message, history)) {
         break;
       }
 
@@ -524,7 +524,7 @@ void runVelocityrun (int argc, char **argv, Vm &vm, Multiverse &multiverse, Mult
     if (maxScoreValue1 != maxScoreValue0) {
       printf("  max score changed\n");
       fflush(stdout);
-      if (!runCommandLineTemplate(vm, multiverse, maxScoreChangeCommandLineTemplate, round + 1, message, history)) {
+      if (!runCommandLineTemplate(multiverse, maxScoreChangeCommandLineTemplate, round + 1, message, history)) {
         break;
       }
     }
@@ -534,7 +534,7 @@ void runVelocityrun (int argc, char **argv, Vm &vm, Multiverse &multiverse, Mult
       appendWordList(wordList, words1, multiverse);
       printf("  words added (%s)\n", narrowise(wordList));
       fflush(stdout);
-      if (!runCommandLineTemplate(vm, multiverse, wordsChangeCommandLineTemplate, round + 1, message, history)) {
+      if (!runCommandLineTemplate(multiverse, wordsChangeCommandLineTemplate, round + 1, message, history)) {
         break;
       }
     }
@@ -554,7 +554,7 @@ void runVelocityrun (int argc, char **argv, Vm &vm, Multiverse &multiverse, Mult
   fflush(stdout);
 }
 
-bool runCommandLineTemplate (Vm &r_vm, Multiverse &r_multiverse, const u8string &inTemplate, iu roundCount, u8string &r_message, vector<tuple<u8string, iu>> &r_history) {
+bool runCommandLineTemplate (Multiverse &r_multiverse, const u8string &inTemplate, iu roundCount, u8string &r_message, vector<tuple<u8string, iu>> &r_history) {
   char8_t b[1024];
   sprintf(reinterpret_cast<char *>(b), "%u", roundCount);
   u8string sub(b);
@@ -585,7 +585,7 @@ bool runCommandLineTemplate (Vm &r_vm, Multiverse &r_multiverse, const u8string 
     r_history.emplace_back(in, 1);
   }
 
-  return runCommandLine(r_vm, r_multiverse, in, r_message);
+  return runCommandLine(r_multiverse, in, r_message);
 }
 
 void appendWordList (u8string &r_o, const Bitset &words, const Multiverse &multiverse) {
@@ -601,7 +601,7 @@ void appendWordList (u8string &r_o, const Bitset &words, const Multiverse &multi
   }
 }
 
-bool runCommandLine (Vm &vm, Multiverse &multiverse, const u8string &in, u8string &message) {
+bool runCommandLine (Multiverse &multiverse, const u8string &in, u8string &message) {
   MultiverseView *view = static_cast<MultiverseView *>(multiverse.getListener());
   vector<Node *> &nodesByIndex = view->nodesByIndex;
   unordered_set<Node *> &selectedNodes = view->selectedNodes;
@@ -627,7 +627,7 @@ bool runCommandLine (Vm &vm, Multiverse &multiverse, const u8string &in, u8strin
         iu times = static_cast<iu>(n);
         u8string subLine(inPartEnd, inEnd);
         for (iu i = 0; i != times; ++i) {
-          bool notDone = runCommandLine(vm, multiverse, subLine, message);
+          bool notDone = runCommandLine(multiverse, subLine, message);
           if (!notDone) {
             return false;
           }
@@ -755,12 +755,12 @@ bool runCommandLine (Vm &vm, Multiverse &multiverse, const u8string &in, u8strin
             t.emplace_back(n);
           }
         }
-        multiverse.processNodes(t.begin(), t.end(), vm);
+        multiverse.processNodes(t.begin(), t.end());
       }
       view->multiverseChanged(multiverse);
     } else if (line == u8("L") || line == u8("l")) {
       if (!selectedNodes.empty()) {
-        multiverse.collapseNodes(selectedNodes.cbegin(), selectedNodes.cend(), vm);
+        multiverse.collapseNodes(selectedNodes.cbegin(), selectedNodes.cend());
       }
       view->multiverseChanged(multiverse);
     } else if (line == u8("T") || line == u8("t")) {
@@ -770,10 +770,10 @@ bool runCommandLine (Vm &vm, Multiverse &multiverse, const u8string &in, u8strin
       view->multiverseChanged(multiverse);
     } else if (line.size() > 2 && (line[0] == u8("E")[0] || line[0] == u8("e")[0]) && line[1] == u8("-")[0]) {
       u8string name(line.data() + 2, line.data() + line.size());
-      multiverse.save(reinterpret_cast<const char *>(name.c_str()), vm);
+      multiverse.save(reinterpret_cast<const char *>(name.c_str()));
     } else if (line.size() > 2 && (line[0] == u8("O")[0] || line[0] == u8("o")[0]) && line[1] == u8("-")[0]) {
       u8string name(line.data() + 2, line.data() + line.size());
-      multiverse.load(reinterpret_cast<const char *>(name.c_str()), vm);
+      multiverse.load(reinterpret_cast<const char *>(name.c_str()));
       view->multiverseChanged(multiverse);
     } else {
       const char8_t *numBegin = line.data();

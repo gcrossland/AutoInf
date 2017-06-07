@@ -870,7 +870,7 @@ template<typename _F, iff(std::is_convertible<_F, std::function<bool (Multiverse
   }
 }
 
-template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd, Vm &r_vm) {
+template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd) {
   DS();
   deque<tuple<Node *, ActionSet::Size, u8string, HashWrapper<Signature>, State, unique_ptr<Node::Listener>>> resultQueue;
   mutex resultQueueLock;
@@ -916,14 +916,14 @@ template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd,
         DW(, "processing action **",input.c_str(),"** (id ",id,")");
         output.clear();
 
-        doRestoreAction(r_vm, *parentState);
-        doAction(r_vm, input, output, u8("VM died while doing action"));
-        HashWrapper<Signature> signature(createSignature(r_vm, ignoredByteRangeset));
+        doRestoreAction(*parentState);
+        doAction(vm, input, output, u8("VM died while doing action"));
+        HashWrapper<Signature> signature(createSignature(vm, ignoredByteRangeset));
 
         auto dewordingWord = action.getDewordingTarget();
         if (dewordingWord != ActionSet::NON_ID) {
           DW(, "this action is a dewording one (for word of id ",dewordingWord,")");
-          if (deworder(r_vm, output)) {
+          if (deworder(vm, output)) {
             DW(, "word of id ",dewordingWord," is missing!");
             dewordedWords.setBit(dewordingWord);
           }
@@ -935,12 +935,12 @@ template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd,
         }
 
         unique_ptr<Node::Listener> nodeListener = listener->createNodeListener();
-        listener->nodeReached(*this, nodeListener.get(), id, output, signature.get(), r_vm);
+        listener->nodeReached(*this, nodeListener.get(), id, output, signature.get(), vm);
 
         DW(, "output from the action is **", output.c_str(), "**");
         try {
           // XXXX better response from doSaveAction on 'can't save'?
-          doSaveAction(r_vm, postState);
+          doSaveAction(postState);
         } catch (...) {
           postState.clear();
         }
@@ -1048,7 +1048,7 @@ template<typename _I> Bitset Multiverse::createExtraIgnoredBytes (const Signatur
   return extraIgnoredBytes;
 }
 
-template<typename _I> void Multiverse::collapseNodes (_I nodesBegin, _I nodesEnd, const Vm &vm) {
+template<typename _I> void Multiverse::collapseNodes (_I nodesBegin, _I nodesEnd) {
   DS();
   DPRE(nodesBegin != nodesEnd);
   DW(, "Collapsing nodes:");
