@@ -9,10 +9,7 @@ using autoinf::Multiverse;
 using std::vector;
 using core::u8string;
 using Node = autoinf::Multiverse::Node;
-using ActionId = autoinf::Multiverse::ActionId;
-using ActionWord = autoinf::Multiverse::ActionWord;
-using ActionTemplate = autoinf::Multiverse::ActionTemplate;
-using ActionSet = autoinf::Multiverse::ActionSet;
+using autoinf::ActionSet;
 using std::unordered_set;
 using std::get;
 using core::numeric_limits;
@@ -88,17 +85,17 @@ int main (int argc, char *argv[]) {
         // {u8("turn wheel. pull wheel.\n"), u8("turn wheel. pull wheel. east. west.\n"), u8("turn wheel. pull wheel. west. east.\n")},
         // {u8(""), u8("east\n"), u8("west\n"), u8("take red sphere\n"), u8("take blue sphere\n"), u8("drop red sphere\n"), u8("drop blue sphere\n"), u8("open red sphere\n"), u8("open blue sphere\n"), u8("enter light\n")}
       },
-      vector<ActionWord> {
+      vector<ActionSet::Word> {
         {u8("red sphere"), 0b011},
         {u8("blue sphere"), 0b011},
         {u8("green sphere"), 0b001},
         {u8("wheel"), 0b101},
         {u8("light"), 0b1001},
       },
-      vector<ActionTemplate> {
+      vector<ActionSet::Template> {
         {u8("examine "), 0b001U, u8("\n")},
       },
-      vector<ActionTemplate> {
+      vector<ActionSet::Template> {
         {u8("east\n")},
         {u8("west\n")},
         {u8("take "), 0b010U, u8("\n")},
@@ -117,23 +114,23 @@ int main (int argc, char *argv[]) {
     const u8string noResurrectionSaveActionInput(u8("no\n") + saveActionInput);
     const u8string noResurrectionRestoreActionInput(u8("no\n") + restoreActionInput);
     iu c = 0;
-    const ActionWord::CategorySet direction = 1U << (c++);
-    const ActionWord::CategorySet noun = 1U << (c++);
-    const ActionWord::CategorySet  mobile = 1U << (c++);
-    const ActionWord::CategorySet  holdable = 1U << (c++);
-    const ActionWord::CategorySet  supporter = 1U << (c++);
-    const ActionWord::CategorySet  container = 1U << (c++);
-    const ActionWord::CategorySet  lockable = 1U << (c++);
-    const ActionWord::CategorySet  locker = 1U << (c++);
-    const ActionWord::CategorySet  unlocker = 1U << (c++);
-    const ActionWord::CategorySet  openable = 1U << (c++);
-    const ActionWord::CategorySet  animate = 1U << (c++);
-    const ActionWord::CategorySet  clothing = 1U << (c++);
-    const ActionWord::CategorySet  edible = 1U << (c++);
-    const ActionWord::CategorySet  switchable = 1U << (c++);
-    const ActionWord::CategorySet  readable = 1U << (c++);
-    const ActionWord::CategorySet  flammable = 1U << (c++);
-    const ActionWord::CategorySet  attachable = 1U << (c++);
+    const ActionSet::Word::CategorySet direction = 1U << (c++);
+    const ActionSet::Word::CategorySet noun = 1U << (c++);
+    const ActionSet::Word::CategorySet  mobile = 1U << (c++);
+    const ActionSet::Word::CategorySet  holdable = 1U << (c++);
+    const ActionSet::Word::CategorySet  supporter = 1U << (c++);
+    const ActionSet::Word::CategorySet  container = 1U << (c++);
+    const ActionSet::Word::CategorySet  lockable = 1U << (c++);
+    const ActionSet::Word::CategorySet  locker = 1U << (c++);
+    const ActionSet::Word::CategorySet  unlocker = 1U << (c++);
+    const ActionSet::Word::CategorySet  openable = 1U << (c++);
+    const ActionSet::Word::CategorySet  animate = 1U << (c++);
+    const ActionSet::Word::CategorySet  clothing = 1U << (c++);
+    const ActionSet::Word::CategorySet  edible = 1U << (c++);
+    const ActionSet::Word::CategorySet  switchable = 1U << (c++);
+    const ActionSet::Word::CategorySet  readable = 1U << (c++);
+    const ActionSet::Word::CategorySet  flammable = 1U << (c++);
+    const ActionSet::Word::CategorySet  attachable = 1U << (c++);
     Multiverse multiverse(
       vm, u8("verbose\nfullscore\n"), output,
       [&saveActionInput, &noResurrectionSaveActionInput] (Vm &r_vm) -> bool {
@@ -158,7 +155,7 @@ int main (int argc, char *argv[]) {
       },
       vector<vector<u8string>> {
       },
-      vector<ActionWord> {
+      vector<ActionSet::Word> {
         {u8("north"), direction},
         {u8("south"), direction},
         {u8("east"), direction},
@@ -261,10 +258,10 @@ int main (int argc, char *argv[]) {
         {u8("axe"), noun | mobile | holdable | unlocker},
         {u8("collection of adventure game materials"), noun | mobile | holdable | readable | flammable}
       },
-      vector<ActionTemplate> {
+      vector<ActionSet::Template> {
         {u8("examine "), 0U, u8("\n")},
       },
-      vector<ActionTemplate> {
+      vector<ActionSet::Template> {
         {u8(""), direction, u8("\n")},
         {u8("get in "), container, u8("\n")},
         {u8("exit "), container, u8("\n")},
@@ -919,7 +916,7 @@ MultiverseMetricsListener::MultiverseMetricsListener (zword scoreAddr) :
 {
 }
 
-void MultiverseMetricsListener::nodeReached (const Multiverse &multiverse, Node::Listener *listener_, ActionId parentActionId, const u8string &output, const Signature &signature, const Vm &vm) {
+void MultiverseMetricsListener::nodeReached (const Multiverse &multiverse, Node::Listener *listener_, ActionSet::Size parentActionId, const u8string &output, const Signature &signature, const Vm &vm) {
   DW(, "DDDD created new node with sig of hash ", signature.hashSlow());
   NodeMetricsListener *listener = static_cast<NodeMetricsListener *>(listener_);
 
@@ -1120,7 +1117,7 @@ template<typename F> unique_ptr<size_t []> MultiverseMetricsListener::getWordSta
     }
   }
   DW(, "DDDD word counts:");
-  for (size_t i = 0, end = actionSet.getWordsSize(); i != end; ++i) {
+  for (ActionSet::SubSize i = 0, end = actionSet.getWordsSize(); i != end; ++i) {
     auto word = actionSet.getWord(i);
     DW(, "DDDD   ",u8string(word.begin(), word.end()).c_str()," - ",wordCounts[i]);
   }
@@ -1270,7 +1267,7 @@ const Bitset &MultiverseMetricsListener::getInterestingChildActionWords (const M
 constexpr size_t NodeView::NON_INDEX;
 
 NodeView::NodeView () :
-  index(NON_INDEX - 1), primeParentChildIndex(Multiverse::NON_ID), isDeadEnd(false), isAntiselected(false)
+  index(NON_INDEX - 1), primeParentChildIndex(ActionSet::NON_ID), isDeadEnd(false), isAntiselected(false)
 {
 }
 
@@ -1332,7 +1329,7 @@ void MultiverseView::studyNodes (const Multiverse &multiverse) {
     nodeView->index = NodeView::NON_INDEX;
   }
 
-  studyNode(multiverse.getRoot(), nullptr, Multiverse::NON_ID);
+  studyNode(multiverse.getRoot(), nullptr, ActionSet::NON_ID);
   size_t passBegin = 0;
   size_t passEnd = 1;
   DA(passEnd == nodesByIndex.size());
@@ -1354,7 +1351,7 @@ void MultiverseView::studyNodes (const Multiverse &multiverse) {
   } while (passBegin != passEnd);
 }
 
-void MultiverseView::studyNode (Node *node, Node *primeParentNode, ActionId childIndex) {
+void MultiverseView::studyNode (Node *node, Node *primeParentNode, ActionSet::Size childIndex) {
   DS();
   DW(, "looking at node with sig of hash ",node->getSignature().hashFast());
   NodeView *nodeView = static_cast<NodeView *>(node->getListener());
@@ -1441,11 +1438,11 @@ void MultiverseView::printNodes (const Multiverse &multiverse, FILE *out) {
   markDeadEndAndAntiselectedNodes();
 
   u8string prefix;
-  printNodeAsNonleaf(0, nullptr, multiverse.getRoot(), nullptr, Multiverse::NON_ID, multiverse, prefix, out);
+  printNodeAsNonleaf(0, nullptr, multiverse.getRoot(), nullptr, ActionSet::NON_ID, multiverse, prefix, out);
 }
 
 void MultiverseView::printNodeHeader (
-  char8_t nodeIndexRenderingPrefix, char8_t nodeIndexRenderingSuffix, Node *node, ActionId actionId,
+  char8_t nodeIndexRenderingPrefix, char8_t nodeIndexRenderingSuffix, Node *node, ActionSet::Size actionId,
   const Multiverse &multiverse, FILE *out
 ) {
   NodeView *nodeView = static_cast<NodeView *>(node->getListener());
@@ -1466,9 +1463,9 @@ void MultiverseView::printNodeHeader (
   fprintf(out, "}");
 }
 
-u8string MultiverseView::renderActionInput (ActionId actionId, const ActionSet &actionSet) {
+u8string MultiverseView::renderActionInput (ActionSet::Size actionId, const ActionSet &actionSet) {
   u8string actionInput;
-  if (actionId != Multiverse::NON_ID) {
+  if (actionId != ActionSet::NON_ID) {
     actionInput.push_back(u8("\"")[0]);
     actionSet.get(actionId).getInput(actionInput);
     actionInput.erase(actionInput.size() - 1);
@@ -1500,7 +1497,7 @@ void MultiverseView::printNodeOutput (const StringSet<char8_t>::String *output, 
 }
 
 void MultiverseView::printNodeAsLeaf (
-  size_t depth, const StringSet<char8_t>::String *output, Node *node, Node *parentNode, ActionId actionId,
+  size_t depth, const StringSet<char8_t>::String *output, Node *node, Node *parentNode, ActionSet::Size actionId,
   const Multiverse &multiverse, u8string &r_prefix, FILE *out
 ) {
   printNodeHeader(u8("{")[0], u8("}")[0], node, actionId, multiverse, out);
@@ -1509,7 +1506,7 @@ void MultiverseView::printNodeAsLeaf (
 }
 
 void MultiverseView::printNodeAsNonleaf (
-  size_t depth, const StringSet<char8_t>::String *output, Node *node, Node *parentNode, ActionId actionId,
+  size_t depth, const StringSet<char8_t>::String *output, Node *node, Node *parentNode, ActionSet::Size actionId,
   const Multiverse &multiverse, u8string &r_prefix, FILE *out
 ) {
   printNodeHeader(u8("(")[0], u8(")")[0], node, actionId, multiverse, out);
@@ -1535,7 +1532,7 @@ void MultiverseView::printNodeAsNonleaf (
   size_t fmtsEnd = 0;
   for (size_t i = 0, end = node->getChildrenSize(); i != end; ++i) {
     auto &child = node->getChild(i);
-    DI(ActionId childActionId = get<0>(child);)
+    DI(ActionSet::Size childActionId = get<0>(child);)
     Node *childNode = get<2>(child);
     DA(&node->getChild(node->getChildIndex(childActionId)) == &child);
     NodeView *childNodeView = static_cast<NodeView *>(childNode->getListener());
@@ -1555,7 +1552,7 @@ void MultiverseView::printNodeAsNonleaf (
     bool last = i == fmtsEnd - 1;
 
     auto &child = node->getChild(i);
-    ActionId childActionId = get<0>(child);
+    ActionSet::Size childActionId = get<0>(child);
     const StringSet<char8_t>::String &childOuput = get<1>(child);
     Node *childNode = get<2>(child);
 

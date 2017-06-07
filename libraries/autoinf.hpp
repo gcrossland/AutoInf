@@ -351,77 +351,73 @@ template<typename _c, typename _Size = iu> class StringSet {
   pub void rebuildString (const String &o, core::string<_c> &r_out) const;
 };
 
-class Multiverse {
-  pub typedef iu16f ActionId;
-  pub static constexpr ActionId NON_ID = static_cast<ActionId>(-1);
+class ActionSet {
+  pub typedef iu16f Size;
+  pub static constexpr Size NON_ID = static_cast<Size>(-1);
+  pub typedef iu8f SubSize;
+  pub class Action;
 
-  pub class ActionSet;
-
-  pub class ActionWord {
+  pub class Word {
     pub typedef iu64 CategorySet;
 
     prv core::u8string word;
     prv CategorySet categories;
 
-    pub ActionWord (core::u8string &&word, CategorySet categories);
+    pub Word (core::u8string &&word, CategorySet categories);
 
     friend class ActionSet;
   };
 
-  pub class ActionTemplate {
+  pub class Template {
     prv std::vector<core::u8string> segments;
-    prv std::vector<ActionWord::CategorySet> words;
+    prv std::vector<Word::CategorySet> words;
 
-    pub template<typename ..._Ts> ActionTemplate (_Ts &&...ts);
+    pub template<typename ..._Ts> Template (_Ts &&...ts);
     prv void init (core::u8string &&segment);
-    prv template<typename ..._Ts> void init (core::u8string &&segment, ActionWord::CategorySet word, _Ts &&...ts);
+    prv template<typename ..._Ts> void init (core::u8string &&segment, Word::CategorySet word, _Ts &&...ts);
 
     friend class ActionSet;
   };
 
-  pub class ActionSet {
-    pub typedef iu8f Index;
-    pub class Action;
+  prv MultiList<core::u8string, SubSize> words;
+  prv MultiList<MultiList<core::u8string, iu16f>, SubSize> templates;
+  prv Size dewordingActionCount;
+  prv MultiList<core::string<SubSize>, Size> specs;
 
-    prv MultiList<core::u8string, Index> words;
-    prv MultiList<MultiList<core::u8string, iu16f>, Index> templates;
-    prv ActionId dewordingActionCount;
-    prv MultiList<core::string<Index>, ActionId> specs;
+  pub ActionSet (const std::vector<Word> &words, const std::vector<Template> &dewordingTemplates, const std::vector<Template> &otherTemplates);
+  prv static void init (
+    const std::vector<Word> &words, SubSize nextTemplateI, const std::vector<Template> &templates,
+    MultiList<core::string<SubSize>, Size> &specs
+  );
+  prv static void initImpl (
+    const std::vector<Word> &words, const Template &templ, SubSize templateWordI,
+    MultiList<core::string<SubSize>, Size> &specs, core::string<SubSize> &r_spec
+  );
 
-    pub ActionSet (const std::vector<ActionWord> &words, const std::vector<ActionTemplate> &dewordingTemplates, const std::vector<ActionTemplate> &otherTemplates);
-    prv static void init (
-      const std::vector<ActionWord> &words, Index nextTemplateI, const std::vector<ActionTemplate> &templates,
-      MultiList<core::string<Index>, ActionId> &specs
-    );
-    prv static void initImpl (
-      const std::vector<ActionWord> &words, const ActionTemplate &templ, Index templateWordI,
-      MultiList<core::string<Index>, ActionId> &specs, core::string<Index> &r_spec
-    );
+  pub SubSize getWordsSize () const;
+  pub MultiList<core::u8string, SubSize>::SubList getWord (SubSize i) const;
+  pub Size getSize () const;
+  pub Action get (Size id) const;
 
-    pub Index getWordsSize () const;
-    pub MultiList<core::u8string, Index>::SubList getWord (Index i) const;
-    pub ActionId getSize () const;
-    pub Action get (ActionId id) const;
+  pub class Action {
+    prv const ActionSet &actionSet;
+    prv const MultiList<core::string<SubSize>, Size>::SubList spec;
+    prv bool dewording;
 
-    friend class Action;
-    pub class Action {
-      prv const ActionSet &actionSet;
-      prv const MultiList<core::string<Index>, ActionId>::SubList spec;
-      prv bool dewording;
+    prv Action (const ActionSet &actionSet, Size id);
+    prv Action (const ActionSet &actionSet, Size id, MultiList<core::string<SubSize>, Size>::SubList &&spec);
 
-      prv Action (const ActionSet &actionSet, ActionId id);
-      prv Action (const ActionSet &actionSet, ActionId id, MultiList<core::string<Index>, ActionId>::SubList &&spec);
+    pub Size getDewordingTarget () const;
+    pub size_t getWordCount () const;
+    pub SubSize getWord (size_t i) const;
+    pub void getInput (core::u8string &r_out) const;
+    pub bool includesAnyWords (const bitset::Bitset &words) const;
 
-      pub ActionId getDewordingTarget () const;
-      pub size_t getWordCount () const;
-      pub Index getWord (size_t i) const;
-      pub void getInput (core::u8string &r_out) const;
-      pub bool includesAnyWords (const bitset::Bitset &words) const;
-
-      friend class ActionSet;
-    };
+    friend class ActionSet;
   };
+};
 
+class Multiverse {
   prv struct RangesetPart {
     iu16f setSize;
     iu16f clearSize;
@@ -442,7 +438,7 @@ class Multiverse {
     prv bool primeParentNodeInvalid;
     prv core::HashWrapper<Signature> signature;
     prv std::unique_ptr<autofrotz::State> state;
-    prv std::vector<std::tuple<ActionId, StringSet<char8_t>::String, Node *>> children;
+    prv std::vector<std::tuple<ActionSet::Size, StringSet<char8_t>::String, Node *>> children;
 
     pub Node (std::unique_ptr<Listener> &&listener, Node *primeParentNode, core::HashWrapper<Signature> &&signature, autofrotz::State &&state);
     Node (const Node &) = delete;
@@ -460,9 +456,9 @@ class Multiverse {
     pub const autofrotz::State *getState () const;
     pub void clearState ();
     pub size_t getChildrenSize () const;
-    pub const std::tuple<ActionId, StringSet<char8_t>::String, Node *> &getChild (size_t i) const;
-    pub size_t getChildIndex (ActionId id) const;
-    pub void addChild (ActionId actionId, const core::u8string &output, Node *node, Multiverse &multiverse);
+    pub const std::tuple<ActionSet::Size, StringSet<char8_t>::String, Node *> &getChild (size_t i) const;
+    pub size_t getChildIndex (ActionSet::Size id) const;
+    pub void addChild (ActionSet::Size actionId, const core::u8string &output, Node *node, Multiverse &multiverse);
     prv bool updatePrimeParent (Node *newParentNode, bool changedAbove);
     pub void removeChild (size_t i);
     pub void changeChild (size_t i, Node *node);
@@ -508,7 +504,7 @@ class Multiverse {
     autofrotz::Vm &r_vm, const core::u8string &initialInput, core::u8string &r_initialOutput,
     std::function<bool (autofrotz::Vm &r_vm)> &&saver, std::function<bool (autofrotz::Vm &r_vm)> &&restorer,
     const std::vector<std::vector<core::u8string>> &equivalentActionInputsSet,
-    const std::vector<ActionWord> &words, const std::vector<ActionTemplate> &dewordingTemplates, const std::vector<ActionTemplate> &otherTemplates,
+    const std::vector<ActionSet::Word> &words, const std::vector<ActionSet::Template> &dewordingTemplates, const std::vector<ActionSet::Template> &otherTemplates,
     std::function<bool (const autofrotz::Vm &vm, const core::u8string &output)> &&deworder, std::unique_ptr<Listener> &&listener
   );
   prv static bitset::Bitset initIgnoredBytes (const autofrotz::Vm &vm);
@@ -558,7 +554,7 @@ class Multiverse {
     pub virtual void walkNodeListener (Node::Listener *listener, Deserialiser<FileInputIterator> &s) = 0;
 
     pub virtual std::unique_ptr<Node::Listener> createNodeListener () = 0;
-    pub virtual void nodeReached (const Multiverse &multiverse, Node::Listener *listener, ActionId parentActionId, const core::u8string &output, const Signature &signature, const autofrotz::Vm &vm) = 0;
+    pub virtual void nodeReached (const Multiverse &multiverse, Node::Listener *listener, ActionSet::Size parentActionId, const core::u8string &output, const Signature &signature, const autofrotz::Vm &vm) = 0;
     pub virtual void subtreePrimeAncestorsUpdated (const Multiverse &multiverse, const Node *node) = 0;
     pub virtual void nodeProcessed (const Multiverse &multiverse, const Node *node) = 0;
     pub virtual void nodesProcessed (const Multiverse &multiverse) = 0;

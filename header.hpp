@@ -57,7 +57,7 @@ class MultiverseMetricsListener : public autoinf::Multiverse::Listener {
 
   pub MultiverseMetricsListener (autofrotz::zword scoreAddr);
 
-  pub virtual void nodeReached (const autoinf::Multiverse &multiverse, autoinf::Multiverse::Node::Listener *listener, autoinf::Multiverse::ActionId parentActionId, const core::u8string &output, const autoinf::Signature &signature, const autofrotz::Vm &vm) override;
+  pub virtual void nodeReached (const autoinf::Multiverse &multiverse, autoinf::Multiverse::Node::Listener *listener, autoinf::ActionSet::Size parentActionId, const core::u8string &output, const autoinf::Signature &signature, const autofrotz::Vm &vm) override;
   prv void setScoreValue (NodeMetricsListener *listener, const autofrotz::Vm &vm);
   prv void setVisitageData (NodeMetricsListener *listener, const core::u8string &output);
   pub virtual void subtreePrimeAncestorsUpdated (const autoinf::Multiverse &multiverse, const autoinf::Multiverse::Node *node) override;
@@ -77,7 +77,7 @@ class MultiverseMetricsListener : public autoinf::Multiverse::Listener {
   prv void setVisitageValue (const autoinf::Multiverse::Node *node, NodeMetricsListener *listener, VisitageChain &r_chain);
   prv size_t checkVisitageValueRecursively (const autoinf::Multiverse::Node *node, NodeMetricsListener *listener, VisitageChain chain);
   pub virtual void nodeProcessed (const autoinf::Multiverse &multiverse, const autoinf::Multiverse::Node *node) override;
-  prv void setWordData (const autoinf::Multiverse::Node *node, NodeMetricsListener *listener, const autoinf::Multiverse::ActionSet &actionSet);
+  prv void setWordData (const autoinf::Multiverse::Node *node, NodeMetricsListener *listener, const autoinf::ActionSet &actionSet);
   pub virtual void nodesProcessed (const autoinf::Multiverse &multiverse) override;
   prv template<typename F> std::unique_ptr<size_t []> getWordStats (const autoinf::Multiverse &multiverse, const F &nodeFunctor);
   prv void setWordValueRecursively (const autoinf::Multiverse::Node *node, NodeMetricsListener *listener, size_t nodesSize, const size_t *stats, Value wordValue);
@@ -98,7 +98,7 @@ class MultiverseMetricsListener : public autoinf::Multiverse::Listener {
 class NodeView : public NodeMetricsListener {
   pub size_t index;
   pub static constexpr size_t NON_INDEX = static_cast<size_t>(-1);
-  pub autoinf::Multiverse::ActionId primeParentChildIndex;
+  pub autoinf::ActionSet::Size primeParentChildIndex;
   pub bool isDeadEnd;
   pub bool isAntiselected;
 
@@ -127,23 +127,23 @@ class MultiverseView : public MultiverseMetricsListener {
   pub void multiverseChanged (const autoinf::Multiverse &multiverse);
   pub void selectionChanged ();
   prv void studyNodes (const autoinf::Multiverse &multiverse);
-  prv void studyNode (autoinf::Multiverse::Node *node, autoinf::Multiverse::Node *parentNode, autoinf::Multiverse::ActionId childIndex);
+  prv void studyNode (autoinf::Multiverse::Node *node, autoinf::Multiverse::Node *parentNode, autoinf::ActionSet::Size childIndex);
   prv void markDeadEndAndAntiselectedNodes ();
   prv void markDeadEndNode (autoinf::Multiverse::Node *node, NodeView *nodeView);
   prv void markAntiselectedNode (autoinf::Multiverse::Node *node, NodeView *nodeView);
   pub void printNodes (const autoinf::Multiverse &multiverse, FILE *out);
   prv void printNodeHeader (
-    char8_t nodeIndexRenderingPrefix, char8_t nodeIndexRenderingSuffix, autoinf::Multiverse::Node *node, autoinf::Multiverse::ActionId actionId,
+    char8_t nodeIndexRenderingPrefix, char8_t nodeIndexRenderingSuffix, autoinf::Multiverse::Node *node, autoinf::ActionSet::Size actionId,
     const autoinf::Multiverse &multiverse, FILE *out
   );
-  prv core::u8string renderActionInput (autoinf::Multiverse::ActionId actionId, const autoinf::Multiverse::ActionSet &actionSet);
+  prv core::u8string renderActionInput (autoinf::ActionSet::Size actionId, const autoinf::ActionSet &actionSet);
   prv void printNodeOutput (const autoinf::StringSet<char8_t>::String *output, const autoinf::Multiverse &multiverse, const core::u8string &prefix, FILE *out);
   prv void printNodeAsLeaf (
-    size_t depth, const autoinf::StringSet<char8_t>::String *output, autoinf::Multiverse::Node *node, autoinf::Multiverse::Node *parentNode, autoinf::Multiverse::ActionId actionId,
+    size_t depth, const autoinf::StringSet<char8_t>::String *output, autoinf::Multiverse::Node *node, autoinf::Multiverse::Node *parentNode, autoinf::ActionSet::Size actionId,
     const autoinf::Multiverse &multiverse, core::u8string &r_prefix, FILE *out
   );
   prv void printNodeAsNonleaf (
-    size_t depth, const autoinf::StringSet<char8_t>::String *output, autoinf::Multiverse::Node *node, autoinf::Multiverse::Node *parentNode, autoinf::Multiverse::ActionId actionId,
+    size_t depth, const autoinf::StringSet<char8_t>::String *output, autoinf::Multiverse::Node *node, autoinf::Multiverse::Node *parentNode, autoinf::ActionSet::Size actionId,
     const autoinf::Multiverse &multiverse, core::u8string &r_prefix, FILE *out
   );
 };

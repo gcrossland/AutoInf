@@ -254,23 +254,23 @@ void Signature::Iterator::copy (Writer &r_writer, size_t r) {
   }
 }
 
-Multiverse::ActionWord::ActionWord (u8string &&word, CategorySet categories) : word(move(word)), categories(categories) {
+ActionSet::Word::Word (u8string &&word, CategorySet categories) : word(move(word)), categories(categories) {
 }
 
-void Multiverse::ActionTemplate::init (u8string &&segment) {
+void ActionSet::Template::init (u8string &&segment) {
   segments.push_back(move(segment));
 }
 
-Multiverse::ActionSet::ActionSet (const vector<ActionWord> &words, const vector<ActionTemplate> &dewordingTemplates, const vector<ActionTemplate> &otherTemplates) {
+ActionSet::ActionSet (const vector<Word> &words, const vector<Template> &dewordingTemplates, const vector<Template> &otherTemplates) {
   DS();
-  for (const ActionTemplate &templ : dewordingTemplates) {
+  for (const Template &templ : dewordingTemplates) {
     if (templ.words.size() != 1) {
       throw PlainException(u8("dewording action templates must contain exactly one action word"));
     }
   }
 
   this->words.reserve(words.size());
-  for (const ActionWord &word : words) {
+  for (const Word &word : words) {
     this->words.subList().append(word.word);
     this->words.push();
   }
@@ -278,8 +278,8 @@ Multiverse::ActionSet::ActionSet (const vector<ActionWord> &words, const vector<
   DI(DW(,"words are:"); for (const auto &w : this->words) { DW(,"  **",u8string(w.begin(), w.end()).c_str(),"**"); })
   this->templates.reserve(dewordingTemplates.size() + otherTemplates.size());
   auto l = {&dewordingTemplates, &otherTemplates};
-  for (const vector<ActionTemplate> *templates : l) {
-    for (const ActionTemplate &templ : *templates) {
+  for (const vector<Template> *templates : l) {
+    for (const Template &templ : *templates) {
       auto &e = this->templates.subList();
       for (auto &segment : templ.segments) {
         e.subList().append(segment);
@@ -293,11 +293,11 @@ Multiverse::ActionSet::ActionSet (const vector<ActionWord> &words, const vector<
 
   init(words, 0, dewordingTemplates, specs);
   dewordingActionCount = specs.size();
-  init(words, static_cast<Index>(dewordingTemplates.size()), otherTemplates, specs);
+  init(words, static_cast<SubSize>(dewordingTemplates.size()), otherTemplates, specs);
   specs.compact().shrink_to_fit();
   DI(
     DW(,"hence, action inputs are:");
-    for (ActionId i = 0; i != getSize(); ++i) {
+    for (Size i = 0; i != getSize(); ++i) {
       u8string o;
       get(i).getInput(o);
       DW(,"  **",o.c_str(),"**");
@@ -305,22 +305,22 @@ Multiverse::ActionSet::ActionSet (const vector<ActionWord> &words, const vector<
   )
 }
 
-void Multiverse::ActionSet::init (
-  const vector<ActionWord> &words, Index nextTemplateI, const vector<ActionTemplate> &templates,
-  MultiList<string<Index>, ActionId> &specs
+void ActionSet::init (
+  const vector<Word> &words, SubSize nextTemplateI, const vector<Template> &templates,
+  MultiList<string<SubSize>, Size> &specs
 ) {
   DS();
-  string<Index> spec;
-  for (const ActionTemplate &templ : templates) {
+  string<SubSize> spec;
+  for (const Template &templ : templates) {
     spec.clear();
     spec.push_back(nextTemplateI++);
     initImpl(words, templ, 0, specs, spec);
   }
 }
 
-void Multiverse::ActionSet::initImpl (
-  const vector<ActionWord> &words, const ActionTemplate &templ, Index templateWordI,
-  MultiList<string<Index>, ActionId> &specs, string<Index> &r_spec
+void ActionSet::initImpl (
+  const vector<Word> &words, const Template &templ, SubSize templateWordI,
+  MultiList<string<SubSize>, Size> &specs, string<SubSize> &r_spec
 ) {
   if (templateWordI == templ.words.size()) {
     DA(r_spec.size() == static_cast<size_t>(templateWordI) + 1);
@@ -330,10 +330,10 @@ void Multiverse::ActionSet::initImpl (
     return;
   }
 
-  ActionWord::CategorySet categories = templ.words[templateWordI];
+  Word::CategorySet categories = templ.words[templateWordI];
   size_t specPreSize = r_spec.size();
-  for (Index i = 0, end = static_cast<Index>(words.size()); i != end; ++i) {
-    const ActionWord &word = words[i];
+  for (SubSize i = 0, end = static_cast<SubSize>(words.size()); i != end; ++i) {
+    const Word &word = words[i];
     if ((categories & word.categories) == categories) {
       r_spec.push_back(i);
       initImpl(words, templ, templateWordI + 1, specs, r_spec);
@@ -342,32 +342,32 @@ void Multiverse::ActionSet::initImpl (
   }
 }
 
-Multiverse::ActionSet::Index Multiverse::ActionSet::getWordsSize () const {
+ActionSet::SubSize ActionSet::getWordsSize () const {
   return words.size();
 }
 
-MultiList<core::u8string, Multiverse::ActionSet::Index>::SubList Multiverse::ActionSet::getWord (Index i) const {
+MultiList<core::u8string, ActionSet::SubSize>::SubList ActionSet::getWord (SubSize i) const {
   return words.get(i);
 }
 
-Multiverse::ActionId Multiverse::ActionSet::getSize () const {
+ActionSet::Size ActionSet::getSize () const {
   return specs.size();
 }
 
-Multiverse::ActionSet::Action Multiverse::ActionSet::get (ActionId id) const {
+ActionSet::Action ActionSet::get (Size id) const {
   return Action(*this, id);
 }
 
-Multiverse::ActionSet::Action::Action (const ActionSet &actionSet, ActionId id) : Action(actionSet, id, actionSet.specs.get(id)) {
+ActionSet::Action::Action (const ActionSet &actionSet, Size id) : Action(actionSet, id, actionSet.specs.get(id)) {
 }
 
-Multiverse::ActionSet::Action::Action (const ActionSet &actionSet, ActionId id, MultiList<core::string<Index>, ActionId>::SubList &&spec) :
+ActionSet::Action::Action (const ActionSet &actionSet, Size id, MultiList<core::string<SubSize>, Size>::SubList &&spec) :
   actionSet(actionSet), spec(move(spec)), dewording(id < actionSet.dewordingActionCount)
 {
   DA(actionSet.templates.get(*this->spec.begin()).size() == this->spec.size());
 }
 
-Multiverse::ActionId Multiverse::ActionSet::Action::getDewordingTarget () const {
+ActionSet::Size ActionSet::Action::getDewordingTarget () const {
   if (!dewording) {
     return NON_ID;
   }
@@ -376,16 +376,16 @@ Multiverse::ActionId Multiverse::ActionSet::Action::getDewordingTarget () const 
   return getWord(0);
 }
 
-size_t Multiverse::ActionSet::Action::getWordCount () const {
+size_t ActionSet::Action::getWordCount () const {
   return spec.size() - 1;
 }
 
-Multiverse::ActionSet::Index Multiverse::ActionSet::Action::getWord (size_t i) const {
+ActionSet::SubSize ActionSet::Action::getWord (size_t i) const {
   DA(i < getWordCount());
   return *(spec.begin() + 1 + i);
 }
 
-void Multiverse::ActionSet::Action::getInput (u8string &r_out) const {
+void ActionSet::Action::getInput (u8string &r_out) const {
   auto segmentsI = actionSet.templates.get(*spec.begin()).begin();
   auto segment = *(segmentsI++);
   r_out.append(segment.begin(), segment.end());
@@ -399,7 +399,7 @@ void Multiverse::ActionSet::Action::getInput (u8string &r_out) const {
   DA(segmentsI == actionSet.templates.get(*spec.begin()).end());
 }
 
-bool Multiverse::ActionSet::Action::includesAnyWords (const Bitset &words) const {
+bool ActionSet::Action::includesAnyWords (const Bitset &words) const {
   for (size_t i = 0, end = getWordCount(); i != end; ++i) {
     if (words.getBit(getWord(i))) {
       return true;
@@ -487,18 +487,18 @@ size_t Multiverse::Node::getChildrenSize () const {
   return children.size();
 }
 
-const tuple<Multiverse::ActionId, StringSet<char8_t>::String, Multiverse::Node *> &Multiverse::Node::getChild (size_t i) const {
+const tuple<ActionSet::Size, StringSet<char8_t>::String, Multiverse::Node *> &Multiverse::Node::getChild (size_t i) const {
   return children[i];
 }
 
-size_t Multiverse::Node::getChildIndex (ActionId id) const {
-  auto i = lower_bound(children.begin(), children.end(), id, [] (const tuple<ActionId, StringSet<char8_t>::String, Node *> &elmt, const ActionId &target) {
+size_t Multiverse::Node::getChildIndex (ActionSet::Size id) const {
+  auto i = lower_bound(children.begin(), children.end(), id, [] (const tuple<ActionSet::Size, StringSet<char8_t>::String, Node *> &elmt, const ActionSet::Size &target) {
     return get<0>(elmt) < target;
   });
   return (i == children.end() || get<0>(*i) != id) ? numeric_limits<size_t>::max() : offset(children.begin(), i);
 }
 
-void Multiverse::Node::addChild (ActionId actionId, const u8string &output, Node *node, Multiverse &multiverse) {
+void Multiverse::Node::addChild (ActionSet::Size actionId, const u8string &output, Node *node, Multiverse &multiverse) {
   DW(, "adding to Node with sig of hash ", signature.hashFast(), " child of action id ", actionId, ":");
   DW(, "  output is **", output.c_str(), "**");
   DW(, "  dest. Node has sig of hash ", node->getSignature().hashFast());
@@ -697,7 +697,7 @@ Multiverse::Node *const &Multiverse::NodeIterator::operator* () const {
 Multiverse::Multiverse (
   Vm &r_vm, const u8string &initialInput, u8string &r_initialOutput, function<bool (Vm &r_vm)> &&saver, function<bool (Vm &r_vm)> &&restorer,
   const vector<vector<u8string>> &equivalentActionInputsSet,
-  const vector<ActionWord> &words, const vector<ActionTemplate> &dewordingTemplates, const vector<ActionTemplate> &otherTemplates,
+  const vector<ActionSet::Word> &words, const vector<ActionSet::Template> &dewordingTemplates, const vector<ActionSet::Template> &otherTemplates,
   function<bool (const Vm &vm, const u8string &output)> &&deworder, unique_ptr<Listener> &&listener
 ) :
   saver(saver), restorer(restorer), actionSet(words, dewordingTemplates, otherTemplates),
@@ -739,7 +739,7 @@ Multiverse::Multiverse (
   signature = recreateSignature(signature, ignoredByteRangeset);
 
   unique_ptr<Node::Listener> nodeListener(this->listener->createNodeListener());
-  this->listener->nodeReached(*this, nodeListener.get(), NON_ID, r_initialOutput, signature, r_vm);
+  this->listener->nodeReached(*this, nodeListener.get(), ActionSet::NON_ID, r_initialOutput, signature, r_vm);
   unique_ptr<Node> node(new Node(move(nodeListener), nullptr, hashed(move(signature)), move(state)));
   rootNode = node.get();
   nodes.emplace(ref(rootNode->getSignature()), rootNode);
@@ -780,7 +780,7 @@ Multiverse::~Multiverse () noexcept {
   }
 }
 
-const Multiverse::ActionSet &Multiverse::getActionSet () const {
+const ActionSet &Multiverse::getActionSet () const {
   return actionSet;
 }
 

@@ -820,7 +820,7 @@ template<typename _c, typename _Size> void StringSet<_c, _Size>::rebuildString (
   }
 }
 
-template<typename ..._Ts> Multiverse::ActionTemplate::ActionTemplate (_Ts &&...ts) {
+template<typename ..._Ts> ActionSet::Template::Template (_Ts &&...ts) {
   DS();
   segments.reserve((sizeof...(_Ts) + 1) / 2);
   words.reserve((sizeof...(_Ts) - 1) / 2);
@@ -829,7 +829,7 @@ template<typename ..._Ts> Multiverse::ActionTemplate::ActionTemplate (_Ts &&...t
   DI(DW(,"and words"); for (auto &w : words) { DW(,"  ", w); })
 }
 
-template<typename ..._Ts> void Multiverse::ActionTemplate::init (u8string &&segment, ActionWord::CategorySet word, _Ts &&...ts) {
+template<typename ..._Ts> void ActionSet::Template::init (u8string &&segment, Word::CategorySet word, _Ts &&...ts) {
   segments.push_back(move(segment));
   words.push_back(word);
   init(forward<_Ts>(ts)...);
@@ -850,7 +850,7 @@ template<typename _Walker> void Multiverse::Node::beWalked (_Walker &w) {
     signature = hashed(move(t));
   }
   w.derefAndProcess(state);
-  w.process(children, [] (tuple<ActionId, StringSet<char8_t>::String, Node *> &o, _Walker &w) {
+  w.process(children, [] (tuple<ActionSet::Size, StringSet<char8_t>::String, Node *> &o, _Walker &w) {
     DS();
     w.process(get<0>(o));
     w.process(get<1>(o), [] (iu &e, _Walker &w) {
@@ -872,7 +872,7 @@ template<typename _F, iff(std::is_convertible<_F, std::function<bool (Multiverse
 
 template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd, Vm &r_vm) {
   DS();
-  deque<tuple<Node *, ActionId, u8string, HashWrapper<Signature>, State, unique_ptr<Node::Listener>>> resultQueue;
+  deque<tuple<Node *, ActionSet::Size, u8string, HashWrapper<Signature>, State, unique_ptr<Node::Listener>>> resultQueue;
   mutex resultQueueLock;
   condition_variable resultQueueCondVar;
 
@@ -903,7 +903,7 @@ template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd,
       DA(parentNode->getChildrenSize() == 0);
 
       Bitset dewordedWords;
-      for (ActionId id = 0, end = actionSet.getSize(); id != end; ++id) {
+      for (ActionSet::Size id = 0, end = actionSet.getSize(); id != end; ++id) {
         ActionSet::Action action = actionSet.get(id);
 
         if (action.includesAnyWords(dewordedWords)) {
@@ -921,7 +921,7 @@ template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd,
         HashWrapper<Signature> signature(createSignature(r_vm, ignoredByteRangeset));
 
         auto dewordingWord = action.getDewordingTarget();
-        if (dewordingWord != NON_ID) {
+        if (dewordingWord != ActionSet::NON_ID) {
           DW(, "this action is a dewording one (for word of id ",dewordingWord,")");
           if (deworder(r_vm, output)) {
             DW(, "word of id ",dewordingWord," is missing!");
@@ -984,7 +984,7 @@ template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd,
       break;
     }
     DW(, "M the result is a child for the node with sig of hash ", parentNode->getSignature().hashFast());
-    ActionId parentActionId = get<1>(rs);
+    ActionSet::Size parentActionId = get<1>(rs);
     u8string &resultOutput = get<2>(rs);
     HashWrapper<Signature> &resultSignature = get<3>(rs);
     State &resultState = get<4>(rs);
