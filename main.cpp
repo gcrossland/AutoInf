@@ -520,20 +520,26 @@ void runVelocityrun (iu argsSize, char **args, Multiverse &multiverse, Multivers
     }
 
     Value maxScoreValue1 = view->getMaxScoreValue(multiverse);
+    bool maxScoreChanged = maxScoreValue1 != maxScoreValue0;
     Bitset words1(view->getInterestingChildActionWords(multiverse));
-    if (maxScoreValue1 != maxScoreValue0) {
-      printf("  max score changed\n");
-      fflush(stdout);
-      if (!runCommandLineTemplate(multiverse, maxScoreChangeCommandLineTemplate, round + 1, message, history)) {
-        break;
-      }
-    }
     words1.andNot(words0);
-    if (!words1.empty()) {
+    bool wordsChanged = !words1.empty();
+    if (maxScoreChanged) {
+      printf("  max score changed (%d)\n", maxScoreValue1);
+      fflush(stdout);
+    }
+    if (wordsChanged) {
       u8string wordList;
       appendWordList(wordList, words1, multiverse);
       printf("  words added (%s)\n", narrowise(wordList));
       fflush(stdout);
+    }
+    if (maxScoreChanged) {
+      if (!runCommandLineTemplate(multiverse, maxScoreChangeCommandLineTemplate, round + 1, message, history)) {
+        break;
+      }
+    }
+    if (wordsChanged) {
       if (!runCommandLineTemplate(multiverse, wordsChangeCommandLineTemplate, round + 1, message, history)) {
         break;
       }
