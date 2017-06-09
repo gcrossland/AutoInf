@@ -694,23 +694,19 @@ Multiverse::Node *const &Multiverse::NodeIterator::operator* () const {
   return get<1>(*i);
 }
 
-Multiverse::Multiverse (
-  Vm &vm, const u8string &initialInput, u8string &r_initialOutput, function<bool (Vm &r_vm)> &&saver, function<bool (Vm &r_vm)> &&restorer,
-  const vector<vector<u8string>> &equivalentActionInputsSet,
-  const vector<ActionSet::Word> &words, const vector<ActionSet::Template> &dewordingTemplates, const vector<ActionSet::Template> &otherTemplates,
-  function<bool (const Vm &vm, const u8string &output)> &&deworder, unique_ptr<Listener> &&listener
-) :
-  vm(vm),
-  saver(saver), restorer(restorer), actionSet(words, dewordingTemplates, otherTemplates),
-  deworder(move(deworder)), listener(move(listener)),
+Multiverse::Multiverse (Story &&story, u8string &r_initialOutput, const vector<vector<u8string>> &equivalentActionInputsSet, unique_ptr<Listener> &&listener) :
+  vm(story.zcodeFileName, story.screenWidth, story.screenHeight, 0, true, r_initialOutput),
+  saver(move(story.saver)), restorer(move(story.restorer)), actionSet(move(story.words), move(story.dewordingTemplates), move(story.otherTemplates)),
+  deworder(move(story.deworder)), listener(move(listener)),
   ignoredBytes(initIgnoredBytes(vm)), ignoredByteRangeset(ignoredBytes, vm.getDynamicMemorySize()), rootNode(nullptr)
 {
   DS();
-  DPRE(vm.isAlive());
-  DPRE(vm.getWordSet());
   DPRE(!!this->listener);
 
-  doAction(vm, initialInput, r_initialOutput, u8("VM died while running the initial input"));
+  if (!vm.isAlive()) {
+    throw PlainException(u8("VM died while initialising"));
+  }
+  doAction(vm, move(story.prologueInput), r_initialOutput, u8("VM died while running the prologue input"));
   Signature signature = createSignature(vm, ignoredByteRangeset);
   State state;
   doSaveAction(state);

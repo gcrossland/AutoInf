@@ -43,6 +43,9 @@ using core::hash;
 using autoinf::StringSet;
 using std::deque;
 using std::swap;
+using std::unordered_map;
+using core::HashWrapper;
+using core::string;
 
 /* -----------------------------------------------------------------------------
 ----------------------------------------------------------------------------- */
@@ -61,8 +64,12 @@ int main (int argc, char *argv[]) {
     //autofrotz::DOPEN(, errs);
     //autofrotz::vmlink::DOPEN(, errs);
 
+    if (argc < 3) {
+      throw PlainException(u8("Syntax: autoinf <story> <mode> ..."));
+    }
+
+    const iu width = 70;
     const iu height = 64;
-    const iu undoDepth = 0;
     const u8string saveActionInput(u8("save\n\1\n"));
     const u8string restoreActionInput(u8("restore\n\1\n"));
     const u8string noResurrectionSaveActionInput(u8("no\n") + saveActionInput);
@@ -85,9 +92,11 @@ int main (int argc, char *argv[]) {
     const ActionSet::Word::CategorySet  readable = 1U << (c++);
     const ActionSet::Word::CategorySet  flammable = 1U << (c++);
     const ActionSet::Word::CategorySet  attachable = 1U << (c++);
-    u8string output;
-    Vm vm("testgame/testgame.z5", 70, height, undoDepth, true, output);
-    Multiverse multiverse(
+    unordered_map<HashWrapper<string<char>>, Story> stories = {
+      {HashWrapper<string<char>>("testgame"), {{
+        "testgame/testgame.z5",
+        width,
+        height,
         [&saveActionInput] (Vm &r_vm) -> bool {
           u8string o;
           Multiverse::doAction(r_vm, saveActionInput, o, u8("VM died while saving a state"));
@@ -98,13 +107,7 @@ int main (int argc, char *argv[]) {
           Multiverse::doAction(r_vm, restoreActionInput, o, u8("VM died while restoring a state"));
           return r_vm.getRestoreCount() != 0;
         },
-        vm, u8("verbose\nfullscore\n"), output,
-      vector<vector<u8string>> {
-        // {u8("z\n"), u8("z. z. z. z. z. z. z. z.\n")},
-        // {u8("verbitudeise the tangerine monstrosity. verbitudeise the tangerine monstrosity.\n"), u8("")},
-        // {u8("turn wheel. pull wheel.\n"), u8("turn wheel. pull wheel. east. west.\n"), u8("turn wheel. pull wheel. west. east.\n")},
-        // {u8(""), u8("east\n"), u8("west\n"), u8("take red sphere\n"), u8("take blue sphere\n"), u8("drop red sphere\n"), u8("drop blue sphere\n"), u8("open red sphere\n"), u8("open blue sphere\n"), u8("enter light\n")}
-      },
+        u8("verbose\nfullscore\n"),
         vector<ActionSet::Word> {
           {u8("red sphere"), 0b011},
           {u8("blue sphere"), 0b011},
@@ -127,11 +130,11 @@ int main (int argc, char *argv[]) {
           {u8("turn "), 0b100U, u8(". pull "), 0b100U, u8("\n")},
           {u8("enter "), 0b1000U, u8("\n")}
         },
-        unique_ptr<Multiverse::Listener>(new MultiverseView(0x08C8))
-    );
-    /*
-    Vm vm("advent/advent.z5", 70, height, undoDepth, true, output);
-    Multiverse multiverse(
+      }, 0x08C8}},
+      {HashWrapper<string<char>>("advent"), {{
+        "advent/advent.z5",
+        width,
+        height,
         [&saveActionInput, &noResurrectionSaveActionInput] (Vm &r_vm) -> bool {
           u8string o;
           Multiverse::doAction(r_vm, saveActionInput, o, u8("VM died while saving a state"));
@@ -152,9 +155,7 @@ int main (int argc, char *argv[]) {
 
           return r_vm.getRestoreCount() != 0;
         },
-        vm, u8("verbose\nfullscore\n"), output,
-      vector<vector<u8string>> {
-      },
+        u8("verbose\nfullscore\n"),
         vector<ActionSet::Word> {
           {u8("north"), direction},
           {u8("south"), direction},
@@ -360,32 +361,31 @@ int main (int argc, char *argv[]) {
           {u8("say foo\n")},
           {u8("say abracadabra\n")}
         },
-        unique_ptr<Multiverse::Listener>(new MultiverseView(one of 0x3BEB or 0x3C0B or 0x3C0D))
-    );
-    */
+      }, 0x3BEB /* or 0x3C0B or 0x3C0D */ }}
+    };
+    // TODO uargs
+    auto e0 = stories.find(core::hashed(string<char>(argv[1])));
+    if (e0 == stories.end()) {
+      throw PlainException(u8string(u8("unknown story '")) + reinterpret_cast<char8_t *>(argv[1]) + u8("' specified"));
+    }
+    Story story(move(get<1>(*e0)));
+
+    unordered_map<HashWrapper<string<char>>, void (*)(iu argsSize, char **args, Multiverse &multiverse, MultiverseView *view)> modes = {
+      {HashWrapper<string<char>>("cmd"), runCmd},
+      {HashWrapper<string<char>>("velocityrun"), runVelocityrun}
+    };
+    auto e1 = find(modes, core::hashed(string<char>(argv[2])));
+    if (!e1) {
+      throw PlainException(u8string(u8("unknown mode '")) + reinterpret_cast<char8_t *>(argv[2]) + u8("' specified"));
+    }
+    auto mode = *e1;
+
+    u8string output;
+    auto scoreAddr = story.scoreAddr;
+    Multiverse multiverse(move(story._), output, {}, unique_ptr<Multiverse::Listener>(new MultiverseView(scoreAddr)));
     MultiverseView *view = static_cast<MultiverseView *>(multiverse.getListener());
     view->multiverseChanged(multiverse);
-
-    struct {
-      const char *name;
-      void (*impl)(int argc, char **argv, Multiverse &multiverse, MultiverseView *view);
-    } modes[] = {{"cmd", runCmd}, {"velocityrun", runVelocityrun}};
-    if (argc < 2) {
-      throw PlainException(u8("no mode specified"));
-    } else {
-      void (*impl)(int argc, char **argv, Multiverse &multiverse, MultiverseView *view) = nullptr;
-      for (auto &mode : modes) {
-        if (strcmp(argv[1], mode.name) == 0) {
-          impl = mode.impl;
-          break;
-        }
-      }
-      if (impl) {
-        (*impl)(argc, argv, multiverse, view);
-      } else {
-        throw PlainException(u8("no valid mode specified"));
-      }
-    }
+    (*mode)(static_cast<iu>(argc) - 3, argv + 3, multiverse, view);
 
     return 0;
   } catch (exception &e) {
@@ -394,10 +394,10 @@ int main (int argc, char *argv[]) {
   }
 }
 
-void runCmd (int argc, char **argv, Multiverse &multiverse, MultiverseView *view) {
+void runCmd (iu argsSize, char **args, Multiverse &multiverse, MultiverseView *view) {
   const char *outPathName = nullptr;
-  if (argc == 3) {
-    outPathName = argv[2];
+  if (argsSize == 1) {
+    outPathName = args[0];
   }
 
   u8string message;
@@ -422,25 +422,25 @@ void runCmd (int argc, char **argv, Multiverse &multiverse, MultiverseView *view
   }
 }
 
-void runVelocityrun (int argc, char **argv, Multiverse &multiverse, MultiverseView *view) {
-  if (argc != 8 && argc != 9) {
+void runVelocityrun (iu argsSize, char **args, Multiverse &multiverse, MultiverseView *view) {
+  if (argsSize != 6 && argsSize != 7) {
     throw PlainException(u8("command lines to be run initially, each round, on no change in node count, on max score change, on new words being used and on user exit must be specified"));
   }
   // TODO uargs
-  u8string initialCommandLineTemplate(reinterpret_cast<char8_t *>(argv[2]));
-  u8string roundCommandLineTemplate(reinterpret_cast<char8_t *>(argv[3]));
-  u8string nullChangeCommandLineTemplate(reinterpret_cast<char8_t *>(argv[4]));
-  u8string maxScoreChangeCommandLineTemplate(reinterpret_cast<char8_t *>(argv[5]));
-  u8string wordsChangeCommandLineTemplate(reinterpret_cast<char8_t *>(argv[6]));
-  u8string stopCommandLineTemplate(reinterpret_cast<char8_t *>(argv[7]));
+  u8string initialCommandLineTemplate(reinterpret_cast<char8_t *>(args[0]));
+  u8string roundCommandLineTemplate(reinterpret_cast<char8_t *>(args[1]));
+  u8string nullChangeCommandLineTemplate(reinterpret_cast<char8_t *>(args[2]));
+  u8string maxScoreChangeCommandLineTemplate(reinterpret_cast<char8_t *>(args[3]));
+  u8string wordsChangeCommandLineTemplate(reinterpret_cast<char8_t *>(args[4]));
+  u8string stopCommandLineTemplate(reinterpret_cast<char8_t *>(args[5]));
   iu initialRoundCount = 0;
   double initialTTotal = 0;
   double initialTVm = 0;
-  if (argc == 9) {
+  if (argsSize == 7) {
     int v0;
     float v1;
     float v2;
-    if (sscanf(argv[8], "%d,%f,%f", &v0, &v1, &v2) != 3 || v0 < 0) {
+    if (sscanf(args[6], "%d,%f,%f", &v0, &v1, &v2) != 3 || v0 < 0) {
       throw PlainException(u8("invalid initial stats state specified"));
     }
     initialRoundCount = static_cast<unsigned int>(v0);

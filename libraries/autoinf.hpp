@@ -417,6 +417,19 @@ class ActionSet {
   };
 };
 
+struct Story {
+  const char *zcodeFileName;
+  iu screenWidth;
+  iu screenHeight;
+  std::function<bool (autofrotz::Vm &r_vm)> saver;
+  std::function<bool (autofrotz::Vm &r_vm)> restorer;
+  core::u8string prologueInput;
+  std::vector<ActionSet::Word> words;
+  std::vector<ActionSet::Template> dewordingTemplates;
+  std::function<bool (const autofrotz::Vm &vm, const core::u8string &output)> deworder;
+  std::vector<ActionSet::Template> otherTemplates;
+};
+
 class Multiverse {
   prv struct RangesetPart {
     iu16f setSize;
@@ -489,7 +502,7 @@ class Multiverse {
 
   pub class Listener;
 
-  prv autofrotz::Vm &vm;
+  prv autofrotz::Vm vm;
   prv const std::function<bool (autofrotz::Vm &r_vm)> saver;
   prv const std::function<bool (autofrotz::Vm &r_vm)> restorer;
   prv const ActionSet actionSet;
@@ -501,13 +514,7 @@ class Multiverse {
   prv Node *rootNode;
   prv std::unordered_map<std::reference_wrapper<const core::HashWrapper<Signature>>, Node *> nodes; // XXXX make Node * unique_ptr?
 
-  pub Multiverse (
-    autofrotz::Vm &vm, const core::u8string &initialInput, core::u8string &r_initialOutput,
-    std::function<bool (autofrotz::Vm &r_vm)> &&saver, std::function<bool (autofrotz::Vm &r_vm)> &&restorer,
-    const std::vector<std::vector<core::u8string>> &equivalentActionInputsSet,
-    const std::vector<ActionSet::Word> &words, const std::vector<ActionSet::Template> &dewordingTemplates, const std::vector<ActionSet::Template> &otherTemplates,
-    std::function<bool (const autofrotz::Vm &vm, const core::u8string &output)> &&deworder, std::unique_ptr<Listener> &&listener
-  );
+  pub Multiverse (Story &&story, core::u8string &r_initialOutput, const std::vector<std::vector<core::u8string>> &equivalentActionInputsSet, std::unique_ptr<Listener> &&listener);
   prv static bitset::Bitset initIgnoredBytes (const autofrotz::Vm &vm);
   Multiverse (const Multiverse &) = delete;
   Multiverse &operator= (const Multiverse &) = delete;
