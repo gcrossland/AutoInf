@@ -65,52 +65,6 @@ int main (int argc, char *argv[]) {
     const iu undoDepth = 0;
     const u8string saveActionInput(u8("save\n\1\n"));
     const u8string restoreActionInput(u8("restore\n\1\n"));
-    u8string output;
-    Vm vm("testgame/testgame.z5", 70, height, undoDepth, true, output);
-    Multiverse multiverse(
-      vm, u8("verbose\nfullscore\n"), output,
-      [&saveActionInput] (Vm &r_vm) -> bool {
-        u8string o;
-        Multiverse::doAction(r_vm, saveActionInput, o, u8("VM died while saving a state"));
-        return r_vm.getSaveCount() != 0;
-      },
-      [&restoreActionInput] (Vm &r_vm) -> bool {
-        u8string o;
-        Multiverse::doAction(r_vm, restoreActionInput, o, u8("VM died while restoring a state"));
-        return r_vm.getRestoreCount() != 0;
-      },
-      vector<vector<u8string>> {
-        // {u8("z\n"), u8("z. z. z. z. z. z. z. z.\n")},
-        // {u8("verbitudeise the tangerine monstrosity. verbitudeise the tangerine monstrosity.\n"), u8("")},
-        // {u8("turn wheel. pull wheel.\n"), u8("turn wheel. pull wheel. east. west.\n"), u8("turn wheel. pull wheel. west. east.\n")},
-        // {u8(""), u8("east\n"), u8("west\n"), u8("take red sphere\n"), u8("take blue sphere\n"), u8("drop red sphere\n"), u8("drop blue sphere\n"), u8("open red sphere\n"), u8("open blue sphere\n"), u8("enter light\n")}
-      },
-      vector<ActionSet::Word> {
-        {u8("red sphere"), 0b011},
-        {u8("blue sphere"), 0b011},
-        {u8("green sphere"), 0b001},
-        {u8("wheel"), 0b101},
-        {u8("light"), 0b1001},
-      },
-      vector<ActionSet::Template> {
-        {u8("examine "), 0b001U, u8("\n")},
-      },
-      vector<ActionSet::Template> {
-        {u8("east\n")},
-        {u8("west\n")},
-        {u8("take "), 0b010U, u8("\n")},
-        {u8("drop "), 0b010U, u8("\n")},
-        {u8("open "), 0b010U, u8("\n")},
-        {u8("turn "), 0b100U, u8(". pull "), 0b100U, u8("\n")},
-        {u8("enter "), 0b1000U, u8("\n")}
-      },
-      [] (const Vm &vm, const u8string &output) -> bool {
-        return output.find(u8("You can't see")) != std::string::npos;
-      },
-      unique_ptr<Multiverse::Listener>(new MultiverseView(0x08C8))
-    );
-    /*
-    Vm vm("advent/advent.z5", 70, height, undoDepth, true, output);
     const u8string noResurrectionSaveActionInput(u8("no\n") + saveActionInput);
     const u8string noResurrectionRestoreActionInput(u8("no\n") + restoreActionInput);
     iu c = 0;
@@ -131,236 +85,282 @@ int main (int argc, char *argv[]) {
     const ActionSet::Word::CategorySet  readable = 1U << (c++);
     const ActionSet::Word::CategorySet  flammable = 1U << (c++);
     const ActionSet::Word::CategorySet  attachable = 1U << (c++);
+    u8string output;
+    Vm vm("testgame/testgame.z5", 70, height, undoDepth, true, output);
     Multiverse multiverse(
-      vm, u8("verbose\nfullscore\n"), output,
-      [&saveActionInput, &noResurrectionSaveActionInput] (Vm &r_vm) -> bool {
-        u8string o;
-        Multiverse::doAction(r_vm, saveActionInput, o, u8("VM died while saving a state"));
-
-        if (r_vm.getSaveCount() == 0 && o.find(u8("Please answer yes or no.")) != u8string::npos) {
-          Multiverse::doAction(r_vm, noResurrectionSaveActionInput, o, u8("VM died while declining resurrection and saving a state"));
-        }
-
-        return r_vm.getSaveCount() != 0;
+        [&saveActionInput] (Vm &r_vm) -> bool {
+          u8string o;
+          Multiverse::doAction(r_vm, saveActionInput, o, u8("VM died while saving a state"));
+          return r_vm.getSaveCount() != 0;
+        },
+        [&restoreActionInput] (Vm &r_vm) -> bool {
+          u8string o;
+          Multiverse::doAction(r_vm, restoreActionInput, o, u8("VM died while restoring a state"));
+          return r_vm.getRestoreCount() != 0;
+        },
+        vm, u8("verbose\nfullscore\n"), output,
+      vector<vector<u8string>> {
+        // {u8("z\n"), u8("z. z. z. z. z. z. z. z.\n")},
+        // {u8("verbitudeise the tangerine monstrosity. verbitudeise the tangerine monstrosity.\n"), u8("")},
+        // {u8("turn wheel. pull wheel.\n"), u8("turn wheel. pull wheel. east. west.\n"), u8("turn wheel. pull wheel. west. east.\n")},
+        // {u8(""), u8("east\n"), u8("west\n"), u8("take red sphere\n"), u8("take blue sphere\n"), u8("drop red sphere\n"), u8("drop blue sphere\n"), u8("open red sphere\n"), u8("open blue sphere\n"), u8("enter light\n")}
       },
-      [&restoreActionInput, &noResurrectionRestoreActionInput] (Vm &r_vm) -> bool {
-        u8string o;
-        Multiverse::doAction(r_vm, restoreActionInput, o, u8("VM died while restoring a state"));
+        vector<ActionSet::Word> {
+          {u8("red sphere"), 0b011},
+          {u8("blue sphere"), 0b011},
+          {u8("green sphere"), 0b001},
+          {u8("wheel"), 0b101},
+          {u8("light"), 0b1001},
+        },
+        vector<ActionSet::Template> {
+          {u8("examine "), 0b001U, u8("\n")},
+        },
+        [] (const Vm &vm, const u8string &output) -> bool {
+          return output.find(u8("You can't see")) != std::string::npos;
+        },
+        vector<ActionSet::Template> {
+          {u8("east\n")},
+          {u8("west\n")},
+          {u8("take "), 0b010U, u8("\n")},
+          {u8("drop "), 0b010U, u8("\n")},
+          {u8("open "), 0b010U, u8("\n")},
+          {u8("turn "), 0b100U, u8(". pull "), 0b100U, u8("\n")},
+          {u8("enter "), 0b1000U, u8("\n")}
+        },
+        unique_ptr<Multiverse::Listener>(new MultiverseView(0x08C8))
+    );
+    /*
+    Vm vm("advent/advent.z5", 70, height, undoDepth, true, output);
+    Multiverse multiverse(
+        [&saveActionInput, &noResurrectionSaveActionInput] (Vm &r_vm) -> bool {
+          u8string o;
+          Multiverse::doAction(r_vm, saveActionInput, o, u8("VM died while saving a state"));
 
-        if (r_vm.getRestoreCount() == 0 && o.find(u8("Please answer yes or no.")) != u8string::npos) {
-          Multiverse::doAction(r_vm, noResurrectionRestoreActionInput, o, u8("VM died while declining resurrection and restoring a state"));
-        }
+          if (r_vm.getSaveCount() == 0 && o.find(u8("Please answer yes or no.")) != u8string::npos) {
+            Multiverse::doAction(r_vm, noResurrectionSaveActionInput, o, u8("VM died while declining resurrection and saving a state"));
+          }
 
-        return r_vm.getRestoreCount() != 0;
-      },
+          return r_vm.getSaveCount() != 0;
+        },
+        [&restoreActionInput, &noResurrectionRestoreActionInput] (Vm &r_vm) -> bool {
+          u8string o;
+          Multiverse::doAction(r_vm, restoreActionInput, o, u8("VM died while restoring a state"));
+
+          if (r_vm.getRestoreCount() == 0 && o.find(u8("Please answer yes or no.")) != u8string::npos) {
+            Multiverse::doAction(r_vm, noResurrectionRestoreActionInput, o, u8("VM died while declining resurrection and restoring a state"));
+          }
+
+          return r_vm.getRestoreCount() != 0;
+        },
+        vm, u8("verbose\nfullscore\n"), output,
       vector<vector<u8string>> {
       },
-      vector<ActionSet::Word> {
-        {u8("north"), direction},
-        {u8("south"), direction},
-        {u8("east"), direction},
-        {u8("west"), direction},
-        {u8("northeast"), direction},
-        {u8("northwest"), direction},
-        {u8("southeast"), direction},
-        {u8("southwest"), direction},
-        {u8("up above"), direction},
-        {u8("ground"), direction},
-        {u8("inside"), direction},
-        {u8("outside"), direction},
-        {u8("hill"), noun | supporter},
-        {u8("other side of hill"), noun | supporter},
-        {u8("spring"), noun | container | edible},
-        {u8("pipes"), noun | container},
-        {u8("keys"), noun | mobile | holdable | locker | unlocker},
-        {u8("tasty food"), noun | mobile | holdable | edible},
-        {u8("brass lantern"), noun | mobile | holdable | container | openable | switchable},
-        {u8("bottle"), noun | mobile | holdable | container | edible},
-        {u8("streambed"), noun | container},
-        {u8("slit"), noun | mobile},
-        {u8("depression"), noun},
-        {u8("grate"), noun | lockable | openable},
-        {u8("cobbles"), noun},
-        {u8("wicker cage"), noun | mobile | holdable | container | lockable | openable | flammable},
-        {u8("debris"), noun | mobile | holdable},
-        {u8("note"), noun | mobile | holdable | readable},
-        {u8("rod"), noun | mobile | holdable | unlocker},
-        {u8("bird"), noun | holdable | animate},
-        {u8("pit"), noun | container},
-        {u8("crack"), noun | container},
-        {u8("wide stone staircase"), noun | supporter},
-        {u8("rough stone steps"), noun | supporter},
-        {u8("dome"), noun},
-        {u8("large gold nugget"), noun | mobile | holdable},
-        {u8("diamonds"), noun | mobile | holdable},
-        {u8("bridge"), noun | supporter | flammable},
-        {u8("fissure"), noun | container},
-        {u8("crossover"), noun | supporter},
-        {u8("snake"), noun | holdable | animate},
-        {u8("bars of silver"), noun | mobile | holdable},
-        {u8("precious jewelry"), noun | mobile | holdable | clothing},
-        {u8("rare coins"), noun | mobile | holdable},
-        {u8("Y2"), noun | supporter},
-        {u8("window"), noun | lockable | openable},
-        {u8("marks"), noun},
-        {u8("shadowy figure"), noun | animate},
-        {u8("rocks"), noun | mobile | holdable | supporter},
-        {u8("orange column"), noun | supporter},
-        {u8("bedrock block"), noun | supporter},
-        {u8("beanstalk"), noun | mobile | supporter | flammable},
-        {u8("hole above pit"), noun},
-        {u8("plant"), noun | mobile | holdable | flammable},
-        {u8("thin rock slabs"), noun | holdable | supporter},
-        {u8("pool of oil"), noun | holdable | flammable},
-        {u8("slab"), noun | mobile | supporter},
-        {u8("boulders"), noun | mobile | supporter},
-        {u8("stalactite"), noun | supporter},
-        {u8("dragon"), noun | animate},
-        {u8("rug"), noun | holdable | supporter | flammable},
-        {u8("treasure chest"), noun | mobile | container | lockable | openable | flammable},
-        {u8("leaves"), noun | mobile | holdable | flammable},
-        {u8("scrawled inscription"), noun | readable},
-        {u8("nest of golden eggs"), noun | mobile | holdable},
-        {u8("rusty door"), noun | lockable | openable},
-        {u8("waterfall"), noun | container | edible},
-        {u8("trident"), noun | mobile | holdable | unlocker},
-        {u8("carpet"), noun | supporter | flammable},
-        {u8("curtains"), noun | holdable | openable | flammable},
-        {u8("moss"), noun | holdable},
-        {u8("pillow"), noun | holdable | supporter},
-        {u8("drawings"), noun | holdable | readable},
-        {u8("vase"), noun | mobile | holdable | container},
-        {u8("shards"), noun | mobile | holdable | unlocker},
-        {u8("emerald"), noun | mobile | holdable},
-        {u8("tablet"), noun | mobile | holdable},
-        {u8("platinum pyramid"), noun | mobile | holdable},
-        {u8("clam"), noun | mobile | holdable | container | openable},
-        {u8("pearl"), noun | mobile | holdable},
-        {u8("sign"), noun | readable},
-        {u8("Spelunker Today"), noun | holdable | readable | flammable},
-        {u8("mirror"), noun | mobile | holdable},
-        {u8("troll"), noun | animate},
-        {u8("volcano"), noun | supporter | container},
-        {u8("sparks of ash"), noun},
-        {u8("jagged roof"), noun},
-        {u8("gorge"), noun | container},
-        {u8("river of fire"), noun},
-        {u8("geyser"), noun},
-        {u8("rare spices"), noun | mobile | holdable | edible},
-        {u8("limestone formations"), noun | supporter},
-        {u8("dust"), noun | mobile | holdable},
-        {u8("bear"), noun | animate},
-        {u8("golden chain"), noun | mobile | holdable | clothing},
-        {u8("message"), noun | mobile | holdable},
-        {u8("vending machine"), noun | mobile | container | lockable | openable | switchable},
-        {u8("batteries"), noun | mobile | holdable | flammable},
-        {u8("dwarf"), noun | animate},
-        {u8("axe"), noun | mobile | holdable | unlocker},
-        {u8("collection of adventure game materials"), noun | mobile | holdable | readable | flammable}
-      },
-      vector<ActionSet::Template> {
-        {u8("examine "), 0U, u8("\n")},
-      },
-      vector<ActionSet::Template> {
-        {u8(""), direction, u8("\n")},
-        {u8("get in "), container, u8("\n")},
-        {u8("exit "), container, u8("\n")},
-        {u8("get on "), supporter, u8("\n")},
-        {u8("get off "), supporter, u8("\n")},
-        {u8("take "), holdable, u8("\n")},
-        {u8("take "), holdable, u8(" from "), container, u8("\n")},
-        {u8("take "), holdable, u8(" from "), supporter, u8("\n")},
-        {u8("don "), clothing, u8("\n")},
-        {u8("unlock "), lockable, u8(" with "), unlocker, u8("\n")},
-        {u8("open "), openable, u8("\n")},
-        {u8("close "), openable, u8("\n")},
-        {u8("lock "), lockable, u8(" with "), locker, u8("\n")},
-        {u8("say "), noun, u8(" to "), animate, u8("\n")},
-        {u8("ask "), animate, u8(" about "), noun, u8("\n")},
-        {u8("attack "), noun, u8("\n")},
-        {u8("blow "), holdable, u8("\n")},
-        {u8("burn "), flammable, u8("\n")},
-        {u8("burn "), flammable, u8(" with "), holdable, u8("\n")},
-        {u8("buy "), noun, u8("\n")},
-        {u8("climb "), supporter, u8("\n")},
-        {u8("consult "), readable, u8(" about "), 0U, u8("\n")},
-        {u8("chop "), noun, u8("\n")},
-        {u8("dig "), noun, u8("\n")},
-        {u8("dig "), noun, u8(" with "), holdable, u8("\n")},
-        {u8("doff "), clothing, u8("\n")},
-        {u8("drink "), edible, u8("\n")},
-        {u8("eat "), edible, u8("\n")},
-        {u8("empty "), container, u8(" into "), container, u8("\n")},
-        {u8("empty "), container, u8(" onto "), supporter, u8("\n")},
-        {u8("empty "), supporter, u8(" into "), container, u8("\n")},
-        {u8("empty "), supporter, u8(" onto "), supporter, u8("\n")},
-        {u8("fill "), container, u8("\n")},
-        {u8("feed "), holdable, u8(" to "), animate, u8("\n")},
-        {u8("drop "), holdable, u8("\n")},
-        {u8("drop "), holdable, u8(" into "), container, u8("\n")},
-        {u8("drop "), holdable, u8(" onto "), supporter, u8("\n")},
-        {u8("hop\n")},
-        {u8("hop over "), noun, u8("\n")},
-        {u8("attach "), attachable, u8("\n")},
-        {u8("attach "), attachable, u8(" to "), noun, u8("\n")},
-        {u8("embrace "), animate, u8("\n")},
-        {u8("hear\n")},
-        {u8("hear "), noun, u8("\n")},
-        {u8("look under "), noun, u8("\n")},
-        {u8("drag "), mobile, u8("\n")},
-        {u8("push "), mobile, u8("\n")},
-        {u8("rotate "), mobile, u8("\n")},
-        {u8("push "), noun, u8(" "), direction, u8("\n")},
-        {u8("clean "), noun, u8("\n")},
-        {u8("look in "), container, u8("\n")},
-        {u8("look on "), supporter, u8("\n")},
-        {u8("adjust "), noun, u8("\n")},
-        {u8("display "), holdable, u8(" to "), animate, u8("\n")},
-        {u8("sing\n")},
-        {u8("nap\n")},
-        {u8("smell\n")},
-        {u8("smell "), noun, u8("\n")},
-        {u8("squash "), noun, u8("\n")},
-        {u8("dive\n")},
-        {u8("swing "), mobile, u8("\n")},
-        {u8("switch on "), switchable, u8("\n")},
-        {u8("switch off "), switchable, u8("\n")},
-        {u8("taste "), noun, u8("\n")},
-        {u8("tell "), animate, u8(" about "), 0U, u8("\n")},
-        {u8("feel "), noun, u8("\n")},
-        {u8("wake up\n")},
-        {u8("wake up "), animate, u8("\n")},
-        {u8("wave "), noun, u8("\n")},
-        {u8("wave\n")},
-        {u8("tell "), animate, u8(" to "), 0U, u8("\n")},
-        {u8("ask "), animate, u8(" for "), noun, u8("\n")},
-        {u8("push "), mobile, u8(" to "), noun, u8("\n")},
-        {u8("say xyzzy\n")},
-        {u8("say plugh\n")},
-        {u8("count "), noun, u8("\n")},
-        {u8("empty "), noun, u8("\n")},
-        {u8("free "), animate, u8("\n")},
-        {u8("capture "), animate, u8("\n")},
-        {u8("capture "), animate, u8(" with "), holdable, u8("\n")},
-        {u8("say plover\n")},
-        {u8("douse water on "), noun, u8("\n")},
-        {u8("douse oil on "), noun, u8("\n")},
-        {u8("kick "), noun, u8("\n")},
-        {u8("blast "), noun, u8(" with "), holdable, u8("\n")},
-        {u8("say fee\n")},
-        {u8("say fie\n")},
-        {u8("say foe\n")},
-        {u8("say foo\n")},
-        {u8("say abracadabra\n")}
-      },
-      [] (const Vm &vm, const u8string &output) -> bool {
-        return
-          output.find(u8("You can't see ")) != u8string::npos ||
-          output.find(u8("I only understood you as far as ")) != u8string::npos ||
-          output.find(u8("That's not something you need to refer to in the course of this game.")) != u8string::npos
-        ;
-      },
-      unique_ptr<Multiverse::Listener>(new MultiverseView(one of 0x3BEB or 0x3C0B or 0x3C0D))
+        vector<ActionSet::Word> {
+          {u8("north"), direction},
+          {u8("south"), direction},
+          {u8("east"), direction},
+          {u8("west"), direction},
+          {u8("northeast"), direction},
+          {u8("northwest"), direction},
+          {u8("southeast"), direction},
+          {u8("southwest"), direction},
+          {u8("up above"), direction},
+          {u8("ground"), direction},
+          {u8("inside"), direction},
+          {u8("outside"), direction},
+          {u8("hill"), noun | supporter},
+          {u8("other side of hill"), noun | supporter},
+          {u8("spring"), noun | container | edible},
+          {u8("pipes"), noun | container},
+          {u8("keys"), noun | mobile | holdable | locker | unlocker},
+          {u8("tasty food"), noun | mobile | holdable | edible},
+          {u8("brass lantern"), noun | mobile | holdable | container | openable | switchable},
+          {u8("bottle"), noun | mobile | holdable | container | edible},
+          {u8("streambed"), noun | container},
+          {u8("slit"), noun | mobile},
+          {u8("depression"), noun},
+          {u8("grate"), noun | lockable | openable},
+          {u8("cobbles"), noun},
+          {u8("wicker cage"), noun | mobile | holdable | container | lockable | openable | flammable},
+          {u8("debris"), noun | mobile | holdable},
+          {u8("note"), noun | mobile | holdable | readable},
+          {u8("rod"), noun | mobile | holdable | unlocker},
+          {u8("bird"), noun | holdable | animate},
+          {u8("pit"), noun | container},
+          {u8("crack"), noun | container},
+          {u8("wide stone staircase"), noun | supporter},
+          {u8("rough stone steps"), noun | supporter},
+          {u8("dome"), noun},
+          {u8("large gold nugget"), noun | mobile | holdable},
+          {u8("diamonds"), noun | mobile | holdable},
+          {u8("bridge"), noun | supporter | flammable},
+          {u8("fissure"), noun | container},
+          {u8("crossover"), noun | supporter},
+          {u8("snake"), noun | holdable | animate},
+          {u8("bars of silver"), noun | mobile | holdable},
+          {u8("precious jewelry"), noun | mobile | holdable | clothing},
+          {u8("rare coins"), noun | mobile | holdable},
+          {u8("Y2"), noun | supporter},
+          {u8("window"), noun | lockable | openable},
+          {u8("marks"), noun},
+          {u8("shadowy figure"), noun | animate},
+          {u8("rocks"), noun | mobile | holdable | supporter},
+          {u8("orange column"), noun | supporter},
+          {u8("bedrock block"), noun | supporter},
+          {u8("beanstalk"), noun | mobile | supporter | flammable},
+          {u8("hole above pit"), noun},
+          {u8("plant"), noun | mobile | holdable | flammable},
+          {u8("thin rock slabs"), noun | holdable | supporter},
+          {u8("pool of oil"), noun | holdable | flammable},
+          {u8("slab"), noun | mobile | supporter},
+          {u8("boulders"), noun | mobile | supporter},
+          {u8("stalactite"), noun | supporter},
+          {u8("dragon"), noun | animate},
+          {u8("rug"), noun | holdable | supporter | flammable},
+          {u8("treasure chest"), noun | mobile | container | lockable | openable | flammable},
+          {u8("leaves"), noun | mobile | holdable | flammable},
+          {u8("scrawled inscription"), noun | readable},
+          {u8("nest of golden eggs"), noun | mobile | holdable},
+          {u8("rusty door"), noun | lockable | openable},
+          {u8("waterfall"), noun | container | edible},
+          {u8("trident"), noun | mobile | holdable | unlocker},
+          {u8("carpet"), noun | supporter | flammable},
+          {u8("curtains"), noun | holdable | openable | flammable},
+          {u8("moss"), noun | holdable},
+          {u8("pillow"), noun | holdable | supporter},
+          {u8("drawings"), noun | holdable | readable},
+          {u8("vase"), noun | mobile | holdable | container},
+          {u8("shards"), noun | mobile | holdable | unlocker},
+          {u8("emerald"), noun | mobile | holdable},
+          {u8("tablet"), noun | mobile | holdable},
+          {u8("platinum pyramid"), noun | mobile | holdable},
+          {u8("clam"), noun | mobile | holdable | container | openable},
+          {u8("pearl"), noun | mobile | holdable},
+          {u8("sign"), noun | readable},
+          {u8("Spelunker Today"), noun | holdable | readable | flammable},
+          {u8("mirror"), noun | mobile | holdable},
+          {u8("troll"), noun | animate},
+          {u8("volcano"), noun | supporter | container},
+          {u8("sparks of ash"), noun},
+          {u8("jagged roof"), noun},
+          {u8("gorge"), noun | container},
+          {u8("river of fire"), noun},
+          {u8("geyser"), noun},
+          {u8("rare spices"), noun | mobile | holdable | edible},
+          {u8("limestone formations"), noun | supporter},
+          {u8("dust"), noun | mobile | holdable},
+          {u8("bear"), noun | animate},
+          {u8("golden chain"), noun | mobile | holdable | clothing},
+          {u8("message"), noun | mobile | holdable},
+          {u8("vending machine"), noun | mobile | container | lockable | openable | switchable},
+          {u8("batteries"), noun | mobile | holdable | flammable},
+          {u8("dwarf"), noun | animate},
+          {u8("axe"), noun | mobile | holdable | unlocker},
+          {u8("collection of adventure game materials"), noun | mobile | holdable | readable | flammable}
+        },
+        vector<ActionSet::Template> {
+          {u8("examine "), 0U, u8("\n")},
+        },
+        [] (const Vm &vm, const u8string &output) -> bool {
+          return
+            output.find(u8("You can't see ")) != u8string::npos ||
+            output.find(u8("I only understood you as far as ")) != u8string::npos ||
+            output.find(u8("That's not something you need to refer to in the course of this game.")) != u8string::npos
+          ;
+        },
+        vector<ActionSet::Template> {
+          {u8(""), direction, u8("\n")},
+          {u8("get in "), container, u8("\n")},
+          {u8("exit "), container, u8("\n")},
+          {u8("get on "), supporter, u8("\n")},
+          {u8("get off "), supporter, u8("\n")},
+          {u8("take "), holdable, u8("\n")},
+          {u8("take "), holdable, u8(" from "), container, u8("\n")},
+          {u8("take "), holdable, u8(" from "), supporter, u8("\n")},
+          {u8("don "), clothing, u8("\n")},
+          {u8("unlock "), lockable, u8(" with "), unlocker, u8("\n")},
+          {u8("open "), openable, u8("\n")},
+          {u8("close "), openable, u8("\n")},
+          {u8("lock "), lockable, u8(" with "), locker, u8("\n")},
+          {u8("say "), noun, u8(" to "), animate, u8("\n")},
+          {u8("ask "), animate, u8(" about "), noun, u8("\n")},
+          {u8("attack "), noun, u8("\n")},
+          {u8("blow "), holdable, u8("\n")},
+          {u8("burn "), flammable, u8("\n")},
+          {u8("burn "), flammable, u8(" with "), holdable, u8("\n")},
+          {u8("buy "), noun, u8("\n")},
+          {u8("climb "), supporter, u8("\n")},
+          {u8("consult "), readable, u8(" about "), 0U, u8("\n")},
+          {u8("chop "), noun, u8("\n")},
+          {u8("dig "), noun, u8("\n")},
+          {u8("dig "), noun, u8(" with "), holdable, u8("\n")},
+          {u8("doff "), clothing, u8("\n")},
+          {u8("drink "), edible, u8("\n")},
+          {u8("eat "), edible, u8("\n")},
+          {u8("empty "), container, u8(" into "), container, u8("\n")},
+          {u8("empty "), container, u8(" onto "), supporter, u8("\n")},
+          {u8("empty "), supporter, u8(" into "), container, u8("\n")},
+          {u8("empty "), supporter, u8(" onto "), supporter, u8("\n")},
+          {u8("fill "), container, u8("\n")},
+          {u8("feed "), holdable, u8(" to "), animate, u8("\n")},
+          {u8("drop "), holdable, u8("\n")},
+          {u8("drop "), holdable, u8(" into "), container, u8("\n")},
+          {u8("drop "), holdable, u8(" onto "), supporter, u8("\n")},
+          {u8("hop\n")},
+          {u8("hop over "), noun, u8("\n")},
+          {u8("attach "), attachable, u8("\n")},
+          {u8("attach "), attachable, u8(" to "), noun, u8("\n")},
+          {u8("embrace "), animate, u8("\n")},
+          {u8("hear\n")},
+          {u8("hear "), noun, u8("\n")},
+          {u8("look under "), noun, u8("\n")},
+          {u8("drag "), mobile, u8("\n")},
+          {u8("push "), mobile, u8("\n")},
+          {u8("rotate "), mobile, u8("\n")},
+          {u8("push "), noun, u8(" "), direction, u8("\n")},
+          {u8("clean "), noun, u8("\n")},
+          {u8("look in "), container, u8("\n")},
+          {u8("look on "), supporter, u8("\n")},
+          {u8("adjust "), noun, u8("\n")},
+          {u8("display "), holdable, u8(" to "), animate, u8("\n")},
+          {u8("sing\n")},
+          {u8("nap\n")},
+          {u8("smell\n")},
+          {u8("smell "), noun, u8("\n")},
+          {u8("squash "), noun, u8("\n")},
+          {u8("dive\n")},
+          {u8("swing "), mobile, u8("\n")},
+          {u8("switch on "), switchable, u8("\n")},
+          {u8("switch off "), switchable, u8("\n")},
+          {u8("taste "), noun, u8("\n")},
+          {u8("tell "), animate, u8(" about "), 0U, u8("\n")},
+          {u8("feel "), noun, u8("\n")},
+          {u8("wake up\n")},
+          {u8("wake up "), animate, u8("\n")},
+          {u8("wave "), noun, u8("\n")},
+          {u8("wave\n")},
+          {u8("tell "), animate, u8(" to "), 0U, u8("\n")},
+          {u8("ask "), animate, u8(" for "), noun, u8("\n")},
+          {u8("push "), mobile, u8(" to "), noun, u8("\n")},
+          {u8("say xyzzy\n")},
+          {u8("say plugh\n")},
+          {u8("count "), noun, u8("\n")},
+          {u8("empty "), noun, u8("\n")},
+          {u8("free "), animate, u8("\n")},
+          {u8("capture "), animate, u8("\n")},
+          {u8("capture "), animate, u8(" with "), holdable, u8("\n")},
+          {u8("say plover\n")},
+          {u8("douse water on "), noun, u8("\n")},
+          {u8("douse oil on "), noun, u8("\n")},
+          {u8("kick "), noun, u8("\n")},
+          {u8("blast "), noun, u8(" with "), holdable, u8("\n")},
+          {u8("say fee\n")},
+          {u8("say fie\n")},
+          {u8("say foe\n")},
+          {u8("say foo\n")},
+          {u8("say abracadabra\n")}
+        },
+        unique_ptr<Multiverse::Listener>(new MultiverseView(one of 0x3BEB or 0x3C0B or 0x3C0D))
     );
     */
     MultiverseView *view = static_cast<MultiverseView *>(multiverse.getListener());
