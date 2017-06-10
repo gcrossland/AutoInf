@@ -680,69 +680,93 @@ bool runCommandLine (Multiverse &multiverse, const u8string &in, u8string &messa
       char8_t valueName = line[2];
       size_t valueIndex;
       if (valueName >= u8("a")[0] && valueName <= u8("z")[0] && (valueIndex = static_cast<size_t>(valueName - u8("a")[0])) < NodeMetricsListener::VALUE_COUNT) {
-        const char8_t *numBegin = line.data() + 3;
-        const char8_t *numEnd = line.data() + line.size();
-        bool undershoot = false;
-        bool overshootOnEmpty =  false;
-        if (*(numEnd - 1) == u8("-")[0]) {
-          --numEnd;
-          undershoot = true;
-        } else if (*(numEnd - 1) == u8("|")[0]) {
-          --numEnd;
-          undershoot = true;
-          overshootOnEmpty = true;
-        }
-        is n = getNaturalNumber(numBegin, numEnd);
-        if (n > 0 && !selectedNodes.empty()) {
-          size_t count = static_cast<size_t>(n);
-          if (count < selectedNodes.size()) {
-            vector<tuple<Value, Node *>> nodes;
-            nodes.reserve(selectedNodes.size());
-
-            for (Node *node : selectedNodes) {
-              Value value = static_cast<NodeView *>(node->getListener())->getValue(valueIndex);
-              nodes.emplace_back(value, node);
-            }
-            sort(nodes.begin(), nodes.end(), [] (const tuple<Value, Node *> &o0, const tuple<Value, Node *> &o1) -> bool {
-              return get<0>(o0) > get<0>(o1);
-            });
-
-            if (undershoot) {
-              Value minValue = get<0>(nodes[count]);
-              if (overshootOnEmpty && get<0>(nodes[0]) == minValue) {
-                undershoot = false;
-              } else {
-                --count;
-                for (; count != static_cast<size_t>(-1) && get<0>(nodes[count]) == minValue; --count);
-                ++count;
-              }
-            }
-            if (!undershoot) {
-              Value minValue = get<0>(nodes[count - 1]);
-              for (auto end = nodes.size(); count != end && get<0>(nodes[count]) == minValue; ++count);
-            }
-
-            selectedNodes.clear();
+        if (line.size() > 5 && line[3] == u8(">")[0] && line[4] == u8("=")[0]) {
+          const char8_t *numBegin = line.data() + 5;
+          const char8_t *numEnd = line.data() + line.size();
+          is n = getNaturalNumber(numBegin, numEnd);
+          if (n >= 0) {
+            size_t prevSize = selectedNodes.size();
             size_t unprocessedCount = 0;
-            for (auto i = nodes.begin(), end = i + count; i != end; ++i) {
-              Node *node = get<1>(*i);
+            for (auto i = selectedNodes.begin(), end = selectedNodes.end(); i != end;) {
+              Node *node = *i;
+              Value value = static_cast<NodeView *>(node->getListener())->getValue(valueIndex);
+              if (value < n) {
+                i = selectedNodes.erase(i);
+                continue;
+              }
               unprocessedCount += !!node->getState();
-              selectedNodes.insert(node);
+              ++i;
             }
-            view->selectionChanged();
 
             char8_t b[1024];
-            char *t = reinterpret_cast<char *>(b);
-            t += sprintf(t, "Selected %u (%u unprocessed) (from %u) nodes", static_cast<iu>(count), static_cast<iu>(unprocessedCount), static_cast<iu>(nodes.size()));
-            if (count != 0) {
-              t += sprintf(t, " (threshold metric value %d)", get<0>(nodes[count - 1]));
+            sprintf(reinterpret_cast<char *>(b), "Selected %u (%u unprocessed) (from %u) nodes\n\n", static_cast<iu>(selectedNodes.size()), static_cast<iu>(unprocessedCount), static_cast<iu>(prevSize));
+            message.append(b);
+          }
+        } else {
+          const char8_t *numBegin = line.data() + 3;
+          const char8_t *numEnd = line.data() + line.size();
+          bool undershoot = false;
+          bool overshootOnEmpty =  false;
+          if (*(numEnd - 1) == u8("-")[0]) {
+            --numEnd;
+            undershoot = true;
+          } else if (*(numEnd - 1) == u8("|")[0]) {
+            --numEnd;
+            undershoot = true;
+            overshootOnEmpty = true;
+          }
+          is n = getNaturalNumber(numBegin, numEnd);
+          if (n > 0 && !selectedNodes.empty()) {
+            size_t count = static_cast<size_t>(n);
+            if (count < selectedNodes.size()) {
+              vector<tuple<Value, Node *>> nodes;
+              nodes.reserve(selectedNodes.size());
+
+              for (Node *node : selectedNodes) {
+                Value value = static_cast<NodeView *>(node->getListener())->getValue(valueIndex);
+                nodes.emplace_back(value, node);
+              }
+              sort(nodes.begin(), nodes.end(), [] (const tuple<Value, Node *> &o0, const tuple<Value, Node *> &o1) -> bool {
+                return get<0>(o0) > get<0>(o1);
+              });
+
+              if (undershoot) {
+                Value minValue = get<0>(nodes[count]);
+                if (overshootOnEmpty && get<0>(nodes[0]) == minValue) {
+                  undershoot = false;
+                } else {
+                  --count;
+                  for (; count != static_cast<size_t>(-1) && get<0>(nodes[count]) == minValue; --count);
+                  ++count;
+                }
+              }
+              if (!undershoot) {
+                Value minValue = get<0>(nodes[count - 1]);
+                for (auto end = nodes.size(); count != end && get<0>(nodes[count]) == minValue; ++count);
+              }
+
+              selectedNodes.clear();
+              size_t unprocessedCount = 0;
+              for (auto i = nodes.begin(), end = i + count; i != end; ++i) {
+                Node *node = get<1>(*i);
+                unprocessedCount += !!node->getState();
+                selectedNodes.insert(node);
+              }
+              view->selectionChanged();
+
+              char8_t b[1024];
+              char *t = reinterpret_cast<char *>(b);
+              t += sprintf(t, "Selected %u (%u unprocessed) (from %u) nodes", static_cast<iu>(count), static_cast<iu>(unprocessedCount), static_cast<iu>(nodes.size()));
+              if (count != 0) {
+                t += sprintf(t, " (threshold metric value %d)", get<0>(nodes[count - 1]));
+              }
+              t += sprintf(t, "\n\n");
+              message.append(b);
+            } else {
+              char8_t b[1024];
+              sprintf(reinterpret_cast<char *>(b), "Selected %u nodes (selection unchanged)\n\n", static_cast<iu>(selectedNodes.size()));
+              message.append(b);
             }
-            t += sprintf(t, "\n\n");
-            message.append(b);
-          } else {
-            char8_t b[1024];
-            sprintf(reinterpret_cast<char *>(b), "Selected %u nodes (selection unchanged)\n\n", static_cast<iu>(selectedNodes.size()));
-            message.append(b);
           }
         }
       }
