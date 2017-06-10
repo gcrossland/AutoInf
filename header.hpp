@@ -81,7 +81,8 @@ class MultiverseMetricsListener : public autoinf::Multiverse::Listener {
   prv void setVisitageValueRecursively (const autoinf::Multiverse::Node *node, NodeMetricsListener *listener, VisitageChain chain);
   prv void setVisitageValue (const autoinf::Multiverse::Node *node, NodeMetricsListener *listener, VisitageChain &r_chain);
   prv size_t checkVisitageValueRecursively (const autoinf::Multiverse::Node *node, NodeMetricsListener *listener, VisitageChain chain);
-  pub virtual void nodeProcessed (const autoinf::Multiverse &multiverse, const autoinf::Multiverse::Node *node) override;
+  pub virtual void nodeProcessed (const autoinf::Multiverse &multiverse, const autoinf::Multiverse::Node *node, size_t processedCount, size_t totalCount) override;
+  prv void nodeProcessed (const autoinf::Multiverse &multiverse, const autoinf::Multiverse::Node *node);
   prv void setWordData (const autoinf::Multiverse::Node *node, NodeMetricsListener *listener, const autoinf::ActionSet &actionSet);
   pub virtual void nodesProcessed (const autoinf::Multiverse &multiverse) override;
   prv template<typename F> std::unique_ptr<size_t []> getWordStats (const autoinf::Multiverse &multiverse, const F &nodeFunctor);
@@ -112,6 +113,9 @@ class NodeView : public NodeMetricsListener {
 };
 
 class MultiverseView : public MultiverseMetricsListener {
+  pub time_t firstNodeProcessed;
+  pub time_t prevNodeProcessingProgressReport;
+  pub int prevNodeProcessingProgressReportSize;
   pub std::vector<autoinf::Multiverse::Node *> nodesByIndex;
   pub std::unordered_set<autoinf::Multiverse::Node *> selectedNodes;
   pub std::unordered_set<autoinf::Multiverse::Node *> verboseNodes;
@@ -129,6 +133,7 @@ class MultiverseView : public MultiverseMetricsListener {
   pub virtual void walkNodeListener (autoinf::Multiverse::Node::Listener *listener, autoinf::Deserialiser<autoinf::FileInputIterator> &s) override;
 
   pub virtual std::unique_ptr<autoinf::Multiverse::Node::Listener> createNodeListener () override;
+  pub virtual void nodeProcessed (const autoinf::Multiverse &multiverse, const autoinf::Multiverse::Node *node, size_t processedCount, size_t totalCount) override;
   pub void multiverseChanged (const autoinf::Multiverse &multiverse);
   pub void selectionChanged ();
   prv void studyNodes (const autoinf::Multiverse &multiverse);

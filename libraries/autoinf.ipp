@@ -872,6 +872,7 @@ template<typename _F, iff(std::is_convertible<_F, std::function<bool (Multiverse
 
 template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd) {
   DS();
+  size_t nodeCount = offset(nodesBegin, nodesEnd);
   deque<tuple<Node *, ActionSet::Size, u8string, HashWrapper<Signature>, State, unique_ptr<Node::Listener>>> resultQueue;
   mutex resultQueueLock;
   condition_variable resultQueueCondVar;
@@ -962,6 +963,7 @@ template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd)
   });
 
   Node *prevParentNode = nullptr;
+  size_t processedNodeCount = 0;
   while (true) {
     unique_lock<mutex> l(resultQueueLock);
     resultQueueCondVar.wait(l, [&] () {
@@ -976,7 +978,7 @@ template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd)
     if (prevParentNode && parentNode != prevParentNode) {
       prevParentNode->clearState();
       prevParentNode->childrenUpdated();
-      listener->nodeProcessed(*this, prevParentNode);
+      listener->nodeProcessed(*this, prevParentNode, ++processedNodeCount, nodeCount);
     }
     prevParentNode = parentNode;
     if (!parentNode) {

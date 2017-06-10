@@ -564,7 +564,7 @@ class Multiverse {
     pub virtual std::unique_ptr<Node::Listener> createNodeListener () = 0;
     pub virtual void nodeReached (const Multiverse &multiverse, Node::Listener *listener, ActionSet::Size parentActionId, const core::u8string &output, const Signature &signature, const autofrotz::Vm &vm) = 0;
     pub virtual void subtreePrimeAncestorsUpdated (const Multiverse &multiverse, const Node *node) = 0;
-    pub virtual void nodeProcessed (const Multiverse &multiverse, const Node *node) = 0;
+    pub virtual void nodeProcessed (const Multiverse &multiverse, const Node *node, size_t processedCount, size_t totalCount) = 0;
     pub virtual void nodesProcessed (const Multiverse &multiverse) = 0;
     pub virtual void nodeCollapsed (const Multiverse &multiverse, const Node *node, bool childrenUpdated) = 0;
     pub virtual void nodesCollapsed (const Multiverse &multiverse) = 0;

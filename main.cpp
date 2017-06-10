@@ -1097,6 +1097,10 @@ size_t MultiverseMetricsListener::checkVisitageValueRecursively (const Node *nod
   return c;
 }
 
+void MultiverseMetricsListener::nodeProcessed (const Multiverse &multiverse, const Node *node, size_t processedCount, size_t totalCount) {
+  nodeProcessed(multiverse, node);
+}
+
 void MultiverseMetricsListener::nodeProcessed (const Multiverse &multiverse, const Node *node) {
   NodeMetricsListener *listener = static_cast<NodeMetricsListener *>(node->getListener());
 
@@ -1335,6 +1339,40 @@ void MultiverseView::walkNodeListener (Node::Listener *listener, Serialiser<File
 
 void MultiverseView::walkNodeListener (Node::Listener *listener, Deserialiser<FileInputIterator> &s) {
   static_cast<NodeView *>(listener)->beWalked(s);
+}
+
+void MultiverseView::nodeProcessed (const Multiverse &multiverse, const Node *node, size_t processedCount, size_t totalCount) {
+  MultiverseMetricsListener::nodeProcessed(multiverse, node, processedCount, totalCount);
+
+  time_t now = time(NULL);
+  if (processedCount == 1) {
+    firstNodeProcessed = prevNodeProcessingProgressReport = now;
+    prevNodeProcessingProgressReportSize = 0;
+  } else {
+    int reportSize = -1;
+
+    if (processedCount == totalCount) {
+      reportSize = 0;
+    } else {
+      DA(processedCount > 1);
+      DA(processedCount <= totalCount);
+      if (difftime(now, prevNodeProcessingProgressReport) > 2) {
+        f64 d = difftime(now, firstNodeProcessed);
+        auto remaining = (d / (processedCount - 1)) * (totalCount - processedCount);
+        reportSize = printf("Processed %u (%u%%) of %u nodes (%d secs remaining)", static_cast<iu>(processedCount), static_cast<iu>((100 * processedCount) / totalCount), static_cast<iu>(totalCount), static_cast<is>(ceil(remaining / 10)) * 10);
+      }
+    }
+
+    if (reportSize >= 0) {
+      for (int i = reportSize; i < prevNodeProcessingProgressReportSize; ++i) {
+        fputc(' ', stdout);
+      }
+      prevNodeProcessingProgressReport = now;
+      prevNodeProcessingProgressReportSize = reportSize;
+      fputc('\r', stdout);
+      fflush(stdout);
+    }
+  }
 }
 
 unique_ptr<Node::Listener> MultiverseView::createNodeListener () {
