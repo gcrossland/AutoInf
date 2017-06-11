@@ -1531,8 +1531,8 @@ void MultiverseView::printNodeHeader (
   fprintf(out, "%c%u%c ", narrowise(nodeIndexRenderingPrefix), static_cast<iu>(nodeView->index), narrowise(nodeIndexRenderingSuffix));
 
   fprintf(out, "%s", narrowise(renderActionInput(actionId, multiverse.getActionSet())));
-  fprintf(out, " [sig of hash &%08X]", static_cast<iu>(node->getSignature().hashFast()));
-  fprintf(out, " metric values {");
+  fprintf(out, " [&%08X]", static_cast<iu>(node->getSignature().hashFast()));
+  fprintf(out, " {");
   for (size_t i = 0; i != NodeView::VALUE_COUNT; ++i) {
     fprintf(out, "%s%d", i == 0 ? "" : ", ", nodeView->getValue(i));
   }
@@ -1577,7 +1577,7 @@ void MultiverseView::printNodeAsLeaf (
   const Multiverse &multiverse, u8string &r_prefix, FILE *out
 ) {
   printNodeHeader(u8("{")[0], u8("}")[0], node, actionId, multiverse, out);
-  fprintf(out, " / (elsewhere)\n");
+  fprintf(out, "\n");
   printNodeOutput(output, multiverse, r_prefix, out);
 }
 
@@ -1621,6 +1621,7 @@ void MultiverseView::printNodeAsNonleaf (
       fmtsEnd = i + 1;
     }
   }
+  size_t prefixSize = r_prefix.size();
   for (size_t i = 0; i != fmtsEnd; ++i) {
     if (fmts[i] == NONE) {
       continue;
@@ -1632,10 +1633,10 @@ void MultiverseView::printNodeAsNonleaf (
     const StringSet<char8_t>::String &childOuput = get<1>(child);
     Node *childNode = get<2>(child);
 
-    fprintf(out, "%s%c-> ", narrowise(r_prefix), last ? '+' : '|');
-    r_prefix.append(last ? u8("    ") : u8("|   "));
+    fprintf(out, "%s%s", narrowise(r_prefix), narrowise(last ? u8("└─") : u8("├─")));
+    r_prefix.append(last ? u8("  ") : u8("│ "));
     (this->*(fmts[i] == LEAF ? &MultiverseView::printNodeAsLeaf : &MultiverseView::printNodeAsNonleaf))(depth, contains(verboseNodes, childNode) ? &childOuput : nullptr, childNode, node, childActionId, multiverse, r_prefix, out);
-    r_prefix.resize(r_prefix.size() - 4);
+    r_prefix.resize(prefixSize);
   }
 }
 
