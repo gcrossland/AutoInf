@@ -1551,11 +1551,8 @@ u8string MultiverseView::renderActionInput (ActionSet::Size actionId, const Acti
 }
 
 void MultiverseView::printNodeOutput (const StringSet<char8_t>::String *output, const Multiverse &multiverse, const u8string &prefix, FILE *out) {
-  if (!output) {
-    return;
-  }
-
   u8string o;
+  DPRE(output);
   multiverse.getOutputStringSet().rebuildString(*output, o);
   char8_t c;
   while (!o.empty() && ((c = o.back()) == u8("\n")[0] || c == u8(">")[0])) {
@@ -1566,7 +1563,7 @@ void MultiverseView::printNodeOutput (const StringSet<char8_t>::String *output, 
   auto lineStart = o.cbegin();
   for (auto i = o.cbegin(), end = o.cend(); i != end; ++i) {
     if (*i == u8("\n")[0]) {
-      fprintf(out, "%s  %.*s\n", narrowise(prefix), static_cast<int>(i - lineStart), narrowise(&*lineStart));
+      fprintf(out, "%s%.*s\n", narrowise(prefix), static_cast<int>(i - lineStart), narrowise(&*lineStart));
       lineStart = i + 1;
     }
   }
@@ -1578,7 +1575,13 @@ void MultiverseView::printNodeAsLeaf (
 ) {
   printNodeHeader(u8("{")[0], u8("}")[0], node, actionId, multiverse, out);
   fprintf(out, "\n");
-  printNodeOutput(output, multiverse, r_prefix, out);
+
+  if (output) {
+    size_t prefixSize = r_prefix.size();
+    r_prefix.append(u8("  "));
+    printNodeOutput(output, multiverse, r_prefix, out);
+    r_prefix.resize(prefixSize);
+  }
 }
 
 void MultiverseView::printNodeAsNonleaf (
@@ -1592,36 +1595,45 @@ void MultiverseView::printNodeAsNonleaf (
     size_t c = node->getChildrenSize();
     fprintf(out, " / %u %s\n", static_cast<iu>(c), c == 1 ? "child" : "children");
   }
-  printNodeOutput(output, multiverse, r_prefix, out);
-
-  DA(depth <= maxDepth);
-  if (depth == maxDepth) {
-    return;
-  }
-  ++depth;
 
   enum {
     NONE,
     LEAF,
     NONLEAF
   } fmts[node->getChildrenSize()];
-  size_t fmtsEnd = 0;
-  for (size_t i = 0, end = node->getChildrenSize(); i != end; ++i) {
-    auto &child = node->getChild(i);
-    DI(ActionSet::Size childActionId = get<0>(child);)
-    Node *childNode = get<2>(child);
-    DA(&node->getChild(node->getChildIndex(childActionId)) == &child);
-    NodeView *childNodeView = static_cast<NodeView *>(childNode->getListener());
+  size_t fmtsEnd;
 
-    bool elided = (elideDeadEndNodes && childNodeView->isDeadEnd) || (elideAntiselectedNodes && childNodeView->isAntiselected);
-    bool elision = elideDeadEndNodes || elideAntiselectedNodes;
-    auto fmt = (childNode->getPrimeParentNode() == node && childNodeView->primeParentChildIndex == i && !elided) ? NONLEAF : !elision ? LEAF : NONE;
-    fmts[i] = fmt;
-    if (fmt != NONE) {
-      fmtsEnd = i + 1;
+  DA(depth <= maxDepth);
+  if (depth == maxDepth) {
+    fmtsEnd = 0;
+  } else {
+    fmtsEnd = 0;
+    for (size_t i = 0, end = node->getChildrenSize(); i != end; ++i) {
+      auto &child = node->getChild(i);
+      DI(ActionSet::Size childActionId = get<0>(child);)
+      Node *childNode = get<2>(child);
+      DA(&node->getChild(node->getChildIndex(childActionId)) == &child);
+      NodeView *childNodeView = static_cast<NodeView *>(childNode->getListener());
+
+      bool elided = (elideDeadEndNodes && childNodeView->isDeadEnd) || (elideAntiselectedNodes && childNodeView->isAntiselected);
+      bool elision = elideDeadEndNodes || elideAntiselectedNodes;
+      auto fmt = (childNode->getPrimeParentNode() == node && childNodeView->primeParentChildIndex == i && !elided) ? NONLEAF : !elision ? LEAF : NONE;
+      fmts[i] = fmt;
+      if (fmt != NONE) {
+        fmtsEnd = i + 1;
+      }
     }
   }
+
+  ++depth;
+
   size_t prefixSize = r_prefix.size();
+  if (output) {
+    bool last = fmtsEnd == 0;
+    r_prefix.append(last ? u8("  ") : u8("│ "));
+    printNodeOutput(output, multiverse, r_prefix, out);
+    r_prefix.resize(prefixSize);
+  }
   for (size_t i = 0; i != fmtsEnd; ++i) {
     if (fmts[i] == NONE) {
       continue;
