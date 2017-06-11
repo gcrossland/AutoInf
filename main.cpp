@@ -1524,11 +1524,7 @@ void MultiverseView::printNodeHeader (
   NodeView *nodeView = static_cast<NodeView *>(node->getListener());
 
   bool selected = contains(selectedNodes, node);
-  if (selected) {
-    fprintf(out, "* ");
-  }
-
-  fprintf(out, "%c%u%c ", narrowise(nodeIndexRenderingPrefix), static_cast<iu>(nodeView->index), narrowise(nodeIndexRenderingSuffix));
+  fprintf(out, "%c%s %u%c ", narrowise(nodeIndexRenderingPrefix), narrowise(selected ? u8("\u2612") : u8("\u2610")),  static_cast<iu>(nodeView->index), narrowise(nodeIndexRenderingSuffix));
 
   fprintf(out, "%s", narrowise(renderActionInput(actionId, multiverse.getActionSet())));
   fprintf(out, " [&%08X]", static_cast<iu>(node->getSignature().hashFast()));
