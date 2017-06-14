@@ -626,7 +626,7 @@ bool runCommandLine (Multiverse &multiverse, const u8string &in, u8string &messa
     const char8_t *inPartEnd = inI = skipNonSpaces(inI, inEnd);
     u8string line(inPartBegin, inPartEnd);
 
-    if (line == u8("quit")) {
+    if (line == u8("Q") || line == u8("q")) {
       return false;
     } else if (line.size() > 1 && (line[0] == u8("X")[0] || line[0] == u8("x")[0])) {
       is n = getNaturalNumber(line.data() + 1, line.data() + line.size());
@@ -905,7 +905,7 @@ void updateMultiverseDisplay (Multiverse &multiverse, const char *outPathName, c
     "  Select _Unprocesseds                 ──────────────\n"
     "  _Clear Selection                       Sav_e As... \n"
     "  _Invert Selection                      _Open...    \n"
-    "  Shrink Selection to Top_Valued...\n"
+    "  Shrink Selection to Top_Valued...      _Quit        \n"
     ">",
     narrowise(getOptionIcon(view->elideDeadEndNodes)),
     narrowise(getOptionIcon(view->elideAntiselectedNodes)),
