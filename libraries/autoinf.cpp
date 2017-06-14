@@ -584,10 +584,10 @@ bool Multiverse::Node::updatePrimeParent (Node *newParentNode, bool changedAbove
     unordered_set<Node *> seenNodes(children.size());
     for (auto &e : children) {
       Node *childNode = get<2>(e);
-      if (contains(seenNodes, childNode)) {
+      bool emplaced = get<1>(seenNodes.emplace(childNode));
+      if (!emplaced) {
         continue;
       }
-      seenNodes.emplace(childNode);
 
       childNode->updatePrimeParent(this, changedAbove);
     }
@@ -1037,10 +1037,10 @@ void Multiverse::load (const char *pathName) {
     ignoredByteRangeset = Rangeset(ignoredBytes, vm.getDynamicMemorySize());
     unordered_set<Node *> seenNodes;
     rootNode->forEach([&] (Node *node) -> bool {
-      if (contains(seenNodes, node)) {
+      bool emplaced = get<1>(seenNodes.emplace(node));
+      if (!emplaced) {
         return false;
       }
-      seenNodes.emplace(node);
 
       nodes.emplace(ref(node->getSignature()), node);
       return true;

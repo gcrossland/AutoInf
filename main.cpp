@@ -615,6 +615,7 @@ bool runCommandLine (Multiverse &multiverse, const u8string &in, u8string &messa
   bool &elideDeadEndNodes = view->elideDeadEndNodes;
   bool &elideAntiselectedNodes = view->elideAntiselectedNodes;
   size_t &maxDepth = view->maxDepth;
+  bool &combineSimilarSiblings = view->combineSimilarSiblings;
 
   const char8_t *inI = in.data();
   const char8_t *inEnd = inI + in.size();
@@ -651,6 +652,8 @@ bool runCommandLine (Multiverse &multiverse, const u8string &in, u8string &messa
       if (n >= 0) {
         maxDepth = static_cast<iu>(n);
       }
+    } else if (line == u8("M") || line == u8("m")) {
+      combineSimilarSiblings = !combineSimilarSiblings;
     } else if (line == u8("A") || line == u8("a")) {
       selectedNodes.clear();
       for (const auto &node : nodesByIndex) {
@@ -895,6 +898,7 @@ void updateMultiverseDisplay (Multiverse &multiverse, const char *outPathName, c
   printf(
     "%cHide _Dead End Nodes       %cHide A_ntiselected Nodes\n"
     "%cHide Nodes _Beyond Depth[-<n>]\n"
+    "%cCo_mbine Similar Siblings\n"
     " Select _All                 Select _Unprocesseds\n"
     " _Clear Selection            _Invert Selection\n"
     " Shrink Selection to Highest_Valued-<n>\n"
@@ -904,7 +908,8 @@ void updateMultiverseDisplay (Multiverse &multiverse, const char *outPathName, c
     ">",
     view->elideDeadEndNodes ? '*' : ' ',
     view->elideAntiselectedNodes ? '*' : ' ',
-    view->maxDepth != numeric_limits<size_t>::max() ? '*' : ' '
+    view->maxDepth != numeric_limits<size_t>::max() ? '*' : ' ',
+    view->combineSimilarSiblings ? '*' : ' '
   );
   fflush(stdout);
 }
@@ -1318,7 +1323,7 @@ template<typename _Walker> void NodeView::beWalked (_Walker &w) {
 }
 
 MultiverseView::MultiverseView (zword scoreAddr) :
-  MultiverseMetricsListener(scoreAddr), elideDeadEndNodes(false), elideAntiselectedNodes(false), maxDepth(numeric_limits<size_t>::max()),
+  MultiverseMetricsListener(scoreAddr), elideDeadEndNodes(false), elideAntiselectedNodes(false), maxDepth(numeric_limits<size_t>::max()), combineSimilarSiblings(false),
   deadEndnessIsDirty(true), antiselectednessIsDirty(true)
 {
 }
@@ -1514,20 +1519,21 @@ void MultiverseView::printNodes (const Multiverse &multiverse, FILE *out) {
   markDeadEndAndAntiselectedNodes();
 
   u8string prefix;
-  printNodeAsNonleaf(0, nullptr, multiverse.getRoot(), nullptr, ActionSet::NON_ID, multiverse, prefix, out);
+  printNodeAsNonleaf(0, nullptr, multiverse.getRoot(), nullptr, nullptr, nullptr, multiverse, prefix, out);
 }
 
 void MultiverseView::printNodeHeader (
-  char8_t nodeIndexRenderingPrefix, char8_t nodeIndexRenderingSuffix, Node *node, ActionSet::Size actionId,
+  char8_t nodeIndexRenderingPrefix, char8_t nodeIndexRenderingSuffix, Node *node,
+  ActionSet::Size *actionIdsI, ActionSet::Size *actionIdsEnd,
   const Multiverse &multiverse, FILE *out
 ) {
   NodeView *nodeView = static_cast<NodeView *>(node->getListener());
 
   bool selected = contains(selectedNodes, node);
-  fprintf(out, "%c%s %u%c ", narrowise(nodeIndexRenderingPrefix), narrowise(selected ? u8("\u2612") : u8("\u2610")),  static_cast<iu>(nodeView->index), narrowise(nodeIndexRenderingSuffix));
+  fprintf(out, "%c%s %u%c", narrowise(nodeIndexRenderingPrefix), narrowise(selected ? u8("\u2612") : u8("\u2610")),  static_cast<iu>(nodeView->index), narrowise(nodeIndexRenderingSuffix));
 
-  fprintf(out, "%s", narrowise(renderActionInput(actionId, multiverse.getActionSet())));
-  fprintf(out, " [&%08X]", static_cast<iu>(node->getSignature().hashFast()));
+  fprintf(out, "%s", narrowise(renderActionInput(actionIdsI, actionIdsEnd, multiverse.getActionSet())));
+  fprintf(out, " -> [&%08X]", static_cast<iu>(node->getSignature().hashFast()));
   fprintf(out, " {");
   for (size_t i = 0; i != NodeView::VALUE_COUNT; ++i) {
     fprintf(out, "%s%d", i == 0 ? "" : ", ", nodeView->getValue(i));
@@ -1535,13 +1541,14 @@ void MultiverseView::printNodeHeader (
   fprintf(out, "}");
 }
 
-u8string MultiverseView::renderActionInput (ActionSet::Size actionId, const ActionSet &actionSet) {
+u8string MultiverseView::renderActionInput (ActionSet::Size *actionIdsI, ActionSet::Size *actionIdsEnd, const ActionSet &actionSet) {
   u8string actionInput;
-  if (actionId != ActionSet::NON_ID) {
-    actionInput.push_back(u8("\"")[0]);
+  for (; actionIdsI != actionIdsEnd; ++actionIdsI) {
+    auto actionId = *actionIdsI;
+    DA(actionId != ActionSet::NON_ID);
+    actionInput.append(u8(" \""));
     actionSet.get(actionId).getInput(actionInput);
-    actionInput.erase(actionInput.size() - 1);
-    actionInput.append(u8("\" ->"));
+    actionInput.data()[actionInput.size() - 1] = u8("\"")[0];
   }
   return actionInput;
 }
@@ -1566,10 +1573,11 @@ void MultiverseView::printNodeOutput (const StringSet<char8_t>::String *output, 
 }
 
 void MultiverseView::printNodeAsLeaf (
-  size_t depth, const StringSet<char8_t>::String *output, Node *node, Node *parentNode, ActionSet::Size actionId,
+  size_t depth, const StringSet<char8_t>::String *output, Node *node, Node *parentNode,
+  ActionSet::Size *actionIdsI, ActionSet::Size *actionIdsEnd,
   const Multiverse &multiverse, u8string &r_prefix, FILE *out
 ) {
-  printNodeHeader(u8("{")[0], u8("}")[0], node, actionId, multiverse, out);
+  printNodeHeader(u8("{")[0], u8("}")[0], node, actionIdsI, actionIdsEnd, multiverse, out);
   fprintf(out, "\n");
 
   if (output) {
@@ -1581,10 +1589,11 @@ void MultiverseView::printNodeAsLeaf (
 }
 
 void MultiverseView::printNodeAsNonleaf (
-  size_t depth, const StringSet<char8_t>::String *output, Node *node, Node *parentNode, ActionSet::Size actionId,
+  size_t depth, const StringSet<char8_t>::String *output, Node *node, Node *parentNode,
+  ActionSet::Size *actionIdsI, ActionSet::Size *actionIdsEnd,
   const Multiverse &multiverse, u8string &r_prefix, FILE *out
 ) {
-  printNodeHeader(u8("(")[0], u8(")")[0], node, actionId, multiverse, out);
+  printNodeHeader(u8("(")[0], u8(")")[0], node, actionIdsI, actionIdsEnd, multiverse, out);
   if (node->getState()) {
     fprintf(out, " / unprocessed\n");
   } else {
@@ -1598,15 +1607,20 @@ void MultiverseView::printNodeAsNonleaf (
     NONLEAF
   } fmts[node->getChildrenSize()];
   size_t fmtsEnd;
+  unique_ptr<unordered_map<Node *, vector<ActionSet::Size>>> childGroups;
 
   DA(depth <= maxDepth);
   if (depth == maxDepth) {
     fmtsEnd = 0;
   } else {
     fmtsEnd = 0;
+    if (combineSimilarSiblings) {
+      childGroups.reset(new unordered_map<Node *, vector<ActionSet::Size>>(node->getChildrenSize()));
+    }
+
     for (size_t i = 0, end = node->getChildrenSize(); i != end; ++i) {
       auto &child = node->getChild(i);
-      DI(ActionSet::Size childActionId = get<0>(child);)
+      ActionSet::Size childActionId = get<0>(child);
       Node *childNode = get<2>(child);
       DA(&node->getChild(node->getChildIndex(childActionId)) == &child);
       NodeView *childNodeView = static_cast<NodeView *>(childNode->getListener());
@@ -1617,6 +1631,18 @@ void MultiverseView::printNodeAsNonleaf (
       fmts[i] = fmt;
       if (fmt != NONE) {
         fmtsEnd = i + 1;
+
+        if (childGroups) {
+          auto childGroupsI = childGroups->find(childNode);
+          if (childGroupsI == childGroups->end()) {
+            vector<ActionSet::Size> t;
+            t.reserve(8);
+            childGroupsI = get<0>(childGroups->emplace(childNode, move(t)));
+          } else {
+            DA(fmt == LEAF);
+          }
+          get<1>(*childGroupsI).emplace_back(childActionId);
+        }
       }
     }
   }
@@ -1641,9 +1667,27 @@ void MultiverseView::printNodeAsNonleaf (
     const StringSet<char8_t>::String &childOuput = get<1>(child);
     Node *childNode = get<2>(child);
 
+    ActionSet::Size *childActionIdsBegin;
+    ActionSet::Size *childActionIdsEnd;
+    vector<ActionSet::Size> t;
+    if (childGroups) {
+      auto childGroupsI = childGroups->find(childNode);
+      if (childGroupsI == childGroups->end()) {
+        continue;
+      }
+      t = move(get<1>(*childGroupsI));
+      childGroups->erase(childGroupsI);
+
+      childActionIdsBegin = t.data();
+      childActionIdsEnd = childActionIdsBegin + t.size();
+    } else {
+      childActionIdsBegin = &childActionId;
+      childActionIdsEnd = childActionIdsBegin + 1;
+    }
+
     fprintf(out, "%s%s", narrowise(r_prefix), narrowise(last ? u8("└─") : u8("├─")));
     r_prefix.append(last ? u8("  ") : u8("│ "));
-    (this->*(fmts[i] == LEAF ? &MultiverseView::printNodeAsLeaf : &MultiverseView::printNodeAsNonleaf))(depth, contains(verboseNodes, childNode) ? &childOuput : nullptr, childNode, node, childActionId, multiverse, r_prefix, out);
+    (this->*(fmts[i] == LEAF ? &MultiverseView::printNodeAsLeaf : &MultiverseView::printNodeAsNonleaf))(depth, contains(verboseNodes, childNode) ? &childOuput : nullptr, childNode, node, childActionIdsBegin, childActionIdsEnd, multiverse, r_prefix, out);
     r_prefix.resize(prefixSize);
   }
 }

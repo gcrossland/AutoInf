@@ -122,6 +122,7 @@ class MultiverseView : public MultiverseMetricsListener {
   pub bool elideDeadEndNodes;
   pub bool elideAntiselectedNodes;
   pub size_t maxDepth;
+  pub bool combineSimilarSiblings;
   prv bool deadEndnessIsDirty;
   prv bool antiselectednessIsDirty;
 
@@ -143,17 +144,20 @@ class MultiverseView : public MultiverseMetricsListener {
   prv void markAntiselectedNode (autoinf::Multiverse::Node *node, NodeView *nodeView);
   pub void printNodes (const autoinf::Multiverse &multiverse, FILE *out);
   prv void printNodeHeader (
-    char8_t nodeIndexRenderingPrefix, char8_t nodeIndexRenderingSuffix, autoinf::Multiverse::Node *node, autoinf::ActionSet::Size actionId,
+    char8_t nodeIndexRenderingPrefix, char8_t nodeIndexRenderingSuffix, autoinf::Multiverse::Node *node,
+    autoinf::ActionSet::Size *actionIdsI, autoinf::ActionSet::Size *actionIdsEnd,
     const autoinf::Multiverse &multiverse, FILE *out
   );
-  prv core::u8string renderActionInput (autoinf::ActionSet::Size actionId, const autoinf::ActionSet &actionSet);
+  prv core::u8string renderActionInput (autoinf::ActionSet::Size *actionIdsI, autoinf::ActionSet::Size *actionIdsEnd, const autoinf::ActionSet &actionSet);
   prv void printNodeOutput (const autoinf::StringSet<char8_t>::String *output, const autoinf::Multiverse &multiverse, const core::u8string &prefix, FILE *out);
   prv void printNodeAsLeaf (
-    size_t depth, const autoinf::StringSet<char8_t>::String *output, autoinf::Multiverse::Node *node, autoinf::Multiverse::Node *parentNode, autoinf::ActionSet::Size actionId,
+    size_t depth, const autoinf::StringSet<char8_t>::String *output, autoinf::Multiverse::Node *node, autoinf::Multiverse::Node *parentNode,
+    autoinf::ActionSet::Size *actionIdsI, autoinf::ActionSet::Size *actionIdsEnd,
     const autoinf::Multiverse &multiverse, core::u8string &r_prefix, FILE *out
   );
   prv void printNodeAsNonleaf (
-    size_t depth, const autoinf::StringSet<char8_t>::String *output, autoinf::Multiverse::Node *node, autoinf::Multiverse::Node *parentNode, autoinf::ActionSet::Size actionId,
+    size_t depth, const autoinf::StringSet<char8_t>::String *output, autoinf::Multiverse::Node *node, autoinf::Multiverse::Node *parentNode,
+    autoinf::ActionSet::Size *actionIdsI, autoinf::ActionSet::Size *actionIdsEnd,
     const autoinf::Multiverse &multiverse, core::u8string &r_prefix, FILE *out
   );
 };
