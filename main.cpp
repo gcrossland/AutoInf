@@ -896,22 +896,27 @@ void updateMultiverseDisplay (Multiverse &multiverse, const char *outPathName, c
     printf("%s", narrowise(message));
   }
   printf(
-    "%cHide _Dead End Nodes       %cHide A_ntiselected Nodes\n"
-    "%cHide Nodes _Beyond Depth[-<n>]\n"
-    "%cCo_mbine Similar Siblings\n"
-    " Select _All                 Select _Unprocesseds\n"
-    " _Clear Selection            _Invert Selection\n"
-    " Shrink Selection to Highest_Valued-<n>\n"
-    " _Show Output                _Hide Output\n"
-    " _Process                    Co_llapse                   _Terminate\n"
-    " Sav_e As-<name>             _Open File-<name>\n"
+    "%s Hide _Dead End Nodes                   _Show Output\n"
+    "%s Hide A_ntiselected Nodes               _Hide Output\n"
+    "%s Hide Nodes _Beyond Depth...          ──────────────\n"
+    "%s Co_mbine Similar Siblings              _Process    \n"
+    "───────────────────────────────────      Co_llapse   \n"
+    "  Select _All                            _Terminate  \n"
+    "  Select _Unprocesseds                 ──────────────\n"
+    "  _Clear Selection                       Sav_e As... \n"
+    "  _Invert Selection                      _Open...    \n"
+    "  Shrink Selection to Top_Valued...\n"
     ">",
-    view->elideDeadEndNodes ? '*' : ' ',
-    view->elideAntiselectedNodes ? '*' : ' ',
-    view->maxDepth != numeric_limits<size_t>::max() ? '*' : ' ',
-    view->combineSimilarSiblings ? '*' : ' '
+    narrowise(getOptionIcon(view->elideDeadEndNodes)),
+    narrowise(getOptionIcon(view->elideAntiselectedNodes)),
+    narrowise(getOptionIcon(view->maxDepth != numeric_limits<size_t>::max())),
+    narrowise(getOptionIcon(view->combineSimilarSiblings))
   );
   fflush(stdout);
+}
+
+const char8_t *getOptionIcon (bool enabled) {
+  return enabled ? u8("\u2612") : u8("\u2610");
 }
 
 constexpr size_t NodeMetricsListener::VALUE_COUNT;
@@ -1530,7 +1535,7 @@ void MultiverseView::printNodeHeader (
   NodeView *nodeView = static_cast<NodeView *>(node->getListener());
 
   bool selected = contains(selectedNodes, node);
-  fprintf(out, "%c%s %u%c", narrowise(nodeIndexRenderingPrefix), narrowise(selected ? u8("\u2612") : u8("\u2610")),  static_cast<iu>(nodeView->index), narrowise(nodeIndexRenderingSuffix));
+  fprintf(out, "%c%s %u%c", narrowise(nodeIndexRenderingPrefix), narrowise(getOptionIcon(selected)), static_cast<iu>(nodeView->index), narrowise(nodeIndexRenderingSuffix));
 
   fprintf(out, "%s", narrowise(renderActionInput(actionIdsI, actionIdsEnd, multiverse.getActionSet())));
   fprintf(out, " -> [&%08X]", static_cast<iu>(node->getSignature().hashFast()));

@@ -20,6 +20,7 @@ bool runCommandLineTemplate (autoinf::Multiverse &r_multiverse, const core::u8st
 void appendWordList (core::u8string &r_o, const bitset::Bitset &words, const autoinf::Multiverse &multiverse);
 bool runCommandLine (autoinf::Multiverse &multiverse, const core::u8string &in, core::u8string &message);
 void updateMultiverseDisplay (autoinf::Multiverse &multiverse, const char *outPathName, const core::u8string &message);
+const char8_t *getOptionIcon (bool enabled);
 
 class NodeMetricsListener : public autoinf::Multiverse::Node::Listener {
   pub static constexpr size_t VALUE_COUNT = 5;
