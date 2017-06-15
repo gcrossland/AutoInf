@@ -23,17 +23,19 @@ void updateMultiverseDisplay (autoinf::Multiverse &multiverse, const char *outPa
 const char8_t *getOptionIcon (bool enabled);
 
 class NodeMetricsListener : public autoinf::Multiverse::Node::Listener {
-  pub static constexpr size_t VALUE_COUNT = 5;
+  pub static constexpr size_t VALUE_COUNT = 8;
   pub typedef is Value;
   pub static constexpr Value NON_VALUE = core::numeric_limits<Value>::max();
+  pub static constexpr is16f NON_OUTPUTTAGE_VALUE = core::numeric_limits<is16f>::max();
 
-  prv Value scoreValue;
+  prv is16f scoreValue;
 
   prv size_t locationHash;
   prv Value visitageValue;
 
-  prv Value localOutputtageValue;
-  prv Value outputtageValue;
+  prv bool localOutputtageValue;
+  prv is16f outputtageValue;
+  prv is16f antioutputtageValue;
 
   pub NodeMetricsListener ();
   pub template<typename _Walker> void beWalked (_Walker &w);
@@ -51,8 +53,6 @@ class MultiverseMetricsListener : public autoinf::Multiverse::Listener {
   prv static const Value OLD_LOCATION_VISITAGE_MODIFIER;
 
   prv static const size_t OUTPUTTAGE_CHILD_OUTPUT_PRESKIP;
-  prv static const f64 PER_TURN_OUTPUTTAGE_SCALE;
-  prv static const Value NOVEL_OUTPUTTAGE_MODIFIER;
 
   prv const autofrotz::zword scoreAddr;
   prv bitset::Bitset interestingChildActionWords;
@@ -83,8 +83,8 @@ class MultiverseMetricsListener : public autoinf::Multiverse::Listener {
   prv void setWordData (const autoinf::Multiverse::Node *node, const autoinf::ActionSet &actionSet);
   pub virtual void nodesProcessed (const autoinf::Multiverse &multiverse) override;
   prv void setOutputtageValues (const autoinf::Multiverse &multiverse);
-  prv void setOutputtageValueRecursively (const autoinf::Multiverse::Node *node, NodeMetricsListener *listener, Value parentValue);
-  prv void setOutputtageValue (const autoinf::Multiverse::Node *node, NodeMetricsListener *listener, Value parentValue);
+  prv void setOutputtageValuesRecursively (const autoinf::Multiverse::Node *node, NodeMetricsListener *listener, NodeMetricsListener *parentListener);
+  prv void setOutputtageValues (const autoinf::Multiverse::Node *node, NodeMetricsListener *listener, NodeMetricsListener *parentListener);
   pub virtual void nodeCollapsed (const autoinf::Multiverse &multiverse, const autoinf::Multiverse::Node *node, bool childrenUpdated) override;
   pub void virtual nodesCollapsed (const autoinf::Multiverse &multiverse) override;
   pub void virtual loaded (const autoinf::Multiverse &multiverse) override;

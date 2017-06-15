@@ -921,9 +921,10 @@ const char8_t *getOptionIcon (bool enabled) {
 
 constexpr size_t NodeMetricsListener::VALUE_COUNT;
 constexpr Value NodeMetricsListener::NON_VALUE;
+constexpr is16f NodeMetricsListener::NON_OUTPUTTAGE_VALUE;
 
 NodeMetricsListener::NodeMetricsListener () :
-  scoreValue(NON_VALUE), locationHash(0), visitageValue(NON_VALUE), localOutputtageValue(false), outputtageValue(NON_VALUE - 1)
+  locationHash(0), visitageValue(NON_VALUE), localOutputtageValue(false), outputtageValue(NON_OUTPUTTAGE_VALUE - 1)
 {
 }
 
@@ -934,19 +935,33 @@ template<typename _Walker> void NodeMetricsListener::beWalked (_Walker &w) {
   w.process(visitageValue);
   w.process(localOutputtageValue);
   w.process(outputtageValue);
+  w.process(antioutputtageValue);
 }
 
 Value NodeMetricsListener::getValue (size_t i) const {
   DPRE(i < VALUE_COUNT);
-  static constexpr Value NodeMetricsListener::*const values[] = {
-    &NodeMetricsListener::scoreValue,
-    &NodeMetricsListener::scoreValue,
-    &NodeMetricsListener::visitageValue,
-    &NodeMetricsListener::localOutputtageValue,
-    &NodeMetricsListener::outputtageValue
-  };
-  DA(sizeof(values) / sizeof(*values) == VALUE_COUNT);
-  return this->*(values[i]);
+  switch (i) {
+    case 0:
+      return scoreValue;
+    case 1:
+      // TODO remove placeholder word metric value
+      return -42;
+    case 2:
+      return visitageValue;
+    case 3:
+      return localOutputtageValue;
+    case 4:
+      return outputtageValue;
+    case 5:
+      return antioutputtageValue;
+    case 6:
+      return static_cast<Value>(outputtageValue) + antioutputtageValue;
+    case 7:
+      return (static_cast<Value>(10000) * outputtageValue) / (outputtageValue - antioutputtageValue);
+    default:
+      DA(false);
+      return 0;
+  }
 }
 
 const Value MultiverseMetricsListener::PER_TURN_VISITAGE_MODIFIER = -0;
@@ -954,8 +969,6 @@ const vector<Value> MultiverseMetricsListener::NEW_LOCATION_VISITAGE_MODIFIERS =
 const Value MultiverseMetricsListener::OLD_LOCATION_VISITAGE_MODIFIER = -200;
 
 const size_t MultiverseMetricsListener::OUTPUTTAGE_CHILD_OUTPUT_PRESKIP = 1;
-const f64 MultiverseMetricsListener::PER_TURN_OUTPUTTAGE_SCALE = 1;
-const Value MultiverseMetricsListener::NOVEL_OUTPUTTAGE_MODIFIER = 1;
 
 MultiverseMetricsListener::MultiverseMetricsListener (zword scoreAddr) :
   scoreAddr(scoreAddr), interestingChildActionWordsIsDirty(false)
@@ -1135,7 +1148,7 @@ void MultiverseMetricsListener::setOutputtageValues (const autoinf::Multiverse &
   Bitset stringsToThisDepth, stringsToNextDepth;
 
   NodeMetricsListener *listener = static_cast<NodeMetricsListener *>(rootNode->getListener());
-  listener->outputtageValue = NodeMetricsListener::NON_VALUE;
+  listener->outputtageValue = NodeMetricsListener::NON_OUTPUTTAGE_VALUE;
   listener->localOutputtageValue = false;
   nodes.emplace_back(rootNode);
 
@@ -1152,9 +1165,9 @@ void MultiverseMetricsListener::setOutputtageValues (const autoinf::Multiverse &
         const auto &childOutput = get<1>(child);
         const Node *childNode = get<2>(child);
         NodeMetricsListener *childListener = static_cast<NodeMetricsListener *>(childNode->getListener());
-        DA((childNode->getPrimeParentNode() == node && childNode->getPrimeParentArcChildIndex() == i) == (childListener->outputtageValue != NodeMetricsListener::NON_VALUE));
-        if (childListener->outputtageValue != NodeMetricsListener::NON_VALUE) {
-          childListener->outputtageValue = NodeMetricsListener::NON_VALUE;
+        DA((childNode->getPrimeParentNode() == node && childNode->getPrimeParentArcChildIndex() == i) == (childListener->outputtageValue != NodeMetricsListener::NON_OUTPUTTAGE_VALUE));
+        if (childListener->outputtageValue != NodeMetricsListener::NON_OUTPUTTAGE_VALUE) {
+          childListener->outputtageValue = NodeMetricsListener::NON_OUTPUTTAGE_VALUE;
           childListener->localOutputtageValue = false;
           nodes.emplace_back(childNode);
         }
@@ -1171,29 +1184,40 @@ void MultiverseMetricsListener::setOutputtageValues (const autoinf::Multiverse &
     }
   } while (!nodes.empty());
 
-  setOutputtageValueRecursively(rootNode, listener, 0);
+  setOutputtageValuesRecursively(rootNode, listener, nullptr);
 }
 
-void MultiverseMetricsListener::setOutputtageValueRecursively (const Node *node, NodeMetricsListener *listener, Value parentValue) {
-  setOutputtageValue(node, listener, parentValue);
+void MultiverseMetricsListener::setOutputtageValuesRecursively (const Node *node, NodeMetricsListener *listener, NodeMetricsListener *parentListener) {
+  setOutputtageValues(node, listener, parentListener);
 
   for (size_t i = 0, end = node->getChildrenSize(); i != end; ++i) {
     Node *childNode = get<2>(node->getChild(i));
     if (childNode->getPrimeParentNode() == node) {
       NodeMetricsListener *childListener = static_cast<NodeMetricsListener *>(childNode->getListener());
-      DA((childNode->getPrimeParentArcChildIndex() == i) == (childListener->outputtageValue == NodeMetricsListener::NON_VALUE));
-      if (childListener->outputtageValue == NodeMetricsListener::NON_VALUE) {
-        setOutputtageValueRecursively(childNode, childListener, listener->outputtageValue);
-        DA(childListener->outputtageValue != NodeMetricsListener::NON_VALUE);
+      DA((childNode->getPrimeParentArcChildIndex() == i) == (childListener->outputtageValue == NodeMetricsListener::NON_OUTPUTTAGE_VALUE));
+      if (childListener->outputtageValue == NodeMetricsListener::NON_OUTPUTTAGE_VALUE) {
+        setOutputtageValuesRecursively(childNode, childListener, listener);
+        DA(childListener->outputtageValue != NodeMetricsListener::NON_OUTPUTTAGE_VALUE);
       }
     }
   }
 }
 
-void MultiverseMetricsListener::setOutputtageValue (const Node *node, NodeMetricsListener *listener, Value parentValue) {
+void MultiverseMetricsListener::setOutputtageValues (const Node *node, NodeMetricsListener *listener, NodeMetricsListener *parentListener) {
+  if (parentListener) {
+    listener->outputtageValue = parentListener->outputtageValue;
+    listener->antioutputtageValue = parentListener->antioutputtageValue;
+  } else {
+    listener->outputtageValue = 0;
+    listener->antioutputtageValue = 0;
+  }
+
   bool novel = listener->localOutputtageValue;
-  DA(parentValue != NodeMetricsListener::NON_VALUE);
-  listener->outputtageValue = static_cast<Value>(parentValue * PER_TURN_OUTPUTTAGE_SCALE) + (novel ? NOVEL_OUTPUTTAGE_MODIFIER : 0);
+  if (novel) {
+    ++listener->outputtageValue;
+  } else {
+    --listener->antioutputtageValue;
+  }
 }
 
 void MultiverseMetricsListener::nodeCollapsed (const Multiverse &multiverse, const Node *node, bool childrenUpdated) {
