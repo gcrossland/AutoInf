@@ -923,15 +923,13 @@ constexpr size_t NodeMetricsListener::VALUE_COUNT;
 constexpr Value NodeMetricsListener::NON_VALUE;
 
 NodeMetricsListener::NodeMetricsListener () :
-  scoreValue(NON_VALUE), wordValue(NON_VALUE - 1), locationHash(0), visitageValue(NON_VALUE), localOutputtageValue(false), outputtageValue(NON_VALUE - 1)
+  scoreValue(NON_VALUE), locationHash(0), visitageValue(NON_VALUE), localOutputtageValue(false), outputtageValue(NON_VALUE - 1)
 {
 }
 
 template<typename _Walker> void NodeMetricsListener::beWalked (_Walker &w) {
   DS();
   w.process(scoreValue);
-  w.process(interestingChildActionWords);
-  w.process(wordValue);
   w.process(locationHash);
   w.process(visitageValue);
   w.process(localOutputtageValue);
@@ -942,7 +940,7 @@ Value NodeMetricsListener::getValue (size_t i) const {
   DPRE(i < VALUE_COUNT);
   static constexpr Value NodeMetricsListener::*const values[] = {
     &NodeMetricsListener::scoreValue,
-    &NodeMetricsListener::wordValue,
+    &NodeMetricsListener::scoreValue,
     &NodeMetricsListener::visitageValue,
     &NodeMetricsListener::localOutputtageValue,
     &NodeMetricsListener::outputtageValue
@@ -1108,104 +1106,26 @@ size_t MultiverseMetricsListener::checkVisitageValueRecursively (const Node *nod
 }
 
 void MultiverseMetricsListener::nodeProcessed (const Multiverse &multiverse, const Node *node, size_t processedCount, size_t totalCount) {
-  nodeProcessed(multiverse, node);
+  setWordData(node, multiverse.getActionSet());
 }
 
-void MultiverseMetricsListener::nodeProcessed (const Multiverse &multiverse, const Node *node) {
-  NodeMetricsListener *listener = static_cast<NodeMetricsListener *>(node->getListener());
+void MultiverseMetricsListener::setWordData (const Node *node, const ActionSet &actionSet) {
+  if (interestingChildActionWordsIsDirty) {
+    return;
+  }
 
-  setWordData(node, listener, multiverse.getActionSet());
-}
-
-void MultiverseMetricsListener::setWordData (const Node *node, NodeMetricsListener *listener, const ActionSet &actionSet) {
-  DA(!node->getState());
-  Bitset &words = listener->interestingChildActionWords;
-  bool canUpdate = !interestingChildActionWordsIsDirty && words.empty();
-  words.clear();
+  Bitset &words = interestingChildActionWords;
+  words.ensureWidth(actionSet.getSize());
   for (size_t i = 0, end = node->getChildrenSize(); i != end; ++i) {
     auto action = actionSet.get(get<0>(node->getChild(i)));
     for (size_t i = 0, end = action.getWordCount(); i != end; ++i) {
-      words.setBit(action.getWord(i));
+      words.setExistingBit(action.getWord(i));
     }
-  }
-  words.compact();
-
-  if (canUpdate) {
-    interestingChildActionWords |= words;
-  } else {
-    interestingChildActionWordsIsDirty = true;
   }
 }
 
 void MultiverseMetricsListener::nodesProcessed (const Multiverse &multiverse) {
-  const Node *rootNode = multiverse.getRoot();
-
-  unique_ptr<size_t []> stats = getWordStats(multiverse, [] (const Node *node, NodeMetricsListener *listener) {
-    DA(listener->wordValue != NodeMetricsListener::NON_VALUE);
-    listener->wordValue = NodeMetricsListener::NON_VALUE;
-  });
-  setWordValueRecursively(rootNode, static_cast<NodeMetricsListener *>(rootNode->getListener()), multiverse.size(), stats.get(), 0);
-
-  DA(multiverse.size() == checkVisitageValueRecursively(rootNode, static_cast<NodeMetricsListener *>(rootNode->getListener()), getVisitageChain(nullptr)));
-
   setOutputtageValues(multiverse);
-}
-
-template<typename F> unique_ptr<size_t []> MultiverseMetricsListener::getWordStats (const Multiverse &multiverse, const F &nodeFunctor) {
-  DS();
-  DW(, "DDDD nodes have changed!");
-  auto &actionSet = multiverse.getActionSet();
-  unique_ptr<size_t []> wordCounts(new size_t[actionSet.getWordsSize()]);
-  fill(wordCounts.get(), wordCounts.get() + actionSet.getWordsSize(), 0);
-
-  for (const Node *node : multiverse) {
-    NodeMetricsListener *listener = static_cast<NodeMetricsListener *>(node->getListener());
-
-    nodeFunctor(node, listener);
-
-    Bitset &words = listener->interestingChildActionWords;
-    for (size_t i = words.getNextSetBit(0); i != Bitset::NON_INDEX; i = words.getNextSetBit(i + 1)) {
-      ++wordCounts[i];
-    }
-  }
-  DW(, "DDDD word counts:");
-  for (ActionSet::SubSize i = 0, end = actionSet.getWordsSize(); i != end; ++i) {
-    auto word = actionSet.getWord(i);
-    DW(, "DDDD   ",u8string(word.begin(), word.end()).c_str()," - ",wordCounts[i]);
-  }
-
-  return wordCounts;
-}
-
-void MultiverseMetricsListener::setWordValueRecursively (const Node *node, NodeMetricsListener *listener, size_t nodesSize, const size_t *stats, Value wordValue) {
-  setWordValue(node, listener, nodesSize, stats, wordValue);
-
-  for (size_t i = 0, end = node->getChildrenSize(); i != end; ++i) {
-    Node *childNode = get<2>(node->getChild(i));
-    if (childNode->getPrimeParentNode() == node) {
-      NodeMetricsListener *childListener = static_cast<NodeMetricsListener *>(childNode->getListener());
-      DA((childNode->getPrimeParentArcChildIndex() == i) == (childListener->wordValue == NodeMetricsListener::NON_VALUE));
-      if (childListener->wordValue == NodeMetricsListener::NON_VALUE) {
-        setWordValueRecursively(childNode, childListener, nodesSize, stats, wordValue);
-      }
-    }
-  }
-}
-
-void MultiverseMetricsListener::setWordValue (const Node *node, NodeMetricsListener *listener, size_t nodesSize, const size_t *stats, Value &r_wordValue) {
-  DA(listener->wordValue == NodeMetricsListener::NON_VALUE);
-  DW(, "DDDD calculating node word value for node with sig of hash ", node->getSignature().hashFast());
-  DA((!node->getPrimeParentNode() && r_wordValue == 0) || r_wordValue == static_cast<NodeMetricsListener *>(node->getPrimeParentNode()->getListener())->wordValue);
-
-  Value value = r_wordValue;
-  Bitset &words = listener->interestingChildActionWords;
-  for (size_t i = words.getNextSetBit(0); i != Bitset::NON_INDEX; i = words.getNextSetBit(i + 1)) {
-    DW(, "       action word of id ", i);
-    value += static_cast<Value>(nodesSize / stats[i]);
-  }
-  DW(, "       final local word value is ", value - r_wordValue);
-  DW(, "       (parent word value is ", r_wordValue,")");
-  listener->wordValue = r_wordValue = value;
 }
 
 void MultiverseMetricsListener::setOutputtageValues (const autoinf::Multiverse &multiverse) {
@@ -1277,13 +1197,12 @@ void MultiverseMetricsListener::setOutputtageValue (const Node *node, NodeMetric
 }
 
 void MultiverseMetricsListener::nodeCollapsed (const Multiverse &multiverse, const Node *node, bool childrenUpdated) {
-  if (childrenUpdated) {
-    nodeProcessed(multiverse, node);
-  }
 }
 
 void MultiverseMetricsListener::nodesCollapsed (const Multiverse &multiverse) {
   nodesProcessed(multiverse);
+
+  interestingChildActionWordsIsDirty = true;
 }
 
 void MultiverseMetricsListener::loaded (const Multiverse &multiverse) {
@@ -1306,11 +1225,10 @@ Value MultiverseMetricsListener::getMaxScoreValue (const Multiverse &multiverse)
 const Bitset &MultiverseMetricsListener::getInterestingChildActionWords (const Multiverse &multiverse) {
   if (interestingChildActionWordsIsDirty) {
     interestingChildActionWords.clear();
-    for (const Node *node : multiverse) {
-      NodeMetricsListener *listener = static_cast<NodeMetricsListener *>(node->getListener());
-      interestingChildActionWords |= listener->interestingChildActionWords;
-    }
     interestingChildActionWordsIsDirty = false;
+    for (const Node *node : multiverse) {
+      setWordData(node, multiverse.getActionSet());
+    }
   }
 
   return interestingChildActionWords;

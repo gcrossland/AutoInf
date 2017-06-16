@@ -29,9 +29,6 @@ class NodeMetricsListener : public autoinf::Multiverse::Node::Listener {
 
   prv Value scoreValue;
 
-  prv bitset::Bitset interestingChildActionWords;
-  prv Value wordValue;
-
   prv size_t locationHash;
   prv Value visitageValue;
 
@@ -83,12 +80,8 @@ class MultiverseMetricsListener : public autoinf::Multiverse::Listener {
   prv void setVisitageValue (const autoinf::Multiverse::Node *node, NodeMetricsListener *listener, VisitageChain &r_chain);
   prv size_t checkVisitageValueRecursively (const autoinf::Multiverse::Node *node, NodeMetricsListener *listener, VisitageChain chain);
   pub virtual void nodeProcessed (const autoinf::Multiverse &multiverse, const autoinf::Multiverse::Node *node, size_t processedCount, size_t totalCount) override;
-  prv void nodeProcessed (const autoinf::Multiverse &multiverse, const autoinf::Multiverse::Node *node);
-  prv void setWordData (const autoinf::Multiverse::Node *node, NodeMetricsListener *listener, const autoinf::ActionSet &actionSet);
+  prv void setWordData (const autoinf::Multiverse::Node *node, const autoinf::ActionSet &actionSet);
   pub virtual void nodesProcessed (const autoinf::Multiverse &multiverse) override;
-  prv template<typename F> std::unique_ptr<size_t []> getWordStats (const autoinf::Multiverse &multiverse, const F &nodeFunctor);
-  prv void setWordValueRecursively (const autoinf::Multiverse::Node *node, NodeMetricsListener *listener, size_t nodesSize, const size_t *stats, Value wordValue);
-  prv void setWordValue (const autoinf::Multiverse::Node *node, NodeMetricsListener *listener, size_t nodesSize, const size_t *stats, Value &r_wordValue);
   prv void setOutputtageValues (const autoinf::Multiverse &multiverse);
   prv void setOutputtageValueRecursively (const autoinf::Multiverse::Node *node, NodeMetricsListener *listener, Value parentValue);
   prv void setOutputtageValue (const autoinf::Multiverse::Node *node, NodeMetricsListener *listener, Value parentValue);
