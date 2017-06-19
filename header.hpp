@@ -10,6 +10,7 @@
 struct Story {
   autoinf::Story _; // TODO compose by subclassing instead
   size_t scoreSignificantWordAddrI;
+  std::vector<autofrotz::zword> initialIgnoredBytes;
 };
 
 int main (int argc, char *argv[]);

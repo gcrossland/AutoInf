@@ -378,7 +378,6 @@ struct RangesetPart {
 class Rangeset : public std::vector<RangesetPart> {
   pub Rangeset (const bitset::Bitset &bitset, iu16 size);
   pub Rangeset ();
-
   pub template<typename _Walker> void beWalked (_Walker &w);
 };
 
@@ -399,10 +398,12 @@ class ActionExecutor {
     ActionResult (ActionSet::Size id, core::u8string output, core::HashWrapper<Signature> signature);
     ActionResult (ActionSet::Size id, core::u8string output, core::HashWrapper<Signature> signature, autofrotz::State state, std::vector<autofrotz::zword> significantWords);
     template<typename _InputIterator, typename _InputEndIterator> explicit ActionResult (const Deserialiser<_InputIterator, _InputEndIterator> &);
-
     template<typename _Walker> void beWalked (_Walker &w);
   };
-  pub virtual void processNode (std::vector<ActionResult> &r_results, bitset::Bitset *extraWordSet, const core::HashWrapper<Signature> &parentSignature, const autofrotz::State &parentState) = 0;
+  pub virtual void processNode (
+    std::vector<ActionResult> &r_results, bitset::Bitset *extraWordSet,
+    const core::HashWrapper<Signature> &parentSignature, const autofrotz::State &parentState
+  ) = 0;
 };
 
 class LocalActionExecutor : public ActionExecutor {
@@ -418,10 +419,10 @@ class LocalActionExecutor : public ActionExecutor {
 
   pub iu16 getDynamicMemorySize () const noexcept;
   pub bitset::Bitset &getWordSet () noexcept;
-  pub void clearWordSet () noexcept;
+  pub void clearWordSet () noexcept override;
   pub const ActionSet &getActionSet () const noexcept;
   pub const Rangeset &getIgnoredByteRangeset () const noexcept;
-  pub void setIgnoredByteRangeset (Rangeset ignoredByteRangeset) noexcept;
+  pub void setIgnoredByteRangeset (Rangeset ignoredByteRangeset) noexcept override;
   pub static void doAction (autofrotz::Vm &r_vm, core::u8string::const_iterator inputBegin, core::u8string::const_iterator inputEnd, core::u8string &r_output, const char8_t *deathExceptionMsg);
   pub static void doAction (autofrotz::Vm &r_vm, const core::u8string &input, core::u8string &r_output, const char8_t *deathExceptionMsg);
   prv void doSaveAction (autofrotz::State &r_state);
@@ -431,7 +432,7 @@ class LocalActionExecutor : public ActionExecutor {
   pub void processNode (
     std::vector<ActionResult> &r_results, bitset::Bitset *extraWordSet,
     const core::HashWrapper<Signature> &parentSignature, const autofrotz::State &parentState
-  );
+  ) override;
   pub void processNode (
     std::vector<ActionResult> &r_results, bitset::Bitset *extraWordSet,
     const core::HashWrapper<Signature> &parentSignature, const autofrotz::State &parentState,
@@ -457,9 +458,12 @@ class RemoteActionExecutor : public ActionExecutor {
   prv void beginResponse (iu8f requestId);
   prv void endResponse (iu8f requestId);
 
-  pub void clearWordSet ();
-  pub void setIgnoredByteRangeset (Rangeset ignoredByteRangeset);
-  pub void processNode (std::vector<ActionResult> &r_results, bitset::Bitset *extraWordSet, const core::HashWrapper<Signature> &parentSignature, const autofrotz::State &parentState);
+  pub void clearWordSet () override;
+  pub void setIgnoredByteRangeset (Rangeset ignoredByteRangeset) override;
+  pub void processNode (
+    std::vector<ActionResult> &r_results, bitset::Bitset *extraWordSet,
+    const core::HashWrapper<Signature> &parentSignature, const autofrotz::State &parentState
+  ) override;
 };
 
 class ActionExecutorServer {
@@ -552,8 +556,8 @@ class Multiverse {
   prv std::vector<std::unique_ptr<ActionExecutor>> executors;
   prv bitset::Bitset executorIgnoredBytesCleans;
 
-  pub Multiverse (Story &&story, core::u8string &r_initialOutput, std::unique_ptr<Listener> &&listener);
-  prv static bitset::Bitset initIgnoredBytes (const autofrotz::Vm &vm);
+  pub Multiverse (Story &&story, core::u8string &r_initialOutput, std::unique_ptr<Listener> &&listener, const std::vector<autofrotz::zword> &initialIgnoredBytes);
+  prv static bitset::Bitset initIgnoredBytes (const std::vector<autofrotz::zword> &initialIgnoredBytes);
   Multiverse (const Multiverse &) = delete;
   Multiverse &operator= (const Multiverse &) = delete;
   Multiverse (Multiverse &&) = delete;
@@ -562,6 +566,7 @@ class Multiverse {
 
   pub const ActionSet &getActionSet () const;
   pub Listener *getListener () const;
+  pub const bitset::Bitset &getIgnoredBytes () const;
   pub const StringSet<char8_t> &getOutputStringSet () const;
   pub size_t size () const;
   pub NodeIterator begin () const;

@@ -138,7 +138,7 @@ int main (int argc, char *argv[]) {
         vector<autofrotz::zword> {
           0x08C8
         }
-      }, 0}},
+      }, 0, vector<zword> {}}},
       {HashWrapper<string<char>>("advent"), {{
         "advent/advent.z5",
         width,
@@ -372,7 +372,7 @@ int main (int argc, char *argv[]) {
         vector<autofrotz::zword> {
           0x3BEB /* or 0x3C0B or 0x3C0D */
         }
-      }, 0}}
+      }, 0, vector<zword> {}}}
     };
     // TODO uargs
     auto e0 = stories.find(core::hashed(string<char>(argv[1])));
@@ -431,7 +431,7 @@ void runWorker (iu argsSize, char **args, Story story) {
 
 void runCmd (iu argsSize, char **args, Story story) {
   u8string output;
-  Multiverse multiverse(move(story._), output, unique_ptr<Multiverse::Listener>(new MultiverseView(story.scoreSignificantWordAddrI)));
+  Multiverse multiverse(move(story._), output, unique_ptr<Multiverse::Listener>(new MultiverseView(story.scoreSignificantWordAddrI)), story.initialIgnoredBytes);
   MultiverseView *view = static_cast<MultiverseView *>(multiverse.getListener());
   view->multiverseChanged(multiverse);
 
@@ -464,7 +464,7 @@ void runCmd (iu argsSize, char **args, Story story) {
 
 void runVelocityrun (iu argsSize, char **args, Story story) {
   u8string output;
-  Multiverse multiverse(move(story._), output, unique_ptr<Multiverse::Listener>(new MultiverseView(story.scoreSignificantWordAddrI)));
+  Multiverse multiverse(move(story._), output, unique_ptr<Multiverse::Listener>(new MultiverseView(story.scoreSignificantWordAddrI)), story.initialIgnoredBytes);
   MultiverseView *view = static_cast<MultiverseView *>(multiverse.getListener());
   view->multiverseChanged(multiverse);
 
@@ -880,6 +880,15 @@ bool runCommandLine (Multiverse &multiverse, const u8string &in, u8string &messa
       u8string name(line.data() + 2, line.data() + line.size());
       multiverse.load(name);
       view->multiverseMayHaveChanged();
+    } else if (line == u8("G") || line == u8("g")) {
+      auto bytes = multiverse.getIgnoredBytes();
+      message.append(u8("Ignored bytes: {"));
+      for (size_t i = bytes.getNextSetBit(0); i != Bitset::NON_INDEX; i = bytes.getNextSetBit(i + 1)) {
+        char8_t b[1024];
+        sprintf(reinterpret_cast<char *>(b), "0x%04X,", static_cast<iu>(i));
+        message.append(b);
+      }
+      message.append(u8("}\n\n"));
     } else {
       const char8_t *numBegin = line.data();
       const char8_t *numEnd = numBegin + line.size();
@@ -961,19 +970,19 @@ void updateMultiverseDisplay (Multiverse &multiverse, const char *outPathName, c
   }
   #define U "\xCC\xB1" // TODO switch from U+0331 to U+0332
   printf(
-    "%s Hide D" U "ead End Nodes                    Add W" U "orker    \n"
-    "%s Hide An" U "tiselected Nodes                R" U "emove Workers\n"
-    "%s Hide Nodes B" U "eyond Depth...           ────────────────\n"
-    "%s Com" U "bine Similar Siblings               P" U "rocess       \n"
-    "───────────────────────────────────      Col" U "lapse      \n"
-    "  Select A" U "ll                             T" U "erminate     \n"
-    "  Select U" U "nprocesseds                  ────────────────\n"
-    "  C" U "lear Selection                        Save" U " As...    \n"
-    "  I" U "nvert Selection                       O" U "pen...       \n"
-    "  Shrink Selection to Top-V" U "alued...      Q" U "uit          \n"
-    "───────────────────────────────────                    \n"
-    "  S" U "how Output                                          \n"
-    "  H" U "ide Output                                          \n"
+    "%s Hide D" U "ead End Nodes                    Add W" U "orker                       \n"
+    "%s Hide An" U "tiselected Nodes                R" U "emove Workers                   \n"
+    "%s Hide Nodes B" U "eyond Depth...           ────────────────────               \n"
+    "%s Com" U "bine Similar Siblings               P" U "rocess                          \n"
+    "───────────────────────────────────      Col" U "lapse                         \n"
+    "  Select A" U "ll                             T" U "erminate                        \n"
+    "  Select U" U "nprocesseds                  ────────────────────               \n"
+    "  C" U "lear Selection                        Save" U " As...                       \n"
+    "  I" U "nvert Selection                       O" U "pen...                          \n"
+    "  Shrink Selection to Top-V" U "alued...      List Ig" U "nored Bytes               \n"
+    "───────────────────────────────────      Q" U "uit                             \n"
+    "  S" U "how Output                                                             \n"
+    "  H" U "ide Output                                                             \n"
     ">",
     narrowise(getOptionIcon(view->elideDeadEndNodes)),
     narrowise(getOptionIcon(view->elideAntiselectedNodes)),

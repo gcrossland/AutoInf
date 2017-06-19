@@ -664,7 +664,10 @@ void RemoteActionExecutor::setIgnoredByteRangeset (Rangeset ignoredByteRangeset)
   endResponse(ID);
 }
 
-void RemoteActionExecutor::processNode (vector<ActionResult> &r_results, Bitset *extraWordSet, const HashWrapper<Signature> &parentSignature, const State &parentState) {
+void RemoteActionExecutor::processNode (
+  vector<ActionResult> &r_results, Bitset *extraWordSet,
+  const HashWrapper<Signature> &parentSignature, const State &parentState
+) {
   const iu8f ID = 3;
 
   beginRequest(ID);
@@ -1141,9 +1144,8 @@ Multiverse::Node *const &Multiverse::NodeIterator::operator_ind_ () const {
   return get<1>(*i);
 }
 
-Multiverse::Multiverse (Story &&story, u8string &r_initialOutput, unique_ptr<Listener> &&listener) :
-  e(move(story), r_initialOutput), listener(move(listener)),
-  ignoredBytes(), rootNode(nullptr)
+Multiverse::Multiverse (Story &&story, u8string &r_initialOutput, unique_ptr<Listener> &&listener, const vector<zword> &initialIgnoredBytes) :
+  e(move(story), r_initialOutput), listener(move(listener)), ignoredBytes(initIgnoredBytes(initialIgnoredBytes)), rootNode(nullptr)
 {
   DS();
   DPRE(!!this->listener);
@@ -1161,29 +1163,11 @@ Multiverse::Multiverse (Story &&story, u8string &r_initialOutput, unique_ptr<Lis
   node.release();
 }
 
-// XXXX trial - handy for keeping signatures clean with 103
-Bitset Multiverse::initIgnoredBytes (const Vm &vm) {
+Bitset Multiverse::initIgnoredBytes (const vector<zword> &initialIgnoredBytes) {
   Bitset ignoredBytes;
-
-  /*
-  auto size = vm.getDynamicMemorySize();
-  const zbyte *o0 = vm.getInitialDynamicMemory();
-  const zbyte *o1 = vm.getDynamicMemory();
-  const iu8f *vmWordSet = vm.getWordSet();
-  for (size_t i = 0; i != size; ++i, ++o0, ++o1) {
-    if (*o0 != *o1) {
-      ignoredBytes.setBit(i);
-
-      auto addr = i;
-      if (((vmWordSet[addr >> 3] >> (addr & 0x7)) & 0b1) != 0) {
-        ignoredBytes.setBit(addr + 1);
-      }
-      if (addr > 0 && ((vmWordSet[(addr-1) >> 3] >> ((addr-1) & 0x7)) & 0b1) != 0) {
-        ignoredBytes.setBit(addr - 1);
-      }
-    }
+  for (const auto &addr : initialIgnoredBytes) {
+    ignoredBytes.setBit(addr);
   }
-  */
 
   return ignoredBytes;
 }
@@ -1200,6 +1184,10 @@ const ActionSet &Multiverse::getActionSet () const {
 
 Multiverse::Listener *Multiverse::getListener () const {
   return listener.get();
+}
+
+const Bitset &Multiverse::getIgnoredBytes () const {
+  return ignoredBytes;
 }
 
 const StringSet<char8_t> &Multiverse::getOutputStringSet () const {
