@@ -686,6 +686,13 @@ template<typename _L, typename _Size> _Size MultiList<_L, _Size>::push () {
   return i;
 }
 
+template<typename _L, typename _Size> void MultiList<_L, _Size>::pop () {
+  DPRE(bounds.size() > 1);
+  DPRE(list.size() >= bounds.back());
+  bounds.pop_back();
+  list.resize(bounds.back());
+}
+
 template<typename _L, typename _Size> void MultiList<_L, _Size>::reserve (_Size capacity) {
   bounds.reserve(static_cast<typename vector<typename SubList::Size>::size_type>(capacity) + 1);
 }

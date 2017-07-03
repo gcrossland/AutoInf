@@ -318,6 +318,7 @@ template<typename _L, typename _Size = typename _L::size_type> class MultiList {
   pub Iterator end () const;
   pub _L &subList () noexcept;
   pub _Size push ();
+  pub void pop ();
   pub void reserve (_Size capacity);
   pub _L &compact ();
 };

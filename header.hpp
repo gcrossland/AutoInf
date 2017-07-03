@@ -23,7 +23,7 @@ void updateMultiverseDisplay (autoinf::Multiverse &multiverse, const char *outPa
 const char8_t *getOptionIcon (bool enabled);
 
 class NodeMetricsListener : public autoinf::Multiverse::Node::Listener {
-  pub static constexpr size_t VALUE_COUNT = 8;
+  pub static constexpr size_t VALUE_COUNT = 9;
   pub typedef is Value;
   pub static constexpr Value NON_VALUE = core::numeric_limits<Value>::max();
   pub static constexpr is16f NON_OUTPUTTAGE_VALUE = core::numeric_limits<is16f>::max();
@@ -36,6 +36,8 @@ class NodeMetricsListener : public autoinf::Multiverse::Node::Listener {
   prv bool novelOutputInParentArcDepthwise;
   prv is16f outputtageValue;
   prv is16f antioutputtageValue;
+
+  prv bool novelOutputInParentArcPrimePathwise;
 
   pub NodeMetricsListener ();
   pub template<typename _Walker> void beWalked (_Walker &w);
@@ -70,14 +72,23 @@ class MultiverseMetricsListener : public autoinf::Multiverse::Listener {
     prv std::vector<Value>::const_iterator newLocationVisitageModifiersI;
     prv Value visitageValue;
 
-    pub VisitageChain (size_t locationHash, std::vector<Value>::const_iterator newLocationVisitageModifiersI, Value visitageValue);
+    pub VisitageChain ();
 
-    pub void pushNode (NodeMetricsListener *listener);
+    pub void pushNode (size_t nodeLocationHash);
     pub Value getVisitageValue () const;
   };
-  prv VisitageChain doPrimePathwisePassHead (const autoinf::Multiverse::Node *parentNode);
-  prv void doPrimePathwisePass (const autoinf::Multiverse::Node *node, NodeMetricsListener *listener, VisitageChain visitageChain);
-  prv void setVisitageValue (const autoinf::Multiverse::Node *node, NodeMetricsListener *listener, VisitageChain &r_chain);
+  prv class PrimePathwiseOutputtageChain {
+    prv bitset::Bitset strings;
+    prv autoinf::MultiList<std::vector<iu>, iu> stringSetStack;
+
+    pub void pushArc (const autoinf::StringSet<char8_t>::String &childOutput);
+    pub bool novel () const;
+    pub void popArc ();
+  };
+  prv void doPrimePathwisePassHead (const autoinf::Multiverse::Node *node, VisitageChain &r_visitageChain, PrimePathwiseOutputtageChain &r_outputtageChain);
+  prv void doPrimePathwisePass (const autoinf::Multiverse::Node *node, NodeMetricsListener *listener, VisitageChain visitageChain, PrimePathwiseOutputtageChain &r_outputtageChain);
+  prv void setVisitageValue (const autoinf::Multiverse::Node *node, NodeMetricsListener *listener, const VisitageChain &chain);
+  prv void setPrimePathwiseOutputtageValue (const autoinf::Multiverse::Node *node, NodeMetricsListener *listener, const PrimePathwiseOutputtageChain &chain);
   prv size_t checkVisitageValueRecursively (const autoinf::Multiverse::Node *node, NodeMetricsListener *listener, VisitageChain chain);
   pub virtual void nodeProcessed (const autoinf::Multiverse &multiverse, const autoinf::Multiverse::Node *node, size_t processedCount, size_t totalCount) override;
   prv void setWordData (const autoinf::Multiverse::Node *node, const autoinf::ActionSet &actionSet);
@@ -160,6 +171,7 @@ void readLine (core::u8string &r_out);
 const char8_t *skipSpaces (const char8_t *i, const char8_t *end);
 const char8_t *skipNonSpaces (const char8_t *i, const char8_t *end);
 is getNaturalNumber (const char8_t *iBegin, const char8_t *iEnd);
+core::u8string hexise (iu v);
 char narrowise (char8_t c);
 const char *narrowise (const char8_t *s);
 const char *narrowise (const core::u8string &s);
