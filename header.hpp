@@ -33,7 +33,7 @@ class NodeMetricsListener : public autoinf::Multiverse::Node::Listener {
   prv size_t locationHash;
   prv Value visitageValue;
 
-  prv bool localOutputtageValue;
+  prv bool novelOutputInParentArcDepthwise;
   prv is16f outputtageValue;
   prv is16f antioutputtageValue;
 
@@ -72,19 +72,19 @@ class MultiverseMetricsListener : public autoinf::Multiverse::Listener {
 
     pub VisitageChain (size_t locationHash, std::vector<Value>::const_iterator newLocationVisitageModifiersI, Value visitageValue);
 
-    pub void increment (NodeMetricsListener *listener);
+    pub void pushNode (NodeMetricsListener *listener);
     pub Value getVisitageValue () const;
   };
-  prv VisitageChain getVisitageChain (const autoinf::Multiverse::Node *node);
-  prv void setVisitageValueRecursively (const autoinf::Multiverse::Node *node, NodeMetricsListener *listener, VisitageChain chain);
+  prv VisitageChain doPrimePathwisePassHead (const autoinf::Multiverse::Node *parentNode);
+  prv void doPrimePathwisePass (const autoinf::Multiverse::Node *node, NodeMetricsListener *listener, VisitageChain visitageChain);
   prv void setVisitageValue (const autoinf::Multiverse::Node *node, NodeMetricsListener *listener, VisitageChain &r_chain);
   prv size_t checkVisitageValueRecursively (const autoinf::Multiverse::Node *node, NodeMetricsListener *listener, VisitageChain chain);
   pub virtual void nodeProcessed (const autoinf::Multiverse &multiverse, const autoinf::Multiverse::Node *node, size_t processedCount, size_t totalCount) override;
   prv void setWordData (const autoinf::Multiverse::Node *node, const autoinf::ActionSet &actionSet);
   pub virtual void nodesProcessed (const autoinf::Multiverse &multiverse) override;
-  prv void setOutputtageValues (const autoinf::Multiverse &multiverse);
-  prv void setOutputtageValuesRecursively (const autoinf::Multiverse::Node *node, NodeMetricsListener *listener, NodeMetricsListener *parentListener);
-  prv void setOutputtageValues (const autoinf::Multiverse::Node *node, NodeMetricsListener *listener, NodeMetricsListener *parentListener);
+  prv void doDepthwisePass (const autoinf::Multiverse &multiverse);
+  prv void doPostDepthwisePrimePathwisePass (const autoinf::Multiverse::Node *node, NodeMetricsListener *listener, NodeMetricsListener *parentListener);
+  prv void setDepthwiseOutputtageValues (const autoinf::Multiverse::Node *node, NodeMetricsListener *listener, NodeMetricsListener *parentListener);
   pub virtual void nodeCollapsed (const autoinf::Multiverse &multiverse, const autoinf::Multiverse::Node *node, bool childrenUpdated) override;
   pub void virtual nodesCollapsed (const autoinf::Multiverse &multiverse) override;
   pub void virtual loaded (const autoinf::Multiverse &multiverse) override;

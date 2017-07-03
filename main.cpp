@@ -924,7 +924,7 @@ constexpr Value NodeMetricsListener::NON_VALUE;
 constexpr is16f NodeMetricsListener::NON_OUTPUTTAGE_VALUE;
 
 NodeMetricsListener::NodeMetricsListener () :
-  locationHash(0), visitageValue(NON_VALUE), localOutputtageValue(false), outputtageValue(NON_OUTPUTTAGE_VALUE - 1)
+  locationHash(0), visitageValue(NON_VALUE), novelOutputInParentArcDepthwise(false), outputtageValue(NON_OUTPUTTAGE_VALUE - 1)
 {
 }
 
@@ -933,7 +933,7 @@ template<typename _Walker> void NodeMetricsListener::beWalked (_Walker &w) {
   w.process(scoreValue);
   w.process(locationHash);
   w.process(visitageValue);
-  w.process(localOutputtageValue);
+  w.process(novelOutputInParentArcDepthwise);
   w.process(outputtageValue);
   w.process(antioutputtageValue);
 }
@@ -949,7 +949,7 @@ Value NodeMetricsListener::getValue (size_t i) const {
     case 2:
       return visitageValue;
     case 3:
-      return localOutputtageValue;
+      return novelOutputInParentArcDepthwise;
     case 4:
       return outputtageValue;
     case 5:
@@ -1016,7 +1016,7 @@ void MultiverseMetricsListener::setVisitageData (NodeMetricsListener *listener, 
 void MultiverseMetricsListener::subtreePrimeAncestorsUpdated (const Multiverse &multiverse, const Node *node) {
   NodeMetricsListener *listener = static_cast<NodeMetricsListener *>(node->getListener());
 
-  setVisitageValueRecursively(node, listener, getVisitageChain(node->getPrimeParentNode()));
+  doPrimePathwisePass(node, listener, doPrimePathwisePassHead(node->getPrimeParentNode()));
 }
 
 MultiverseMetricsListener::VisitageChain::VisitageChain (
@@ -1026,7 +1026,7 @@ MultiverseMetricsListener::VisitageChain::VisitageChain (
 {
 }
 
-void MultiverseMetricsListener::VisitageChain::increment (NodeMetricsListener *listener) {
+void MultiverseMetricsListener::VisitageChain::pushNode (NodeMetricsListener *listener) {
   visitageValue += PER_TURN_VISITAGE_MODIFIER;
   if (listener->locationHash == locationHash) {
     DW(, "DDDD   location didn't change");
@@ -1055,24 +1055,24 @@ Value MultiverseMetricsListener::VisitageChain::getVisitageValue () const {
   return visitageValue;
 }
 
-MultiverseMetricsListener::VisitageChain MultiverseMetricsListener::getVisitageChain (const Node *node) {
-  if (!node) {
+MultiverseMetricsListener::VisitageChain MultiverseMetricsListener::doPrimePathwisePassHead (const Node *parentNode) {
+  if (!parentNode) {
     DW(, "DDDD   reached the root; starting visitage value work");
     return VisitageChain(numeric_limits<size_t>::max(), NEW_LOCATION_VISITAGE_MODIFIERS.begin(), 0);
   }
 
-  DW(, "DDDD   looking at node with sig of hash ",node->getSignature().hashFast());
-  NodeMetricsListener *listener = static_cast<NodeMetricsListener *>(node->getListener());
+  DW(, "DDDD   looking at node with sig of hash ",parentNode->getSignature().hashFast());
+  NodeMetricsListener *parentListener = static_cast<NodeMetricsListener *>(parentNode->getListener());
 
-  VisitageChain r = getVisitageChain(node->getPrimeParentNode());
-  r.increment(listener);
-  DPRE(listener->visitageValue == r.getVisitageValue());
+  VisitageChain r_visitageChain = doPrimePathwisePassHead(parentNode->getPrimeParentNode());
+  r_visitageChain.pushNode(parentListener);
+  DPRE(parentListener->visitageValue == r_visitageChain.getVisitageValue());
 
-  return r;
+  return r_visitageChain;
 }
 
-void MultiverseMetricsListener::setVisitageValueRecursively (const Node *node, NodeMetricsListener *listener, VisitageChain chain) {
-  setVisitageValue(node, listener, chain);
+void MultiverseMetricsListener::doPrimePathwisePass (const Node *node, NodeMetricsListener *listener, VisitageChain visitageChain) {
+  setVisitageValue(node, listener, visitageChain);
 
   for (size_t i = 0, end = node->getChildrenSize(); i != end; ++i) {
     Node *childNode = get<2>(node->getChild(i));
@@ -1088,7 +1088,7 @@ void MultiverseMetricsListener::setVisitageValueRecursively (const Node *node, N
       NodeMetricsListener *childListener = static_cast<NodeMetricsListener *>(childNode->getListener());
       DA((childNode->getPrimeParentArcChildIndex() == i) == (childListener->visitageValue == NodeMetricsListener::NON_VALUE));
       if (childListener->visitageValue == NodeMetricsListener::NON_VALUE) {
-        setVisitageValueRecursively(childNode, childListener, chain);
+        doPrimePathwisePass(childNode, childListener, visitageChain);
         DA(childListener->visitageValue != NodeMetricsListener::NON_VALUE);
       }
     }
@@ -1097,13 +1097,13 @@ void MultiverseMetricsListener::setVisitageValueRecursively (const Node *node, N
 
 void MultiverseMetricsListener::setVisitageValue (const Node *node, NodeMetricsListener *listener, VisitageChain &r_chain) {
   DA(!node->getPrimeParentNode() || static_cast<NodeMetricsListener *>(node->getPrimeParentNode()->getListener())->visitageValue == r_chain.getVisitageValue());
-  r_chain.increment(listener);
+  r_chain.pushNode(listener);
   listener->visitageValue = r_chain.getVisitageValue();
 }
 
 size_t MultiverseMetricsListener::checkVisitageValueRecursively (const Node *node, NodeMetricsListener *listener, VisitageChain chain) {
   DA(!node->getPrimeParentNode() || static_cast<NodeMetricsListener *>(node->getPrimeParentNode()->getListener())->visitageValue == chain.getVisitageValue());
-  chain.increment(listener);
+  chain.pushNode(listener);
   DA(listener->visitageValue == chain.getVisitageValue());
   size_t c = 1;
 
@@ -1138,18 +1138,18 @@ void MultiverseMetricsListener::setWordData (const Node *node, const ActionSet &
 }
 
 void MultiverseMetricsListener::nodesProcessed (const Multiverse &multiverse) {
-  setOutputtageValues(multiverse);
+  doDepthwisePass(multiverse);
 }
 
-void MultiverseMetricsListener::setOutputtageValues (const autoinf::Multiverse &multiverse) {
+void MultiverseMetricsListener::doDepthwisePass (const autoinf::Multiverse &multiverse) {
   const Node *rootNode = multiverse.getRoot();
 
   deque<const Node *> nodes;
   Bitset stringsToThisDepth, stringsToNextDepth;
 
-  NodeMetricsListener *listener = static_cast<NodeMetricsListener *>(rootNode->getListener());
-  listener->outputtageValue = NodeMetricsListener::NON_OUTPUTTAGE_VALUE;
-  listener->localOutputtageValue = false;
+  NodeMetricsListener *rootListener = static_cast<NodeMetricsListener *>(rootNode->getListener());
+  rootListener->outputtageValue = NodeMetricsListener::NON_OUTPUTTAGE_VALUE;
+  rootListener->novelOutputInParentArcDepthwise = false;
   nodes.emplace_back(rootNode);
 
   do {
@@ -1168,15 +1168,15 @@ void MultiverseMetricsListener::setOutputtageValues (const autoinf::Multiverse &
         DA((childNode->getPrimeParentNode() == node && childNode->getPrimeParentArcChildIndex() == i) == (childListener->outputtageValue != NodeMetricsListener::NON_OUTPUTTAGE_VALUE));
         if (childListener->outputtageValue != NodeMetricsListener::NON_OUTPUTTAGE_VALUE) {
           childListener->outputtageValue = NodeMetricsListener::NON_OUTPUTTAGE_VALUE;
-          childListener->localOutputtageValue = false;
+          childListener->novelOutputInParentArcDepthwise = false;
           nodes.emplace_back(childNode);
         }
         if (childOutput.size() >= OUTPUTTAGE_CHILD_OUTPUT_PRESKIP) {
           for (auto i = childOutput.begin() + OUTPUTTAGE_CHILD_OUTPUT_PRESKIP, end = childOutput.end(); i != end; ++i) {
-            size_t inpara = *i;
-            if (!stringsToThisDepth.getBit(inpara)) {
-              stringsToNextDepth.setBit(inpara);
-              childListener->localOutputtageValue = true;
+            size_t string = *i;
+            if (!stringsToThisDepth.getBit(string)) {
+              stringsToNextDepth.setBit(string);
+              childListener->novelOutputInParentArcDepthwise = true;
             }
           }
         }
@@ -1184,11 +1184,11 @@ void MultiverseMetricsListener::setOutputtageValues (const autoinf::Multiverse &
     }
   } while (!nodes.empty());
 
-  setOutputtageValuesRecursively(rootNode, listener, nullptr);
+  doPostDepthwisePrimePathwisePass(rootNode, rootListener, nullptr);
 }
 
-void MultiverseMetricsListener::setOutputtageValuesRecursively (const Node *node, NodeMetricsListener *listener, NodeMetricsListener *parentListener) {
-  setOutputtageValues(node, listener, parentListener);
+void MultiverseMetricsListener::doPostDepthwisePrimePathwisePass (const Node *node, NodeMetricsListener *listener, NodeMetricsListener *parentListener) {
+  setDepthwiseOutputtageValues(node, listener, parentListener);
 
   for (size_t i = 0, end = node->getChildrenSize(); i != end; ++i) {
     Node *childNode = get<2>(node->getChild(i));
@@ -1196,14 +1196,14 @@ void MultiverseMetricsListener::setOutputtageValuesRecursively (const Node *node
       NodeMetricsListener *childListener = static_cast<NodeMetricsListener *>(childNode->getListener());
       DA((childNode->getPrimeParentArcChildIndex() == i) == (childListener->outputtageValue == NodeMetricsListener::NON_OUTPUTTAGE_VALUE));
       if (childListener->outputtageValue == NodeMetricsListener::NON_OUTPUTTAGE_VALUE) {
-        setOutputtageValuesRecursively(childNode, childListener, listener);
+        doPostDepthwisePrimePathwisePass(childNode, childListener, listener);
         DA(childListener->outputtageValue != NodeMetricsListener::NON_OUTPUTTAGE_VALUE);
       }
     }
   }
 }
 
-void MultiverseMetricsListener::setOutputtageValues (const Node *node, NodeMetricsListener *listener, NodeMetricsListener *parentListener) {
+void MultiverseMetricsListener::setDepthwiseOutputtageValues (const Node *node, NodeMetricsListener *listener, NodeMetricsListener *parentListener) {
   if (parentListener) {
     listener->outputtageValue = parentListener->outputtageValue;
     listener->antioutputtageValue = parentListener->antioutputtageValue;
@@ -1212,7 +1212,7 @@ void MultiverseMetricsListener::setOutputtageValues (const Node *node, NodeMetri
     listener->antioutputtageValue = 0;
   }
 
-  bool novel = listener->localOutputtageValue;
+  bool novel = listener->novelOutputInParentArcDepthwise;
   if (novel) {
     ++listener->outputtageValue;
   } else {
