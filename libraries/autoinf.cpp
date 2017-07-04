@@ -2,8 +2,6 @@
 
 LIB_DEPENDENCIES
 
-#include "autoinf.using"
-
 namespace autoinf {
 
 /* -----------------------------------------------------------------------------
