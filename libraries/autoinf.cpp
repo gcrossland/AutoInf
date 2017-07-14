@@ -8,65 +8,136 @@ namespace autoinf {
 ----------------------------------------------------------------------------- */
 DC();
 
-FileOutputIterator::FileOutputIterator (FILE *h) : h(h) {
+u8string createStrerror (int errnum, const char8_t *prefix = u8(" ("), const char8_t *suffix = u8(")")) {
+  u8string msg;
+  if (errnum) {
+    char b[1024];
+    // TODO handle text properly (encoding, initial letter capitalisation)
+    // TODO transplant this and core::createExceptionMessage() to somewhere after local encoding handling (u8main, setlocale calling etc.)
+    strerror_r(errnum, b, sizeof(b) / sizeof(*b));
+
+    msg += u8(" (");
+    msg += reinterpret_cast<char8_t *>(b);
+    msg += u8(")");
+  }
+  return msg;
 }
 
-FileOutputIterator &FileOutputIterator::operator= (iu8f v) {
-  int r = fputc(v, h);
-  if (r == EOF) {
-    throw PlainException(u8("write failed"));
+FileStream::FileStream (const char *filename, Mode mode) {
+  const char *m;
+  switch (mode) {
+    case READ_EXISTING:
+      m = "rb";
+      break;
+    case READ_WRITE_EXISTING:
+      m = "r+b";
+      break;
+    case READ_WRITE_RECREATE:
+      m = "w+b";
+      break;
+    case APPEND_CREATE:
+      m = "ab";
+      break;
+    case READ_APPEND_CREATE:
+      m = "a+b";
+      break;
+    default:
+      DPRE(false);
+      m = "";
+  }
+
+  errno = 0;
+  h = fopen(filename, m);
+  if (!h) {
+    throw PlainException(u8string(u8("failed to open '")) + reinterpret_cast<const char8_t *>(filename) + u8("'") + createStrerror(errno));
+  }
+  DI(state = FREE;)
+
+  setbuf(h, NULL);
+}
+
+FileStream::FileStream (FileStream &&o) noexcept {
+  *this = move(o);
+}
+
+FileStream &FileStream::operator= (FileStream &&o) noexcept {
+  if (this != &o) {
+    h = o.h;
+    o.h = nullptr;
+    DI(state = o.state;)
   }
   return *this;
 }
 
-FileOutputIterator &FileOutputIterator::operator* () {
-  return *this;
-}
-
-FileOutputIterator &FileOutputIterator::operator++ () {
-  return *this;
-}
-
-FileOutputIterator &FileOutputIterator::operator++ (int) {
-  return *this;
-}
-
-FileInputIterator::FileInputIterator (FILE *h) : h(h) {
-  advance();
-}
-
-FileInputIterator::FileInputIterator () : h(nullptr), v(42) {
-}
-
-FileInputIterator::FileInputIterator (iu8f v) : h(nullptr), v(v) {
-}
-
-void FileInputIterator::advance () {
-  DPRE(!!h, "this must not be an end iterator");
-  int r = fgetc(h);
-  if (r == EOF) {
-    h = nullptr;
+FileStream::~FileStream () {
+  if (h) {
+    fclose(h);
   }
-  v = static_cast<iu8f>(r);
 }
 
-const iu8f &FileInputIterator::operator* () const noexcept {
-  return v;
+long FileStream::tell () const {
+  long offset = ftell(h);
+  if (offset == -1) {
+    throw PlainException(u8string(u8("failed to get file pos")) + createStrerror(errno));
+  }
+  return offset;
 }
 
-FileInputIterator &FileInputIterator::operator++ () {
-  advance();
-  return *this;
+void FileStream::seek (long offset, int origin) {
+  errno = 0;
+  int r = fseek(h, offset, origin);
+  if (r != 0) {
+    throw PlainException(u8string(u8("failed to set file pos")) + createStrerror(errno));
+  }
+  DI(state = FREE;)
 }
 
-FileInputIterator FileInputIterator::operator++ (int) {
-  FileInputIterator v(this->v);
-  ++(*this);
-  return v;
+void FileStream::seek (long offset) {
+  seek(offset, SEEK_SET);
 }
 
-bool FileInputIterator::operator== (const FileInputIterator &r) const noexcept {
-  return h == r.h;
+void FileStream::seekToEnd () {
+  seek(0, SEEK_END);
+}
+
+void FileStream::sync () {
+  // TODO how does this perform for streams?
+  seek(0, SEEK_CUR);
+}
+
+size_t FileStream::read (iu8f *b, size_t s) {
+  DPRE(state == FREE || state == READING);
+  DPRE(s < numeric_limits<size_t>::max());
+  if (s == 0) {
+    return 0;
+  }
+
+  DI(state = READING;)
+  errno = 0;
+  size_t outSize = fread(b, 1, s, h);
+  if (outSize == 0) {
+    if (feof(h)) {
+      return numeric_limits<size_t>::max();
+    }
+    if (ferror(h)) {
+      throw PlainException(u8string(u8("failed to read from file")) + createStrerror(errno));
+    }
+
+    // Er... we didn't manage to read any bytes, but there's apparently no problem.
+    return read(b, s);
+  }
+
+  return outSize;
+}
+
+void FileStream::write (iu8f *b, size_t s) {
+  DPRE(state == FREE || state == WRITING);
+  DI(state = WRITING;)
+  errno = 0;
+  size_t outSize = fwrite(b, 1, s, h);
+  if (outSize != s) {
+    throw PlainException(u8string(u8("failed to write to file")) + createStrerror(errno));
+  }
 }
 
 constexpr SerialiserBase::id SerialiserBase::NON_ID;
@@ -962,19 +1033,9 @@ Multiverse::Node *Multiverse::collapseNode (
 
 void Multiverse::save (const char *pathName) {
   DS();
-  FILE *h = fopen(pathName, "wb");
-  if (h == nullptr) {
-    throw PlainException(u8("failed to open file"));
-  }
-  auto _ = finally([&] () {
-    // TODO autocloser
-    int r = fclose(h);
-    if (r == EOF) {
-      // TODO throw PlainException(u8("failed to finish writing to file"));
-    }
-  });
-
-  auto s = Serialiser<FileOutputIterator>(FileOutputIterator(h));
+  FileStream h(pathName, FileStream::READ_WRITE_RECREATE);
+  FileOutputIterator i(h);
+  auto s = Serialiser<FileOutputIterator>(i);
 
   DA(s.isSerialising());
   for (auto nodeEntry : nodes) {
@@ -991,19 +1052,16 @@ void Multiverse::save (const char *pathName) {
   s.process(ignoredBytes);
   s.process(outputStringSet);
   s.derefAndProcess(rootNode);
+
+  i.flushToStream();
 }
 
 void Multiverse::load (const char *pathName) {
   DS();
-  FILE *h = fopen(pathName, "rb");
-  if (h == nullptr) {
-    throw PlainException(u8("failed to open file"));
-  }
-  auto _ = finally([&] () {
-    fclose(h);
-  });
-
-  auto s = Deserialiser<FileInputIterator>(FileInputIterator(h), FileInputIterator());
+  FileStream h(pathName, FileStream::READ_EXISTING);
+  FileInputIterator i(h);
+  FileInputEndIterator end;
+  auto s = Deserialiser<FileInputIterator, FileInputEndIterator>(i, end);
 
   ignoredBytes.clear();
   ignoredByteRangeset.clear();

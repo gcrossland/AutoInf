@@ -20,32 +20,43 @@ namespace autoinf {
 ----------------------------------------------------------------------------- */
 extern DC();
 
-// TODO proper checking (in debug mode) output iterator framework
-class FileOutputIterator : public std::iterator<std::output_iterator_tag, void, void, void, void> {
+// XXXX move out?
+class FileStream {
+  pub enum Mode {
+    // TODO: more modes (extend CREATEs by doing two fopen()s?)
+    READ_EXISTING,
+    READ_WRITE_EXISTING,
+    READ_WRITE_RECREATE,
+    APPEND_CREATE,
+    READ_APPEND_CREATE
+  };
+
   prv FILE *h;
+  DI(prv enum State {
+    FREE,
+    READING,
+    WRITING
+  } state;)
 
-  pub explicit FileOutputIterator (FILE *h);
+  pub FileStream (const char *filename, Mode mode); // TODO sort out filename
+  FileStream (const FileStream &) = delete;
+  FileStream &operator= (const FileStream &) = delete;
+  pub FileStream (FileStream &&) noexcept;
+  pub FileStream &operator= (FileStream &&) noexcept;
+  pub ~FileStream ();
 
-  pub FileOutputIterator &operator= (iu8f v);
-  pub FileOutputIterator &operator* ();
-  pub FileOutputIterator &operator++ ();
-  pub FileOutputIterator &operator++ (int);
+  pub long tell () const;
+  prv void seek (long offset, int origin);
+  pub void seek (long offset);
+  pub void seekToEnd ();
+  pub void sync ();
+  pub size_t read (iu8f *b, size_t s);
+  pub void write (iu8f *b, size_t s);
 };
 
-class FileInputIterator : public std::iterator<std::input_iterator_tag, iu8f, void> {
-  prv FILE *h;
-  prv iu8f v;
-
-  pub explicit FileInputIterator (FILE *h);
-  pub FileInputIterator ();
-  prv FileInputIterator (iu8f v);
-
-  prv void advance ();
-  pub const iu8f &operator* () const noexcept;
-  pub FileInputIterator &operator++ ();
-  pub FileInputIterator operator++ (int);
-  pub bool operator== (const FileInputIterator &r) const noexcept;
-};
+typedef iterators::InputStreamIterator<FileStream> FileInputIterator;
+typedef iterators::InputStreamEndIterator<FileStream> FileInputEndIterator;
+typedef iterators::OutputStreamIterator<FileStream> FileOutputIterator;
 
 class SerialiserBase {
   prt typedef size_t id;
@@ -55,11 +66,11 @@ class SerialiserBase {
 };
 
 template<typename _OutputIterator> class Serialiser : public SerialiserBase {
-  prv _OutputIterator i;
+  prv _OutputIterator &i;
   prv std::map<void *, std::tuple<id, void *>> allocations;
   prv id nextId;
 
-  pub explicit Serialiser (_OutputIterator &&i);
+  pub explicit Serialiser (_OutputIterator &r_i);
   Serialiser (const Serialiser &) = delete;
   Serialiser &operator= (const Serialiser &) = delete;
   pub Serialiser (Serialiser &&) = default;
@@ -114,12 +125,12 @@ template<typename _OutputIterator> class Serialiser : public SerialiserBase {
   pub template<typename _T> void process (std::unique_ptr<_T> &o);
 };
 
-template<typename _InputIterator, typename _InputEndIterator = _InputIterator> class Deserialiser : public SerialiserBase {
-  prv _InputIterator i;
-  prv _InputIterator end;
+template<typename _InputIterator, typename _InputEndIterator> class Deserialiser : public SerialiserBase {
+  prv _InputIterator &i;
+  prv const _InputEndIterator &end;
   prv std::vector<void *> allocations;
 
-  pub Deserialiser (_InputIterator &&i, _InputIterator &&end);
+  pub Deserialiser (_InputIterator &r_i, const _InputEndIterator &end);
   Deserialiser (const Deserialiser &) = delete;
   Deserialiser &operator= (const Deserialiser &) = delete;
   pub Deserialiser (Deserialiser &&) = default;
@@ -512,7 +523,7 @@ class Multiverse {
     pub virtual std::tuple<void *, size_t> deduceNodeListenerType (Node::Listener *listener) = 0;
     pub virtual std::tuple<Node::Listener *, void *, size_t> constructNodeListener () = 0;
     pub virtual void walkNodeListener (Node::Listener *listener, Serialiser<FileOutputIterator> &s) = 0;
-    pub virtual void walkNodeListener (Node::Listener *listener, Deserialiser<FileInputIterator> &s) = 0;
+    pub virtual void walkNodeListener (Node::Listener *listener, Deserialiser<FileInputIterator, FileInputEndIterator> &s) = 0;
 
     pub virtual std::unique_ptr<Node::Listener> createNodeListener () = 0;
     pub virtual void nodeReached (const Multiverse &multiverse, Node::Listener *listener, ActionSet::Size parentActionId, const core::u8string &output, const Signature &signature, const autofrotz::Vm &vm) = 0;

@@ -3,6 +3,7 @@
 #include <future>
 #include <utility>
 #include <unordered_set>
+#include <cstring>
 
 namespace autoinf {
 
@@ -108,7 +109,7 @@ template<typename Key, typename Hash, typename KeyEqual, typename Allocator, typ
 
 
 
-template<typename _OutputIterator> Serialiser<_OutputIterator>::Serialiser (_OutputIterator &&i) : i(move(i)), nextId(NULL_ID + 1) {
+template<typename _OutputIterator> Serialiser<_OutputIterator>::Serialiser (_OutputIterator &r_i) : i(r_i), nextId(NULL_ID + 1) {
   allocations.emplace(nullptr, tuple<id, void *>(NULL_ID, static_cast<char *>(nullptr) + 1));
   DA(!!findAllocationStart(nullptr));
 }
@@ -132,7 +133,11 @@ template<typename _OutputIterator> void Serialiser<_OutputIterator>::writeOctet 
 }
 
 template<typename _OutputIterator> void Serialiser<_OutputIterator>::writeOctets (const iu8f *begin, const iu8f *end) {
-  copy(begin, end, i);
+  // TODO use core::copy()
+  DPRE(begin <= end);
+  for (; begin != end; ++begin) {
+    writeOctet(*begin);
+  }
 }
 
 template<typename _OutputIterator> void Serialiser<_OutputIterator>::process (bool &r_value) {
@@ -334,8 +339,8 @@ template<typename _OutputIterator> template<typename _T> void Serialiser<_Output
 }
 
 template<typename _InputIterator, typename _InputEndIterator> Deserialiser<_InputIterator, _InputEndIterator>::Deserialiser (
-  _InputIterator &&i, _InputIterator &&end
-) : i(move(i)), end(move(end)), allocations() {
+  _InputIterator &r_i, const _InputEndIterator &end
+) : i(r_i), end(end), allocations() {
   DA(allocations.size() == NON_ID);
   allocations.emplace_back(nullptr);
   DA(allocations.size() == NULL_ID);

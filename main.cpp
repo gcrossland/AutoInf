@@ -29,6 +29,7 @@ using autoinf::FileOutputIterator;
 using std::type_info;
 using autoinf::Deserialiser;
 using autoinf::FileInputIterator;
+using autoinf::FileInputEndIterator;
 using autofrotz::zword;
 using autofrotz::zbyte;
 using autoinf::find;
@@ -1339,7 +1340,7 @@ void MultiverseView::walkNodeListener (Node::Listener *listener, Serialiser<File
   static_cast<NodeView *>(listener)->beWalked(s);
 }
 
-void MultiverseView::walkNodeListener (Node::Listener *listener, Deserialiser<FileInputIterator> &s) {
+void MultiverseView::walkNodeListener (Node::Listener *listener, Deserialiser<FileInputIterator, FileInputEndIterator> &s) {
   static_cast<NodeView *>(listener)->beWalked(s);
 }
 
