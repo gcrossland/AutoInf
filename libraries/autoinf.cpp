@@ -688,7 +688,7 @@ Multiverse::NodeIterator::NodeIterator () {
 Multiverse::NodeIterator::NodeIterator (decltype(i) &&i) : RevaluedIterator(move(i)) {
 }
 
-Multiverse::Node *const &Multiverse::NodeIterator::operator* () const {
+Multiverse::Node *const &Multiverse::NodeIterator::operator_ind_ () const {
   return get<1>(*i);
 }
 

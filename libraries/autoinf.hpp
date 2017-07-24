@@ -12,6 +12,7 @@
 #include <functional>
 #include <map>
 #include <unordered_set>
+#include <iterators.hpp>
 
 namespace autoinf {
 
@@ -229,55 +230,6 @@ class Signature {
   };
 };
 
-// XXXX move out
-// XXXX just have IteratorRevaluator static interface + have RevaluedIterator use an impl of that (rather than CRTP it)
-// XXXX -> if that were const _T &operator() (_Iterator &r_i), we could use lambdas for local revaluators
-template<
-  typename _Class,
-  typename _T,
-  typename _Iterator,
-  typename _IteratorClass = std::iterator<typename _Iterator::iterator_category, _T, typename _Iterator::difference_type, _T *, _T &>
-> class RevaluedIterator : public _IteratorClass {
-  prv typedef typename _IteratorClass::difference_type Distance;
-  prt _Iterator i;
-
-  prt RevaluedIterator ();
-  prt RevaluedIterator (_Iterator &&i);
-  prt RevaluedIterator (const RevaluedIterator &) = default;
-  prt RevaluedIterator &operator= (const RevaluedIterator &) = default;
-  prt RevaluedIterator (RevaluedIterator &&) = default;
-  prt RevaluedIterator &operator= (RevaluedIterator &&) = default;
-
-  pub bool operator== (const _Class &r) const noexcept_auto_return(
-    i == r.i
-  )
-  pub bool operator< (const _Class &r) const noexcept_auto_return(
-    i < r.i
-  )
-  pub const _T *operator-> () noexcept(noexcept(*(std::declval<_Class>())));
-  pub _Class &operator++ () noexcept(noexcept(++i));
-  pub _Class operator++ (int) noexcept(std::is_nothrow_copy_constructible<_Class>::value && noexcept(++i));
-  pub _Class &operator-- () noexcept(noexcept(--i));
-  pub _Class operator-- (int) noexcept(std::is_nothrow_copy_constructible<_Class>::value && noexcept(--i));
-  pub _Class &operator+= (const Distance &r) noexcept(noexcept(i += r));
-  friend _Class operator+ (_Class l, const Distance &r) noexcept_auto_return(
-    l.i += r,
-    l
-  )
-  friend _Class operator+ (const Distance &l, const _Class &r) noexcept_auto_return(
-    r + l
-  )
-  pub _Class &operator-= (const Distance &r) noexcept(noexcept(i -= r));
-  friend _Class operator- (_Class l, const Distance &r) noexcept_auto_return(
-    l.i -= r,
-    l
-  )
-  friend Distance operator- (const _Class &l, const _Class &r) noexcept_auto_return(
-    l.i - r.i
-  )
-  pub const _T &operator[] (const Distance &r) noexcept(noexcept(*(std::declval<_Class>() + r)));
-};
-
 // XXXX move out?
 template<typename _L, typename _Size = typename _L::size_type> class MultiList {
   pub class SubList {
@@ -294,13 +246,13 @@ template<typename _L, typename _Size = typename _L::size_type> class MultiList {
     pub Iterator end () const noexcept;
   };
 
-  pub class Iterator : public RevaluedIterator<Iterator, SubList, typename std::vector<typename SubList::Size>::const_iterator> {
+  pub class Iterator : public iterators::RevaluedIterator<Iterator, SubList, typename std::vector<typename SubList::Size>::const_iterator> {
     prv typename SubList::Iterator listBegin;
 
     pub Iterator ();
     pub Iterator (const MultiList<_L, _Size> &multiList);
 
-    pub SubList operator* () const;
+    pub SubList operator_ind_ () const;
   };
 
   pub typedef Iterator const_iterator;
@@ -492,11 +444,11 @@ class Multiverse {
     };
   };
 
-  pub class NodeIterator : public RevaluedIterator<NodeIterator, Node *, std::unordered_map<std::reference_wrapper<const core::HashWrapper<Signature>>, Node *>::const_iterator> {
+  pub class NodeIterator : public iterators::RevaluedIterator<NodeIterator, Node *const &, std::unordered_map<std::reference_wrapper<const core::HashWrapper<Signature>>, Node *>::const_iterator> {
     pub NodeIterator ();
     prv NodeIterator (decltype(i) &&i);
 
-    pub Node *const &operator* () const;
+    pub Node *const &operator_ind_ () const;
 
     friend class Multiverse;
   };
