@@ -114,7 +114,7 @@ template<typename _OutputIterator> class Serialiser : public SerialiserBase {
   pub template<typename _T> void process (std::unique_ptr<_T> &o);
 };
 
-template<typename _InputIterator> class Deserialiser : public SerialiserBase {
+template<typename _InputIterator, typename _InputEndIterator = _InputIterator> class Deserialiser : public SerialiserBase {
   prv _InputIterator i;
   prv _InputIterator end;
   prv std::vector<void *> allocations;
@@ -144,25 +144,25 @@ template<typename _InputIterator> class Deserialiser : public SerialiserBase {
   pub void process (core::string<iu8f> &r_value);
   pub void process (core::u8string &r_value);
   pub template<typename _T, typename _WalkingFunctor, iff(
-    std::is_convertible<_WalkingFunctor, std::function<void (_T &, Deserialiser<_InputIterator> &)>>::value
+    std::is_convertible<_WalkingFunctor, std::function<void (_T &, Deserialiser<_InputIterator, _InputEndIterator> &)>>::value
   )> void process (std::vector<_T> &r_value, const _WalkingFunctor &walkElement);
-  prv template<typename _T, iff(std::is_constructible<_T, Deserialiser<_InputIterator>>::value)> void emplaceBack (std::vector<_T> &r_value);
-  prv template<typename _T, iff(!std::is_constructible<_T, Deserialiser<_InputIterator>>::value)> void emplaceBack (std::vector<_T> &r_value);
+  prv template<typename _T, iff(std::is_constructible<_T, Deserialiser<_InputIterator, _InputEndIterator>>::value)> void emplaceBack (std::vector<_T> &r_value);
+  prv template<typename _T, iff(!std::is_constructible<_T, Deserialiser<_InputIterator, _InputEndIterator>>::value)> void emplaceBack (std::vector<_T> &r_value);
   pub void process (bitset::Bitset &r_value);
   pub void process (autofrotz::State &r_value);
   pub template<typename _Walkable> void process (_Walkable &r_value);
   prv id readAllocationId ();
   pub template<typename _T, typename _TypeDeductionFunctor, typename _ConstructionFunctor, typename _WalkingFunctor, iff(
     std::is_convertible<_ConstructionFunctor, std::function<std::tuple<_T *, void *, size_t> (SubtypeId)>>::value &&
-    std::is_convertible<_WalkingFunctor, std::function<void (_T *, void *, SubtypeId, Deserialiser<_InputIterator> &)>>::value
+    std::is_convertible<_WalkingFunctor, std::function<void (_T *, void *, SubtypeId, Deserialiser<_InputIterator, _InputEndIterator> &)>>::value
   )> void derefAndProcess (_T *&o, const _TypeDeductionFunctor &, const _ConstructionFunctor &constructReferent, const _WalkingFunctor &walkReferent);
   pub template<typename _T, typename _TypeDeductionFunctor, typename _ConstructionFunctor, typename _WalkingFunctor, iff(
     std::is_convertible<_ConstructionFunctor, std::function<std::tuple<_T *, void *, size_t> (SubtypeId)>>::value &&
-    std::is_convertible<_WalkingFunctor, std::function<void (_T *, void *, SubtypeId, Deserialiser<_InputIterator> &)>>::value
+    std::is_convertible<_WalkingFunctor, std::function<void (_T *, void *, SubtypeId, Deserialiser<_InputIterator, _InputEndIterator> &)>>::value
   )> void derefAndProcess (std::unique_ptr<_T> &o, const _TypeDeductionFunctor &, const _ConstructionFunctor &constructReferent, const _WalkingFunctor &walkReferent);
   pub template<typename _T> void derefAndProcess (_T *&o);
-  prv template<typename _T, iff(std::is_constructible<_T, Deserialiser<_InputIterator>>::value)> _T *construct ();
-  prv template<typename _T, iff(!std::is_constructible<_T, Deserialiser<_InputIterator>>::value)> _T *construct ();
+  prv template<typename _T, iff(std::is_constructible<_T, Deserialiser<_InputIterator, _InputEndIterator>>::value)> _T *construct ();
+  prv template<typename _T, iff(!std::is_constructible<_T, Deserialiser<_InputIterator, _InputEndIterator>>::value)> _T *construct ();
   pub template<typename _T> void derefAndProcess (std::unique_ptr<_T> &o);
   pub template<typename _T> void derefAndProcess (_T *&o, size_t count);
   pub template<typename _T> void derefAndProcess (std::unique_ptr<_T []> &o, size_t count);
@@ -180,7 +180,7 @@ class Signature {
 
   pub Signature ();
   pub explicit Signature (size_t sizeHint);
-  pub template<typename _InputIterator> explicit Signature (const Deserialiser<_InputIterator> &);
+  pub template<typename _InputIterator, typename _InputEndIterator> explicit Signature (const Deserialiser<_InputIterator, _InputEndIterator> &);
   pub template<typename _Walker> void beWalked (_Walker &w);
 
   pub size_t getSizeHint () const noexcept;
@@ -411,7 +411,7 @@ class Multiverse {
     Node &operator= (const Node &) = delete;
     Node (Node &&) = delete;
     Node &operator= (Node &&) = delete;
-    pub template<typename _InputIterator> explicit Node (const Deserialiser<_InputIterator> &);
+    pub template<typename _InputIterator, typename _InputEndIterator> explicit Node (const Deserialiser<_InputIterator, _InputEndIterator> &);
     pub template<typename _Walker> void beWalked (_Walker &w);
 
     pub Listener *getListener () const;

@@ -333,7 +333,7 @@ template<typename _OutputIterator> template<typename _T> void Serialiser<_Output
   this->process(p);
 }
 
-template<typename _InputIterator> Deserialiser<_InputIterator>::Deserialiser (
+template<typename _InputIterator, typename _InputEndIterator> Deserialiser<_InputIterator, _InputEndIterator>::Deserialiser (
   _InputIterator &&i, _InputIterator &&end
 ) : i(move(i)), end(move(end)), allocations() {
   DA(allocations.size() == NON_ID);
@@ -342,23 +342,23 @@ template<typename _InputIterator> Deserialiser<_InputIterator>::Deserialiser (
   allocations.emplace_back(nullptr);
 }
 
-template<typename _InputIterator> constexpr bool Deserialiser<_InputIterator>::isSerialising () const {
+template<typename _InputIterator, typename _InputEndIterator> constexpr bool Deserialiser<_InputIterator, _InputEndIterator>::isSerialising () const {
   return false;
 }
 
-template<typename _InputIterator> template<typename _i> _i Deserialiser<_InputIterator>::readIu () {
+template<typename _InputIterator, typename _InputEndIterator> template<typename _i> _i Deserialiser<_InputIterator, _InputEndIterator>::readIu () {
   _i value = readIeu<_i>(i, end);
   DW(, "reading u value ",value);
   return value;
 }
 
-template<typename _InputIterator> template<typename _i> _i Deserialiser<_InputIterator>::readIs () {
+template<typename _InputIterator, typename _InputEndIterator> template<typename _i> _i Deserialiser<_InputIterator, _InputEndIterator>::readIs () {
   _i value = readIes<_i>(i, end);
   DW(, "reading s value ",value);
   return value;
 }
 
-template<typename _InputIterator> iu8f Deserialiser<_InputIterator>::readOctet () {
+template<typename _InputIterator, typename _InputEndIterator> iu8f Deserialiser<_InputIterator, _InputEndIterator>::readOctet () {
   if (i == end) {
     throw PlainException(u8("input was truncated"));
   }
@@ -366,7 +366,7 @@ template<typename _InputIterator> iu8f Deserialiser<_InputIterator>::readOctet (
   return value;
 }
 
-template<typename _InputIterator> void Deserialiser<_InputIterator>::readOctets (iu8f *begin, size_t size) {
+template<typename _InputIterator, typename _InputEndIterator> void Deserialiser<_InputIterator, _InputEndIterator>::readOctets (iu8f *begin, size_t size) {
   for (iu8f *i = begin, *end = i + size; i != end; ++i) {
     if (this->i == this->end) {
       throw PlainException(u8("input was truncated"));
@@ -375,58 +375,58 @@ template<typename _InputIterator> void Deserialiser<_InputIterator>::readOctets 
   }
 }
 
-template<typename _InputIterator> void Deserialiser<_InputIterator>::process (bool &r_value) {
+template<typename _InputIterator, typename _InputEndIterator> void Deserialiser<_InputIterator, _InputEndIterator>::process (bool &r_value) {
   r_value = static_cast<bool>(readIu<iu8f>());
 }
 
-template<typename _InputIterator> void Deserialiser<_InputIterator>::process (iu8f &r_value) {
+template<typename _InputIterator, typename _InputEndIterator> void Deserialiser<_InputIterator, _InputEndIterator>::process (iu8f &r_value) {
   r_value = readIu<iu8f>();
 }
 
-template<typename _InputIterator> void Deserialiser<_InputIterator>::process (is8f &r_value) {
+template<typename _InputIterator, typename _InputEndIterator> void Deserialiser<_InputIterator, _InputEndIterator>::process (is8f &r_value) {
   r_value = readIs<is8f>();
 }
 
-template<typename _InputIterator> void Deserialiser<_InputIterator>::process (iu16f &r_value) {
+template<typename _InputIterator, typename _InputEndIterator> void Deserialiser<_InputIterator, _InputEndIterator>::process (iu16f &r_value) {
   r_value = readIu<iu16f>();
 }
 
-template<typename _InputIterator> void Deserialiser<_InputIterator>::process (is16f &r_value) {
+template<typename _InputIterator, typename _InputEndIterator> void Deserialiser<_InputIterator, _InputEndIterator>::process (is16f &r_value) {
   r_value = readIs<is16f>();
 }
 
-template<typename _InputIterator> void Deserialiser<_InputIterator>::process (iu32f &r_value) {
+template<typename _InputIterator, typename _InputEndIterator> void Deserialiser<_InputIterator, _InputEndIterator>::process (iu32f &r_value) {
   r_value = readIu<iu32f>();
 }
 
-template<typename _InputIterator> void Deserialiser<_InputIterator>::process (is32f &r_value) {
+template<typename _InputIterator, typename _InputEndIterator> void Deserialiser<_InputIterator, _InputEndIterator>::process (is32f &r_value) {
   r_value = readIs<is32f>();
 }
 
-template<typename _InputIterator> void Deserialiser<_InputIterator>::process (iu64f &r_value) {
+template<typename _InputIterator, typename _InputEndIterator> void Deserialiser<_InputIterator, _InputEndIterator>::process (iu64f &r_value) {
   r_value = readIu<iu64f>();
 }
 
-template<typename _InputIterator> void Deserialiser<_InputIterator>::process (is64f &r_value) {
+template<typename _InputIterator, typename _InputEndIterator> void Deserialiser<_InputIterator, _InputEndIterator>::process (is64f &r_value) {
   r_value = readIs<is64f>();
 }
 
-template<typename _InputIterator> void Deserialiser<_InputIterator>::process (string<iu8f> &r_value) {
+template<typename _InputIterator, typename _InputEndIterator> void Deserialiser<_InputIterator, _InputEndIterator>::process (string<iu8f> &r_value) {
   size_t size = readIu<size_t>();
   r_value.resize_any(size);
   readOctets(r_value.data(), size);
 }
 
-template<typename _InputIterator> void Deserialiser<_InputIterator>::process (u8string &r_value) {
+template<typename _InputIterator, typename _InputEndIterator> void Deserialiser<_InputIterator, _InputEndIterator>::process (u8string &r_value) {
   size_t size = readIu<size_t>();
   r_value.resize_any(size);
   readOctets(reinterpret_cast<iu8f *>(r_value.data()), size);
   DW(, "reading char8_t values ", r_value.c_str());
 }
 
-template<typename _InputIterator> template<typename _T, typename _WalkingFunctor, iff(
-  std::is_convertible<_WalkingFunctor, std::function<void (_T &, Deserialiser<_InputIterator> &)>>::value
-)> void Deserialiser<_InputIterator>::process (vector<_T> &r_value, const _WalkingFunctor &walkElement) {
+template<typename _InputIterator, typename _InputEndIterator> template<typename _T, typename _WalkingFunctor, iff(
+  std::is_convertible<_WalkingFunctor, std::function<void (_T &, Deserialiser<_InputIterator, _InputEndIterator> &)>>::value
+)> void Deserialiser<_InputIterator, _InputEndIterator>::process (vector<_T> &r_value, const _WalkingFunctor &walkElement) {
   size_t size = readIu<size_t>();
   r_value.clear();
   r_value.reserve(size);
@@ -436,21 +436,21 @@ template<typename _InputIterator> template<typename _T, typename _WalkingFunctor
   }
 }
 
-template<typename _InputIterator> template<typename _T, iff(
-  std::is_constructible<_T, Deserialiser<_InputIterator>>::value
-)> void Deserialiser<_InputIterator>::emplaceBack (vector<_T> &r_value) {
+template<typename _InputIterator, typename _InputEndIterator> template<typename _T, iff(
+  std::is_constructible<_T, Deserialiser<_InputIterator, _InputEndIterator>>::value
+)> void Deserialiser<_InputIterator, _InputEndIterator>::emplaceBack (vector<_T> &r_value) {
   DW(, "emplacing_back a ",typeid(_T).name()," object with the custom deserialisation constructor");
   r_value.emplace_back(*this);
 }
 
-template<typename _InputIterator> template<typename _T, iff(
-  !std::is_constructible<_T, Deserialiser<_InputIterator>>::value
-)> void Deserialiser<_InputIterator>::emplaceBack (vector<_T> &r_value) {
+template<typename _InputIterator, typename _InputEndIterator> template<typename _T, iff(
+  !std::is_constructible<_T, Deserialiser<_InputIterator, _InputEndIterator>>::value
+)> void Deserialiser<_InputIterator, _InputEndIterator>::emplaceBack (vector<_T> &r_value) {
   DW(, "emplacing_back a ",typeid(_T).name()," object with the default constructor");
   r_value.emplace_back();
 }
 
-template<typename _InputIterator> void Deserialiser<_InputIterator>::process (Bitset &r_value) {
+template<typename _InputIterator, typename _InputEndIterator> void Deserialiser<_InputIterator, _InputEndIterator>::process (Bitset &r_value) {
   // TODO pull out
   auto p = reinterpret_cast<string<iu> *>(&r_value);
   size_t size = readIu<size_t>();
@@ -460,17 +460,17 @@ template<typename _InputIterator> void Deserialiser<_InputIterator>::process (Bi
   }
 }
 
-template<typename _InputIterator> void Deserialiser<_InputIterator>::process (State &r_value) {
+template<typename _InputIterator, typename _InputEndIterator> void Deserialiser<_InputIterator, _InputEndIterator>::process (State &r_value) {
   // TODO pull out
   string<zbyte> &v = *reinterpret_cast<string<zbyte> *>(&r_value);
   this->process(v);
 }
 
-template<typename _InputIterator> template<typename _Walkable> void Deserialiser<_InputIterator>::process (_Walkable &r_value) {
+template<typename _InputIterator, typename _InputEndIterator> template<typename _Walkable> void Deserialiser<_InputIterator, _InputEndIterator>::process (_Walkable &r_value) {
   r_value.beWalked(*this);
 }
 
-template<typename _InputIterator> SerialiserBase::id Deserialiser<_InputIterator>::readAllocationId () {
+template<typename _InputIterator, typename _InputEndIterator> SerialiserBase::id Deserialiser<_InputIterator, _InputEndIterator>::readAllocationId () {
   id allocationId = readIu<id>();
   if (allocationId >= allocations.size()) {
     throw PlainException(u8("as-yet-unseen allocation referenced"));
@@ -478,10 +478,10 @@ template<typename _InputIterator> SerialiserBase::id Deserialiser<_InputIterator
   return allocationId;
 }
 
-template<typename _InputIterator> template<typename _T, typename _TypeDeductionFunctor, typename _ConstructionFunctor, typename _WalkingFunctor, iff(
+template<typename _InputIterator, typename _InputEndIterator> template<typename _T, typename _TypeDeductionFunctor, typename _ConstructionFunctor, typename _WalkingFunctor, iff(
   std::is_convertible<_ConstructionFunctor, std::function<std::tuple<_T *, void *, size_t> (SerialiserBase::SubtypeId)>>::value &&
-  std::is_convertible<_WalkingFunctor, std::function<void (_T *, void *, SerialiserBase::SubtypeId, Deserialiser<_InputIterator> &)>>::value
-)> void Deserialiser<_InputIterator>::derefAndProcess (_T *&o, const _TypeDeductionFunctor &, const _ConstructionFunctor &constructReferent, const _WalkingFunctor &walkReferent) {
+  std::is_convertible<_WalkingFunctor, std::function<void (_T *, void *, SerialiserBase::SubtypeId, Deserialiser<_InputIterator, _InputEndIterator> &)>>::value
+)> void Deserialiser<_InputIterator, _InputEndIterator>::derefAndProcess (_T *&o, const _TypeDeductionFunctor &, const _ConstructionFunctor &constructReferent, const _WalkingFunctor &walkReferent) {
   DPRE(!o, "o must be null");
   id allocationId = readAllocationId();
   if (allocationId == NON_ID) {
@@ -500,10 +500,10 @@ template<typename _InputIterator> template<typename _T, typename _TypeDeductionF
   }
 }
 
-template<typename _InputIterator> template<typename _T, typename _TypeDeductionFunctor, typename _ConstructionFunctor, typename _WalkingFunctor, iff(
+template<typename _InputIterator, typename _InputEndIterator> template<typename _T, typename _TypeDeductionFunctor, typename _ConstructionFunctor, typename _WalkingFunctor, iff(
   std::is_convertible<_ConstructionFunctor, std::function<std::tuple<_T *, void *, size_t> (SerialiserBase::SubtypeId)>>::value &&
-  std::is_convertible<_WalkingFunctor, std::function<void (_T *, void *, SerialiserBase::SubtypeId, Deserialiser<_InputIterator> &)>>::value
-)> void Deserialiser<_InputIterator>::derefAndProcess (unique_ptr<_T> &o, const _TypeDeductionFunctor &deduceReferentType, const _ConstructionFunctor &constructReferent, const _WalkingFunctor &walkReferent) {
+  std::is_convertible<_WalkingFunctor, std::function<void (_T *, void *, SerialiserBase::SubtypeId, Deserialiser<_InputIterator, _InputEndIterator> &)>>::value
+)> void Deserialiser<_InputIterator, _InputEndIterator>::derefAndProcess (unique_ptr<_T> &o, const _TypeDeductionFunctor &deduceReferentType, const _ConstructionFunctor &constructReferent, const _WalkingFunctor &walkReferent) {
   _T *p = nullptr;
   auto _ = finally([&] () {
     o.reset(p);
@@ -511,7 +511,7 @@ template<typename _InputIterator> template<typename _T, typename _TypeDeductionF
   this->derefAndProcess(p, deduceReferentType, constructReferent, walkReferent);
 }
 
-template<typename _InputIterator> template<typename _T> void Deserialiser<_InputIterator>::derefAndProcess (_T *&o) {
+template<typename _InputIterator, typename _InputEndIterator> template<typename _T> void Deserialiser<_InputIterator, _InputEndIterator>::derefAndProcess (_T *&o) {
   DPRE(!o, "o must be null");
   id allocationId = readAllocationId();
   if (allocationId == NON_ID) {
@@ -525,21 +525,21 @@ template<typename _InputIterator> template<typename _T> void Deserialiser<_Input
   }
 }
 
-template<typename _InputIterator> template<typename _T, iff(
-  std::is_constructible<_T, Deserialiser<_InputIterator>>::value
-)> _T *Deserialiser<_InputIterator>::construct () {
+template<typename _InputIterator, typename _InputEndIterator> template<typename _T, iff(
+  std::is_constructible<_T, Deserialiser<_InputIterator, _InputEndIterator>>::value
+)> _T *Deserialiser<_InputIterator, _InputEndIterator>::construct () {
   DW(, "constructing a ",typeid(_T).name()," object with the custom deserialisation constructor");
   return new _T(*this);
 }
 
-template<typename _InputIterator> template<typename _T, iff(
-  !std::is_constructible<_T, Deserialiser<_InputIterator>>::value
-)> _T *Deserialiser<_InputIterator>::construct () {
+template<typename _InputIterator, typename _InputEndIterator> template<typename _T, iff(
+  !std::is_constructible<_T, Deserialiser<_InputIterator, _InputEndIterator>>::value
+)> _T *Deserialiser<_InputIterator, _InputEndIterator>::construct () {
   DW(, "constructing a ",typeid(_T).name()," object with the default constructor");
   return new _T();
 }
 
-template<typename _InputIterator> template<typename _T> void Deserialiser<_InputIterator>::derefAndProcess (unique_ptr<_T> &o) {
+template<typename _InputIterator, typename _InputEndIterator> template<typename _T> void Deserialiser<_InputIterator, _InputEndIterator>::derefAndProcess (unique_ptr<_T> &o) {
   _T *p = nullptr;
   auto _ = finally([&] () {
     o.reset(p);
@@ -547,7 +547,7 @@ template<typename _InputIterator> template<typename _T> void Deserialiser<_Input
   this->derefAndProcess(p);
 }
 
-template<typename _InputIterator> template<typename _T> void Deserialiser<_InputIterator>::derefAndProcess (_T *&o, size_t count) {
+template<typename _InputIterator, typename _InputEndIterator> template<typename _T> void Deserialiser<_InputIterator, _InputEndIterator>::derefAndProcess (_T *&o, size_t count) {
   DPRE(!o, "o must be null");
   id allocationId = readAllocationId();
   if (allocationId == NON_ID) {
@@ -564,14 +564,14 @@ template<typename _InputIterator> template<typename _T> void Deserialiser<_Input
   }
 }
 
-template<typename _InputIterator> template<typename _T> void Deserialiser<_InputIterator>::derefAndProcess (unique_ptr<_T []> &o, size_t count) {
+template<typename _InputIterator, typename _InputEndIterator> template<typename _T> void Deserialiser<_InputIterator, _InputEndIterator>::derefAndProcess (unique_ptr<_T []> &o, size_t count) {
   _T *p = nullptr;
   auto _ = finally([&] () {
     o.reset(p);
   });  this->derefAndProcess(p, count);
 }
 
-template<typename _InputIterator> template<typename _T, typename _P> void Deserialiser<_InputIterator>::process (_T *&o, _P *parent) {
+template<typename _InputIterator, typename _InputEndIterator> template<typename _T, typename _P> void Deserialiser<_InputIterator, _InputEndIterator>::process (_T *&o, _P *parent) {
   id allocationId = readAllocationId();
   if (allocationId == NON_ID) {
     throw PlainException(u8("serialisation of an as-yet-unseen allocation appears in the input where only a reference to an already-seen allocation was expected"));
@@ -580,17 +580,17 @@ template<typename _InputIterator> template<typename _T, typename _P> void Deseri
   o = static_cast<_T *>(static_cast<void *>(static_cast<char *>(allocations[allocationId]) + offset));
 }
 
-template<typename _InputIterator> template<typename _T> void Deserialiser<_InputIterator>::process (_T *&o) {
+template<typename _InputIterator, typename _InputEndIterator> template<typename _T> void Deserialiser<_InputIterator, _InputEndIterator>::process (_T *&o) {
   this->process(o, o);
 }
 
-template<typename _InputIterator> template<typename _T> void Deserialiser<_InputIterator>::process (unique_ptr<_T> &o) {
+template<typename _InputIterator, typename _InputEndIterator> template<typename _T> void Deserialiser<_InputIterator, _InputEndIterator>::process (unique_ptr<_T> &o) {
   _T *p;
   this->process(p);
   o.reset(p);
 }
 
-template<typename _InputIterator> Signature::Signature (const Deserialiser<_InputIterator> &) : Signature() {
+template<typename _InputIterator, typename _InputEndIterator> Signature::Signature (const Deserialiser<_InputIterator, _InputEndIterator> &) : Signature() {
 }
 
 template<typename _Walker> void Signature::beWalked (_Walker &w) {
@@ -827,7 +827,7 @@ template<typename ..._Ts> void ActionSet::Template::init (u8string &&segment, Wo
   init(forward<_Ts>(ts)...);
 }
 
-template<typename _InputIterator> Multiverse::Node::Node (const Deserialiser<_InputIterator> &) : primeParentNode(nullptr), primeParentNodeInvalid(false) {
+template<typename _InputIterator, typename _InputEndIterator> Multiverse::Node::Node (const Deserialiser<_InputIterator, _InputEndIterator> &) : primeParentNode(nullptr), primeParentNodeInvalid(false) {
 }
 
 template<typename _Walker> void Multiverse::Node::beWalked (_Walker &w) {
