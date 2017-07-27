@@ -383,7 +383,7 @@ int main (int argc, char *argv[]) {
 
     u8string output;
     auto scoreAddr = story.scoreAddr;
-    Multiverse multiverse(move(story._), output, {}, unique_ptr<Multiverse::Listener>(new MultiverseView(scoreAddr)));
+    Multiverse multiverse(move(story._), output, unique_ptr<Multiverse::Listener>(new MultiverseView(scoreAddr)));
     MultiverseView *view = static_cast<MultiverseView *>(multiverse.getListener());
     view->multiverseChanged(multiverse);
     (*mode)(static_cast<iu>(argc) - 3, argv + 3, multiverse, view);

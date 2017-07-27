@@ -478,7 +478,7 @@ class Multiverse {
   prv Node *rootNode;
   prv std::unordered_map<std::reference_wrapper<const core::HashWrapper<Signature>>, Node *> nodes; // XXXX make Node * unique_ptr?
 
-  pub Multiverse (Story &&story, core::u8string &r_initialOutput, const std::vector<std::vector<core::u8string>> &equivalentActionInputsSet, std::unique_ptr<Listener> &&listener);
+  pub Multiverse (Story &&story, core::u8string &r_initialOutput, std::unique_ptr<Listener> &&listener);
   prv static bitset::Bitset initIgnoredBytes (const autofrotz::Vm &vm);
   Multiverse (const Multiverse &) = delete;
   Multiverse &operator= (const Multiverse &) = delete;

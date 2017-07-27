@@ -763,7 +763,7 @@ Multiverse::Node *const &Multiverse::NodeIterator::operator_ind_ () const {
   return get<1>(*i);
 }
 
-Multiverse::Multiverse (Story &&story, u8string &r_initialOutput, const vector<vector<u8string>> &equivalentActionInputsSet, unique_ptr<Listener> &&listener) :
+Multiverse::Multiverse (Story &&story, u8string &r_initialOutput, unique_ptr<Listener> &&listener) :
   vm(story.zcodeFileName, story.screenWidth, story.screenHeight, 0, true, r_initialOutput),
   saver(move(story.saver)), restorer(move(story.restorer)), actionSet(move(story.words), move(story.dewordingTemplates), move(story.otherTemplates)),
   deworder(move(story.deworder)), listener(move(listener)),
@@ -779,30 +779,6 @@ Multiverse::Multiverse (Story &&story, u8string &r_initialOutput, const vector<v
   Signature signature = createSignature(vm, ignoredByteRangeset);
   State state;
   doSaveAction(state);
-
-  Bitset extraIgnoredBytes;
-  for (const auto &equivalentActionInputs : equivalentActionInputsSet) {
-    DS();
-    DW(, "running some equivalent actions to enrich the ignored byte set");
-    DPRE(equivalentActionInputs.size() > 1, "equivalent actions must give multiple actions");
-    Signature signatures[equivalentActionInputs.size()];
-    Signature::Iterator signatureIs[equivalentActionInputs.size()];
-    u8string tmp;
-    for (size_t i = 0, end = equivalentActionInputs.size(); i != end; ++i) {
-      const u8string &actionInput = equivalentActionInputs[i];
-      DW(, " doing **",actionInput.c_str(),"**");
-      doRestoreAction(state);
-      doAction(vm, actionInput, tmp, u8("VM was dead after doing action"));
-      DW(, " output was **",tmp.c_str(),"**");
-      tmp.clear();
-      signatures[i] = createSignature(vm, ignoredByteRangeset);
-      signatureIs[i] = signatures[i].begin();
-    }
-    extraIgnoredBytes |= createExtraIgnoredBytes(signatures[0], signatureIs + 1, signatureIs + equivalentActionInputs.size(), vm);
-  }
-  ignoredBytes |= move(extraIgnoredBytes);
-  ignoredByteRangeset = Rangeset(ignoredBytes, vm.getDynamicMemorySize());
-  signature = recreateSignature(signature, ignoredByteRangeset);
 
   unique_ptr<Node::Listener> nodeListener(this->listener->createNodeListener());
   this->listener->nodeReached(*this, nodeListener.get(), ActionSet::NON_ID, r_initialOutput, signature, vm);
