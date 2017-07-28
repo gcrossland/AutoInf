@@ -885,9 +885,6 @@ template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd)
       DW(, "done adding done result to queue");
     });
 
-    u8string input;
-    u8string output;
-    State postState;
     for (; nodesBegin != nodesEnd; ++nodesBegin) {
       DW(, "looking at the next node:");
       DS();
@@ -900,48 +897,6 @@ template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd)
       }
       DA(parentNode->getChildrenSize() == 0);
 
-      Bitset dewordedWords;
-      for (ActionSet::Size id = 0, end = actionSet.getSize(); id != end; ++id) {
-        ActionSet::Action action = actionSet.get(id);
-
-        if (action.includesAnyWords(dewordedWords)) {
-          DW(, "was about to process action of id ",id,", but at least one of the words used in the action is in the deworded set");
-          continue;
-        }
-
-        input.clear();
-        action.getInput(input);
-        DW(, "processing action **",input.c_str(),"** (id ",id,")");
-        output.clear();
-
-        doRestoreAction(*parentState);
-        doAction(vm, input, output, u8("VM died while doing action"));
-        HashWrapper<Signature> signature(createSignature(vm, ignoredByteRangeset));
-
-        auto dewordingWord = action.getDewordingTarget();
-        if (dewordingWord != ActionSet::NON_ID) {
-          DW(, "this action is a dewording one (for word of id ",dewordingWord,")");
-          if (deworder(vm, output)) {
-            DW(, "word of id ",dewordingWord," is missing!");
-            dewordedWords.setBit(dewordingWord);
-          }
-        }
-
-        if (signature == parentNode->getSignature()) {
-          DW(, "the resultant VM state is the same as the parent's, so skipping");
-          continue;
-        }
-
-        unique_ptr<Node::Listener> nodeListener = listener->createNodeListener();
-        listener->nodeReached(*this, nodeListener.get(), id, output, signature.get(), vm);
-
-        DW(, "output from the action is **", output.c_str(), "**");
-        try {
-          // XXXX better response from doSaveAction on 'can't save'?
-          doSaveAction(postState);
-        } catch (...) {
-          postState.clear();
-        }
         {
           DW(, "adding the result to queue");
           unique_lock<mutex> l(resultQueueLock);
@@ -1012,41 +967,6 @@ template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd)
   listener->nodesProcessed(*this);
 }
 
-template<typename _I> Bitset Multiverse::createExtraIgnoredBytes (const Signature &firstSignature, _I otherSignatureIsBegin, _I otherSignatureIsEnd, const Vm &vm) {
-  Bitset extraIgnoredBytes;
-
-  iu16 addr = 0;
-  const Bitset &vmWordSet = *vm.getWordSet();
-  for (auto byte : firstSignature) {
-    bool same = true;
-    for (auto otherSignatureIsI = otherSignatureIsBegin; otherSignatureIsI != otherSignatureIsEnd; ++otherSignatureIsI) {
-      Signature::Iterator &i = *otherSignatureIsI;
-      if (*(i++) != byte) {
-        same = false;
-      }
-    }
-
-    if (!same) {
-      DW(, "the signatures don't all match at dynmem addr ", addr);
-      extraIgnoredBytes.setBit(addr);
-
-      if (vmWordSet.getExistingBit(addr)) {
-        DW(, "  (it's the first byte of a zword)");
-        extraIgnoredBytes.setBit(addr + 1);
-      }
-      if (addr > 0 && vmWordSet.getExistingBit(addr - 1)) {
-        DW(, "  (it's the second byte of a zword)");
-        extraIgnoredBytes.setBit(addr - 1);
-      }
-    }
-
-    ++addr;
-  }
-  DA(addr == vm.getDynamicMemorySize());
-
-  return extraIgnoredBytes;
-}
-
 template<typename _I> void Multiverse::collapseNodes (_I nodesBegin, _I nodesEnd) {
   DS();
   DPRE(nodesBegin != nodesEnd);
@@ -1099,6 +1019,41 @@ template<typename _I> void Multiverse::collapseNodes (_I nodesBegin, _I nodesEnd
   Node::rebuildPrimeParents(*this);
 
   listener->nodesCollapsed(*this);
+}
+
+template<typename _I> Bitset Multiverse::createExtraIgnoredBytes (const Signature &firstSignature, _I otherSignatureIsBegin, _I otherSignatureIsEnd, const Vm &vm) {
+  Bitset extraIgnoredBytes;
+
+  iu16 addr = 0;
+  const Bitset &vmWordSet = *vm.getWordSet();
+  for (auto byte : firstSignature) {
+    bool same = true;
+    for (auto otherSignatureIsI = otherSignatureIsBegin; otherSignatureIsI != otherSignatureIsEnd; ++otherSignatureIsI) {
+      Signature::Iterator &i = *otherSignatureIsI;
+      if (*(i++) != byte) {
+        same = false;
+      }
+    }
+
+    if (!same) {
+      DW(, "the signatures don't all match at dynmem addr ", addr);
+      extraIgnoredBytes.setBit(addr);
+
+      if (vmWordSet.getExistingBit(addr)) {
+        DW(, "  (it's the first byte of a zword)");
+        extraIgnoredBytes.setBit(addr + 1);
+      }
+      if (addr > 0 && vmWordSet.getExistingBit(addr - 1)) {
+        DW(, "  (it's the second byte of a zword)");
+        extraIgnoredBytes.setBit(addr - 1);
+      }
+    }
+
+    ++addr;
+  }
+  DA(addr == vm.getDynamicMemorySize());
+
+  return extraIgnoredBytes;
 }
 
 template<typename _Walker> void Multiverse::derefAndProcessNodeListener (Node::Listener *&nodeListener, _Walker &w) {

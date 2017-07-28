@@ -500,6 +500,106 @@ Multiverse::Rangeset::Rangeset (const Bitset &bitset, iu16 rangesEnd) : vector()
   }), " bits are set");
 }
 
+  vm(story.zcodeFileName, story.screenWidth, story.screenHeight, 0, true, r_initialOutput),
+  saver(move(story.saver)), restorer(move(story.restorer)), actionSet(move(story.words), move(story.dewordingTemplates), move(story.otherTemplates)),
+
+  if (!vm.isAlive()) {
+    throw PlainException(u8("VM died while initialising"));
+  }
+  doAction(vm, move(story.prologueInput), r_initialOutput, u8("VM died while running the prologue input"));
+
+void Multiverse::doAction(Vm &r_vm, u8string::const_iterator inputBegin, u8string::const_iterator inputEnd, u8string &r_output, const char8_t *deathExceptionMsg) {
+  DPRE(r_vm.isAlive());
+
+  r_vm.doAction(inputBegin, inputEnd, r_output);
+  if (!r_vm.isAlive()) {
+    throw PlainException(deathExceptionMsg);
+  }
+}
+
+void Multiverse::doAction(Vm &r_vm, const u8string &input, u8string &r_output, const char8_t *deathExceptionMsg) {
+  doAction(r_vm, input.begin(), input.end(), r_output, deathExceptionMsg);
+}
+
+void Multiverse::doSaveAction (State &r_state) {
+  vm.setSaveState(&r_state);
+  auto _ = finally([&] () {
+    vm.setSaveState(nullptr);
+  });
+
+  bool succeeded = saver(vm);
+  DPRE(vm.isAlive());
+
+  if (!succeeded) {
+    throw PlainException(u8("save action didn't cause saving"));
+  }
+}
+
+void Multiverse::doRestoreAction (const State &state) {
+  vm.setRestoreState(&state);
+  auto _ = finally([&] () {
+    vm.setRestoreState(nullptr);
+  });
+
+  bool succeeded = restorer(vm);
+  DPRE(vm.isAlive());
+
+  if (!succeeded) {
+    throw PlainException(u8("restore action didn't cause restoration"));
+  }
+}
+
+  Signature signature = createSignature(vm, ignoredByteRangeset);
+  State state;
+  doSaveAction(state);
+
+    u8string input;
+    u8string output;
+    State postState;
+
+      Bitset dewordedWords;
+      for (ActionSet::Size id = 0, end = actionSet.getSize(); id != end; ++id) {
+        ActionSet::Action action = actionSet.get(id);
+
+        if (action.includesAnyWords(dewordedWords)) {
+          DW(, "was about to process action of id ",id,", but at least one of the words used in the action is in the deworded set");
+          continue;
+        }
+
+        input.clear();
+        action.getInput(input);
+        DW(, "processing action **",input.c_str(),"** (id ",id,")");
+        output.clear();
+
+        doRestoreAction(*parentState);
+        doAction(vm, input, output, u8("VM died while doing action"));
+        HashWrapper<Signature> signature(createSignature(vm, ignoredByteRangeset));
+
+        auto dewordingWord = action.getDewordingTarget();
+        if (dewordingWord != ActionSet::NON_ID) {
+          DW(, "this action is a dewording one (for word of id ",dewordingWord,")");
+          if (deworder(vm, output)) {
+            DW(, "word of id ",dewordingWord," is missing!");
+            dewordedWords.setBit(dewordingWord);
+          }
+        }
+
+        if (signature == parentNode->getSignature()) {
+          DW(, "the resultant VM state is the same as the parent's, so skipping");
+          continue;
+        }
+
+        unique_ptr<Node::Listener> nodeListener = listener->createNodeListener();
+        listener->nodeReached(*this, nodeListener.get(), id, output, signature.get(), vm);
+
+        DW(, "output from the action is **", output.c_str(), "**");
+        try {
+          // XXXX better response from doSaveAction on 'can't save'?
+          doSaveAction(postState);
+        } catch (...) {
+          postState.clear();
+        }
+
 Multiverse::Node *const Multiverse::Node::UNPARENTED = static_cast<Node *>(nullptr) + 1;
 const u8string Multiverse::Node::OUTPUT_LINE_TERMINATOR = u8("\n\n");
 
@@ -510,6 +610,57 @@ Multiverse::Node::Node (unique_ptr<Listener> &&listener, Node *primeParentNode, 
     this->state.reset(new State(move(state)));
   }
   DW(, "created new Node with sig of hash ", this->signature.hashFast());
+}
+
+Signature Multiverse::createSignature (const Vm &vm, const Rangeset &ignoredByteRangeset) {
+  DS();
+  DPRE(vm.isAlive());
+
+  Signature signature;
+
+  const zbyte *mem = vm.getDynamicMemory();
+  const zbyte *initialMem = vm.getInitialDynamicMemory();
+  Signature::Writer writer(signature);
+  size_t ec = 0, ms = 0;
+  for (const auto &part : ignoredByteRangeset) {
+    //DW(, "part has ignored len ",part.setSize," followed by used size ",part.clearSize);
+    writer.appendZeroBytes(part.setSize);
+    mem += part.setSize;
+    initialMem += part.setSize;
+
+    for (iu16 i = 0; i != part.clearSize; ++i) {
+      // XXXX something like memcmp, but that returns the first point where the two blocks don't match
+      ec += *mem == *initialMem;
+      writer.appendByte(*mem ^ *initialMem);
+      ++mem;
+      ++initialMem;
+    }
+    ms += part.clearSize;
+  }
+  DA(mem == vm.getDynamicMemory() + vm.getDynamicMemorySize());
+  DW(, "unchanged (of the non-ignoreds): ", ec, " / ", ms, " bytes");
+  writer.close();
+
+  return signature;
+}
+
+Signature Multiverse::recreateSignature (const Signature &oldSignature, const Rangeset &extraIgnoredByteRangeset) {
+  DS();
+
+  Signature signature(oldSignature.getSizeHint());
+
+  auto i = oldSignature.begin();
+  Signature::Writer writer(signature);
+  for (const auto &part : extraIgnoredByteRangeset) {
+    writer.appendZeroBytes(part.setSize);
+    i += part.setSize;
+
+    i.copy(writer, part.clearSize);
+  }
+  DA(i == oldSignature.end());
+  writer.close();
+
+  return signature;
 }
 
 Multiverse::Node::Listener *Multiverse::Node::getListener () const {
@@ -764,21 +915,11 @@ Multiverse::Node *const &Multiverse::NodeIterator::operator_ind_ () const {
 }
 
 Multiverse::Multiverse (Story &&story, u8string &r_initialOutput, unique_ptr<Listener> &&listener) :
-  vm(story.zcodeFileName, story.screenWidth, story.screenHeight, 0, true, r_initialOutput),
-  saver(move(story.saver)), restorer(move(story.restorer)), actionSet(move(story.words), move(story.dewordingTemplates), move(story.otherTemplates)),
   deworder(move(story.deworder)), listener(move(listener)),
   ignoredBytes(initIgnoredBytes(vm)), ignoredByteRangeset(ignoredBytes, vm.getDynamicMemorySize()), rootNode(nullptr)
 {
   DS();
   DPRE(!!this->listener);
-
-  if (!vm.isAlive()) {
-    throw PlainException(u8("VM died while initialising"));
-  }
-  doAction(vm, move(story.prologueInput), r_initialOutput, u8("VM died while running the prologue input"));
-  Signature signature = createSignature(vm, ignoredByteRangeset);
-  State state;
-  doSaveAction(state);
 
   unique_ptr<Node::Listener> nodeListener(this->listener->createNodeListener());
   this->listener->nodeReached(*this, nodeListener.get(), ActionSet::NON_ID, r_initialOutput, signature, vm);
@@ -832,98 +973,6 @@ Multiverse::Listener *Multiverse::getListener () const {
 
 const StringSet<char8_t> &Multiverse::getOutputStringSet () const {
   return outputStringSet;
-}
-
-void Multiverse::doAction(Vm &r_vm, u8string::const_iterator inputBegin, u8string::const_iterator inputEnd, u8string &r_output, const char8_t *deathExceptionMsg) {
-  DPRE(r_vm.isAlive());
-
-  r_vm.doAction(inputBegin, inputEnd, r_output);
-  if (!r_vm.isAlive()) {
-    throw PlainException(deathExceptionMsg);
-  }
-}
-
-void Multiverse::doAction(Vm &r_vm, const u8string &input, u8string &r_output, const char8_t *deathExceptionMsg) {
-  doAction(r_vm, input.begin(), input.end(), r_output, deathExceptionMsg);
-}
-
-void Multiverse::doSaveAction (State &r_state) {
-  vm.setSaveState(&r_state);
-  auto _ = finally([&] () {
-    vm.setSaveState(nullptr);
-  });
-
-  bool succeeded = saver(vm);
-  DPRE(vm.isAlive());
-
-  if (!succeeded) {
-    throw PlainException(u8("save action didn't cause saving"));
-  }
-}
-
-void Multiverse::doRestoreAction (const State &state) {
-  vm.setRestoreState(&state);
-  auto _ = finally([&] () {
-    vm.setRestoreState(nullptr);
-  });
-
-  bool succeeded = restorer(vm);
-  DPRE(vm.isAlive());
-
-  if (!succeeded) {
-    throw PlainException(u8("restore action didn't cause restoration"));
-  }
-}
-
-Signature Multiverse::createSignature (const Vm &vm, const Rangeset &ignoredByteRangeset) {
-  DS();
-  DPRE(vm.isAlive());
-
-  Signature signature;
-
-  const zbyte *mem = vm.getDynamicMemory();
-  const zbyte *initialMem = vm.getInitialDynamicMemory();
-  Signature::Writer writer(signature);
-  size_t ec = 0, ms = 0;
-  for (const auto &part : ignoredByteRangeset) {
-    //DW(, "part has ignored len ",part.setSize," followed by used size ",part.clearSize);
-    writer.appendZeroBytes(part.setSize);
-    mem += part.setSize;
-    initialMem += part.setSize;
-
-    for (iu16 i = 0; i != part.clearSize; ++i) {
-      // XXXX something like memcmp, but that returns the first point where the two blocks don't match
-      ec += *mem == *initialMem;
-      writer.appendByte(*mem ^ *initialMem);
-      ++mem;
-      ++initialMem;
-    }
-    ms += part.clearSize;
-  }
-  DA(mem == vm.getDynamicMemory() + vm.getDynamicMemorySize());
-  DW(, "unchanged (of the non-ignoreds): ", ec, " / ", ms, " bytes");
-  writer.close();
-
-  return signature;
-}
-
-Signature Multiverse::recreateSignature (const Signature &oldSignature, const Rangeset &extraIgnoredByteRangeset) {
-  DS();
-
-  Signature signature(oldSignature.getSizeHint());
-
-  auto i = oldSignature.begin();
-  Signature::Writer writer(signature);
-  for (const auto &part : extraIgnoredByteRangeset) {
-    writer.appendZeroBytes(part.setSize);
-    i += part.setSize;
-
-    i.copy(writer, part.clearSize);
-  }
-  DA(i == oldSignature.end());
-  writer.close();
-
-  return signature;
 }
 
 size_t Multiverse::size () const {
