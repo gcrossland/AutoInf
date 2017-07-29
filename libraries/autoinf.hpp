@@ -385,22 +385,35 @@ struct Story {
   const char *zcodeFileName;
   iu screenWidth;
   iu screenHeight;
+  core::u8string prologueInput;
   std::function<bool (autofrotz::Vm &r_vm)> saver;
   std::function<bool (autofrotz::Vm &r_vm)> restorer;
-  core::u8string prologueInput;
   std::vector<ActionSet::Word> words;
   std::vector<ActionSet::Template> dewordingTemplates;
   std::function<bool (const autofrotz::Vm &vm, const core::u8string &output)> deworder;
   std::vector<ActionSet::Template> otherTemplates;
+  std::vector<autofrotz::zword> significantWordAddrs;
 };
 
-  prv struct RangesetPart {
-    iu16f setSize;
-    iu16f clearSize;
-  };
+struct RangesetPart {
+  iu16f setSize;
+  iu16f clearSize;
+};
 
-  prv class Rangeset : public std::vector<RangesetPart> {
-    pub Rangeset (const bitset::Bitset &bitset, iu16 size);
+class Rangeset : public std::vector<RangesetPart> {
+  pub Rangeset (const bitset::Bitset &bitset, iu16 size);
+  pub Rangeset ();
+};
+
+class LocalActionExecutor {
+  pub struct ActionResult {
+    ActionSet::Size id;
+    core::u8string output;
+    core::HashWrapper<Signature> signature;
+    autofrotz::State state;
+    std::vector<autofrotz::zword> significantWords;
+
+    ActionResult (ActionSet::Size id, core::u8string output, core::HashWrapper<Signature> signature, autofrotz::State state, std::vector<autofrotz::zword> significantWords);
   };
 
   prv autofrotz::Vm vm;
@@ -408,11 +421,23 @@ struct Story {
   prv const std::function<bool (autofrotz::Vm &r_vm)> restorer;
   prv const ActionSet actionSet;
   prv const std::function<bool (const autofrotz::Vm &vm, const core::u8string &output)> deworder;
+  prv const std::vector<autofrotz::zword> significantWordAddrs;
+  prv Rangeset ignoredByteRangeset;
 
+  pub LocalActionExecutor (Story &&story, core::u8string &r_initialOutput);
+
+  pub iu16 getDynamicMemorySize () const noexcept;
+  pub bitset::Bitset &getWordSet () noexcept;
+  pub const ActionSet &getActionSet () const noexcept;
+  pub void setIgnoredByteRangeset (Rangeset ignoredByteRangeset) noexcept;
   pub static void doAction (autofrotz::Vm &r_vm, core::u8string::const_iterator inputBegin, core::u8string::const_iterator inputEnd, core::u8string &r_output, const char8_t *deathExceptionMsg);
   pub static void doAction (autofrotz::Vm &r_vm, const core::u8string &input, core::u8string &r_output, const char8_t *deathExceptionMsg);
   prv void doSaveAction (autofrotz::State &r_state);
   prv void doRestoreAction (const autofrotz::State &state);
+  prv std::vector<autofrotz::zword> getSignificantWords () const;
+  pub ActionResult getActionResult ();
+  pub void processNode (std::vector<ActionResult> &r_results, const core::HashWrapper<Signature> &parentSignature, const autofrotz::State &parentState);
+};
 
 class Multiverse {
   pub class Node {
@@ -436,8 +461,8 @@ class Multiverse {
     pub template<typename _InputIterator, typename _InputEndIterator> explicit Node (const Deserialiser<_InputIterator, _InputEndIterator> &);
     pub template<typename _Walker> void beWalked (_Walker &w);
 
-  prv static Signature createSignature (const autofrotz::Vm &vm, const Rangeset &ignoredByteRangeset);
-  prv static Signature recreateSignature (const Signature &oldSignature, const Rangeset &extraIgnoredByteRangeset);
+    pub static Signature createSignature (const autofrotz::Vm &vm, const Rangeset &ignoredByteRangeset);
+    pub static Signature recreateSignature (const Signature &oldSignature, const Rangeset &extraIgnoredByteRangeset);
     pub Listener *getListener () const;
     pub Node *getPrimeParentNode () const;
     pub size_t getPrimeParentArcChildIndex () const;
@@ -479,9 +504,9 @@ class Multiverse {
 
   pub class Listener;
 
+  prv LocalActionExecutor e;
   prv std::unique_ptr<Listener> listener;
   prv bitset::Bitset ignoredBytes;
-  prv Rangeset ignoredByteRangeset;
   prv StringSet<char8_t> outputStringSet;
   prv Node *rootNode;
   prv std::unordered_map<std::reference_wrapper<const core::HashWrapper<Signature>>, Node *> nodes; // XXXX make Node * unique_ptr?
@@ -501,9 +526,10 @@ class Multiverse {
   pub NodeIterator begin () const;
   pub NodeIterator end () const;
   pub Node *getRoot () const;
+  prv void ignoredBytesChanged ();
   pub template<typename _I> void processNodes (_I nodesBegin, _I nodesEnd);
   pub template<typename _I> void collapseNodes (_I nodesBegin, _I nodesEnd);
-  prv template<typename _I> static bitset::Bitset createExtraIgnoredBytes (const Signature &firstSignature, _I otherSignatureIsBegin, _I otherSignatureIsEnd, const autofrotz::Vm &vm);
+  prv template<typename _I> static bitset::Bitset createExtraIgnoredBytes (const Signature &firstSignature, _I otherSignatureIsBegin, _I otherSignatureIsEnd, LocalActionExecutor &r_e);
   prv Node *collapseNode (
     Node *node, const Rangeset &extraIgnoredByteRangeset,
     std::unordered_map<std::reference_wrapper<const core::HashWrapper<Signature>>, Node *> &r_survivingNodes,
@@ -528,7 +554,7 @@ class Multiverse {
     pub virtual void walkNodeListener (Node::Listener *listener, Deserialiser<FileInputIterator, FileInputEndIterator> &s) = 0;
 
     pub virtual std::unique_ptr<Node::Listener> createNodeListener () = 0;
-    pub virtual void nodeReached (const Multiverse &multiverse, Node::Listener *listener, ActionSet::Size parentActionId, const core::u8string &output, const Signature &signature, const autofrotz::Vm &vm) = 0;
+    pub virtual void nodeReached (const Multiverse &multiverse, Node::Listener *listener, ActionSet::Size parentActionId, const core::u8string &output, const Signature &signature, const std::vector<autofrotz::zword> &significantWords) = 0;
     pub virtual void subtreePrimeAncestorsUpdated (const Multiverse &multiverse, const Node *node) = 0;
     pub virtual void nodeProcessed (const Multiverse &multiverse, const Node *node, size_t processedCount, size_t totalCount) = 0;
     pub virtual void nodesProcessed (const Multiverse &multiverse) = 0;

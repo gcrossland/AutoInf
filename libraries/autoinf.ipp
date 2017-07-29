@@ -870,7 +870,7 @@ template<typename _F, iff(std::is_convertible<_F, std::function<bool (Multiverse
 template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd) {
   DS();
   size_t nodeCount = offset(nodesBegin, nodesEnd);
-  deque<tuple<Node *, ActionSet::Size, u8string, HashWrapper<Signature>, State, unique_ptr<Node::Listener>>> resultQueue;
+  deque<tuple<Node *, vector<LocalActionExecutor::ActionResult>>> resultQueue;
   mutex resultQueueLock;
   condition_variable resultQueueCondVar;
 
@@ -880,11 +880,12 @@ template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd)
       DS();
       DW(, "adding done result to queue");
       unique_lock<mutex> l(resultQueueLock);
-      resultQueue.emplace_back(nullptr, 0, u8string(), HashWrapper<Signature>(), State(), nullptr);
+      resultQueue.emplace_back(nullptr, vector<LocalActionExecutor::ActionResult>());
       resultQueueCondVar.notify_one();
       DW(, "done adding done result to queue");
     });
 
+    vector<LocalActionExecutor::ActionResult> results;
     for (; nodesBegin != nodesEnd; ++nodesBegin) {
       DW(, "looking at the next node:");
       DS();
@@ -897,14 +898,15 @@ template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd)
       }
       DA(parentNode->getChildrenSize() == 0);
 
-        {
-          DW(, "adding the result to queue");
-          unique_lock<mutex> l(resultQueueLock);
-          resultQueue.emplace_back(parentNode, id, output, move(signature), postState, move(nodeListener));
-          resultQueueCondVar.notify_one();
-          DW(, "done adding the result to queue");
-        }
-        // system("sleep 1"); // XXXX
+      results.clear();
+      e.processNode(results, parentNode->getSignature(), *parentState);
+
+      {
+        DW(, "adding the result to queue");
+        unique_lock<mutex> l(resultQueueLock);
+        resultQueue.emplace_back(parentNode, results);
+        resultQueueCondVar.notify_one();
+        DW(, "done adding the result to queue");
       }
     }
   });
@@ -914,52 +916,54 @@ template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd)
     dispatcherThread.join();
   });
 
-  Node *prevParentNode = nullptr;
   size_t processedNodeCount = 0;
   while (true) {
     unique_lock<mutex> l(resultQueueLock);
     resultQueueCondVar.wait(l, [&] () {
       return !resultQueue.empty();
     });
-    DW(, "M getting the next result:");
+    DW(, "M getting the next node's results:");
     auto rs = move(resultQueue.front());
     resultQueue.pop_front();
     l.unlock();
 
     Node *parentNode = get<0>(rs);
-    if (prevParentNode && parentNode != prevParentNode) {
-      prevParentNode->clearState();
-      prevParentNode->childrenUpdated();
-      listener->nodeProcessed(*this, prevParentNode, ++processedNodeCount, nodeCount);
-    }
-    prevParentNode = parentNode;
     if (!parentNode) {
       DW(, "M it's the end of the queue!");
       break;
     }
-    DW(, "M the result is a child for the node with sig of hash ", parentNode->getSignature().hashFast());
-    ActionSet::Size parentActionId = get<1>(rs);
-    u8string &resultOutput = get<2>(rs);
-    HashWrapper<Signature> &resultSignature = get<3>(rs);
-    State &resultState = get<4>(rs);
-    unique_ptr<Node::Listener> &resultListener = get<5>(rs);
-    DW(, "M the child is for the action of id ",parentActionId,"; the sig is of hash ", resultSignature.hashFast());
-    DA(!(resultSignature == parentNode->getSignature()));
+    DW(, "M these results are children for the node with sig of hash ", parentNode->getSignature().hashFast());
 
-    Node *resultNode;
-    auto v = find(nodes, cref(resultSignature));
-    if (!v) {
-      DW(, "M this is a new node for this multiverse!");
-      unique_ptr<Node> n(new Node(move(resultListener), Node::UNPARENTED, move(resultSignature), move(resultState)));
-      resultNode = n.get();
-      nodes.emplace(ref(resultNode->getSignature()), resultNode);
-      n.release();
-    } else {
-      DW(, "M there already exists a node of this signature");
-      resultNode = *v;
-      DA(resultSignature == resultNode->getSignature());
+    for (auto &result : get<1>(rs)) {
+      ActionSet::Size parentActionId = result.id;
+      u8string &resultOutput = result.output;
+      HashWrapper<Signature> &resultSignature = result.signature;
+      State &resultState = result.state;
+      vector<zword> &resultSignificantWords = result.significantWords;
+      DW(, "M the child is for the action of id ",parentActionId,"; the sig is of hash ", resultSignature.hashFast());
+      DA(!(resultSignature == parentNode->getSignature()));
+
+      Node *resultNode;
+      auto v = find(nodes, cref(resultSignature));
+      if (!v) {
+        DW(, "M this is a new node for this multiverse!");
+        unique_ptr<Node::Listener> resultListener = listener->createNodeListener();
+        listener->nodeReached(*this, resultListener.get(), parentActionId, resultOutput, resultSignature.get(), resultSignificantWords);
+        unique_ptr<Node> n(new Node(move(resultListener), Node::UNPARENTED, move(resultSignature), move(resultState)));
+        resultNode = n.get();
+        nodes.emplace(ref(resultNode->getSignature()), resultNode);
+        n.release();
+      } else {
+        DW(, "M there already exists a node of this signature");
+        resultNode = *v;
+        DA(resultSignature == resultNode->getSignature());
+      }
+      parentNode->addChild(parentActionId, resultOutput, resultNode, *this);
     }
-    parentNode->addChild(parentActionId, resultOutput, resultNode, *this);
+
+    parentNode->clearState();
+    parentNode->childrenUpdated();
+    listener->nodeProcessed(*this, parentNode, ++processedNodeCount, nodeCount);
   }
 
   dispatcherFuture.get();
@@ -984,14 +988,14 @@ template<typename _I> void Multiverse::collapseNodes (_I nodesBegin, _I nodesEnd
     DW(, "other node has sig of hash", node->getSignature().hashFast());
     otherSignatureIs.emplace_back(node->getSignature().get().begin());
   }
-  Bitset extraIgnoredBytes = createExtraIgnoredBytes(firstSignature, otherSignatureIs.begin(), otherSignatureIs.end(), vm);
+  Bitset extraIgnoredBytes = createExtraIgnoredBytes(firstSignature, otherSignatureIs.begin(), otherSignatureIs.end(), e);
 
   // Walk through the node tree, processing each node once (unless all its parents
   // are collapsed away, in which case it'll never be reached), and rebuild the
   // node map with only those nodes which have survived (and with their new
   // signatures).
 
-  Rangeset extraIgnoredByteRangeset(extraIgnoredBytes, vm.getDynamicMemorySize());
+  Rangeset extraIgnoredByteRangeset(extraIgnoredBytes, e.getDynamicMemorySize());
   decltype(nodes) survivingNodes(nodes.bucket_count());
   unordered_map<Node *, Node *> nodeCollapseTargets(nodes.bucket_count());
   unordered_map<Node *, HashWrapper<Signature>> survivingNodePrevSignatures(nodes.bucket_count());
@@ -1003,7 +1007,7 @@ template<typename _I> void Multiverse::collapseNodes (_I nodesBegin, _I nodesEnd
   DW(, "after collapsing all ",nodes.size()," nodes, there are ",survivingNodes.size()," surviving nodes");
 
   ignoredBytes |= move(extraIgnoredBytes);
-  ignoredByteRangeset = Rangeset(ignoredBytes, vm.getDynamicMemorySize());
+  ignoredBytesChanged();
   size_t dc = 0;
   for (const auto &i : nodes) {
     Node *node = get<1>(i);
@@ -1021,11 +1025,11 @@ template<typename _I> void Multiverse::collapseNodes (_I nodesBegin, _I nodesEnd
   listener->nodesCollapsed(*this);
 }
 
-template<typename _I> Bitset Multiverse::createExtraIgnoredBytes (const Signature &firstSignature, _I otherSignatureIsBegin, _I otherSignatureIsEnd, const Vm &vm) {
+template<typename _I> Bitset Multiverse::createExtraIgnoredBytes (const Signature &firstSignature, _I otherSignatureIsBegin, _I otherSignatureIsEnd, LocalActionExecutor &r_e) {
   Bitset extraIgnoredBytes;
 
   iu16 addr = 0;
-  const Bitset &vmWordSet = *vm.getWordSet();
+  const Bitset &vmWordSet = r_e.getWordSet();
   for (auto byte : firstSignature) {
     bool same = true;
     for (auto otherSignatureIsI = otherSignatureIsBegin; otherSignatureIsI != otherSignatureIsEnd; ++otherSignatureIsI) {
@@ -1051,7 +1055,7 @@ template<typename _I> Bitset Multiverse::createExtraIgnoredBytes (const Signatur
 
     ++addr;
   }
-  DA(addr == vm.getDynamicMemorySize());
+  DA(addr == r_e.getDynamicMemorySize());
 
   return extraIgnoredBytes;
 }

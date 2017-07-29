@@ -10,6 +10,7 @@ using std::vector;
 using core::u8string;
 using Node = autoinf::Multiverse::Node;
 using autoinf::ActionSet;
+using autoinf::LocalActionExecutor;
 using std::unordered_set;
 using std::get;
 using core::numeric_limits;
@@ -98,17 +99,17 @@ int main (int argc, char *argv[]) {
         "testgame/testgame.z5",
         width,
         height,
+        u8("verbose\nfullscore\n"),
         [&saveActionInput] (Vm &r_vm) -> bool {
           u8string o;
-          Multiverse::doAction(r_vm, saveActionInput, o, u8("VM died while saving a state"));
+          LocalActionExecutor::doAction(r_vm, saveActionInput, o, u8("VM died while saving a state"));
           return r_vm.getSaveCount() != 0;
         },
         [&restoreActionInput] (Vm &r_vm) -> bool {
           u8string o;
-          Multiverse::doAction(r_vm, restoreActionInput, o, u8("VM died while restoring a state"));
+          LocalActionExecutor::doAction(r_vm, restoreActionInput, o, u8("VM died while restoring a state"));
           return r_vm.getRestoreCount() != 0;
         },
-        u8("verbose\nfullscore\n"),
         vector<ActionSet::Word> {
           {u8("red sphere"), 0b011},
           {u8("blue sphere"), 0b011},
@@ -131,32 +132,35 @@ int main (int argc, char *argv[]) {
           {u8("turn "), 0b100U, u8(". pull "), 0b100U, u8("\n")},
           {u8("enter "), 0b1000U, u8("\n")}
         },
-      }, 0x08C8}},
+        vector<autofrotz::zword> {
+          0x08C8
+        }
+      }, 0}},
       {HashWrapper<string<char>>("advent"), {{
         "advent/advent.z5",
         width,
         height,
+        u8("verbose\nfullscore\n"),
         [&saveActionInput, &noResurrectionSaveActionInput] (Vm &r_vm) -> bool {
           u8string o;
-          Multiverse::doAction(r_vm, saveActionInput, o, u8("VM died while saving a state"));
+          LocalActionExecutor::doAction(r_vm, saveActionInput, o, u8("VM died while saving a state"));
 
           if (r_vm.getSaveCount() == 0 && o.find(u8("Please answer yes or no.")) != u8string::npos) {
-            Multiverse::doAction(r_vm, noResurrectionSaveActionInput, o, u8("VM died while declining resurrection and saving a state"));
+            LocalActionExecutor::doAction(r_vm, noResurrectionSaveActionInput, o, u8("VM died while declining resurrection and saving a state"));
           }
 
           return r_vm.getSaveCount() != 0;
         },
         [&restoreActionInput, &noResurrectionRestoreActionInput] (Vm &r_vm) -> bool {
           u8string o;
-          Multiverse::doAction(r_vm, restoreActionInput, o, u8("VM died while restoring a state"));
+          LocalActionExecutor::doAction(r_vm, restoreActionInput, o, u8("VM died while restoring a state"));
 
           if (r_vm.getRestoreCount() == 0 && o.find(u8("Please answer yes or no.")) != u8string::npos) {
-            Multiverse::doAction(r_vm, noResurrectionRestoreActionInput, o, u8("VM died while declining resurrection and restoring a state"));
+            LocalActionExecutor::doAction(r_vm, noResurrectionRestoreActionInput, o, u8("VM died while declining resurrection and restoring a state"));
           }
 
           return r_vm.getRestoreCount() != 0;
         },
-        u8("verbose\nfullscore\n"),
         vector<ActionSet::Word> {
           {u8("north"), direction},
           {u8("south"), direction},
@@ -362,7 +366,10 @@ int main (int argc, char *argv[]) {
           {u8("say foo\n")},
           {u8("say abracadabra\n")}
         },
-      }, 0x3BEB /* or 0x3C0B or 0x3C0D */ }}
+        vector<autofrotz::zword> {
+          0x3BEB /* or 0x3C0B or 0x3C0D */
+        }
+      }, 0}}
     };
     // TODO uargs
     auto e0 = stories.find(core::hashed(string<char>(argv[1])));
@@ -382,8 +389,8 @@ int main (int argc, char *argv[]) {
     auto mode = *e1;
 
     u8string output;
-    auto scoreAddr = story.scoreAddr;
-    Multiverse multiverse(move(story._), output, unique_ptr<Multiverse::Listener>(new MultiverseView(scoreAddr)));
+    auto scoreSignificantWordAddrI = story.scoreSignificantWordAddrI;
+    Multiverse multiverse(move(story._), output, unique_ptr<Multiverse::Listener>(new MultiverseView(scoreSignificantWordAddrI)));
     MultiverseView *view = static_cast<MultiverseView *>(multiverse.getListener());
     view->multiverseChanged(multiverse);
     (*mode)(static_cast<iu>(argc) - 3, argv + 3, multiverse, view);
@@ -974,23 +981,21 @@ const Value MultiverseMetricsListener::OLD_LOCATION_VISITAGE_MODIFIER = -200;
 
 const size_t MultiverseMetricsListener::OUTPUTTAGE_CHILD_OUTPUT_PRESKIP = 1;
 
-MultiverseMetricsListener::MultiverseMetricsListener (zword scoreAddr) :
-  scoreAddr(scoreAddr), interestingChildActionWordsIsDirty(false)
+MultiverseMetricsListener::MultiverseMetricsListener (size_t scoreSignificantWordAddrI) :
+  scoreSignificantWordAddrI(scoreSignificantWordAddrI), interestingChildActionWordsIsDirty(false)
 {
 }
 
-void MultiverseMetricsListener::nodeReached (const Multiverse &multiverse, Node::Listener *listener_, ActionSet::Size parentActionId, const u8string &output, const Signature &signature, const Vm &vm) {
+void MultiverseMetricsListener::nodeReached (const Multiverse &multiverse, Node::Listener *listener_, ActionSet::Size parentActionId, const u8string &output, const Signature &signature, const vector<zword> &significantWords) {
   DW(, "DDDD created new node with sig of hash ", signature.hashSlow());
   NodeMetricsListener *listener = static_cast<NodeMetricsListener *>(listener_);
 
-  setScoreValue(listener, vm);
+  setScoreValue(listener, significantWords);
   setVisitageData(listener, output);
 }
 
-void MultiverseMetricsListener::setScoreValue (NodeMetricsListener *listener, const Vm &vm) {
-  DPRE((static_cast<iu>(scoreAddr) + 1) < vm.getDynamicMemorySize() + 0);
-  const zbyte *m = vm.getDynamicMemory();
-  listener->scoreValue = static_cast<make_signed<zword>::type>(static_cast<zword>(static_cast<zword>(m[scoreAddr] << 8) | m[scoreAddr + 1]));
+void MultiverseMetricsListener::setScoreValue (NodeMetricsListener *listener, const vector<zword> &significantWords) {
+  listener->scoreValue = static_cast<make_signed<zword>::type>(significantWords[scoreSignificantWordAddrI]);
   DW(, "DDDD game score is ",listener->scoreValue);
 }
 
@@ -1320,8 +1325,8 @@ template<typename _Walker> void NodeView::beWalked (_Walker &w) {
   w.process(*static_cast<NodeMetricsListener *>(this));
 }
 
-MultiverseView::MultiverseView (zword scoreAddr) :
-  MultiverseMetricsListener(scoreAddr), elideDeadEndNodes(false), elideAntiselectedNodes(false), maxDepth(numeric_limits<size_t>::max()), combineSimilarSiblings(false),
+MultiverseView::MultiverseView (size_t scoreSignificantWordAddrI) :
+  MultiverseMetricsListener(scoreSignificantWordAddrI), elideDeadEndNodes(false), elideAntiselectedNodes(false), maxDepth(numeric_limits<size_t>::max()), combineSimilarSiblings(false),
   deadEndnessIsDirty(true), antiselectednessIsDirty(true)
 {
 }

@@ -477,7 +477,7 @@ bool ActionSet::Action::includesAnyWords (const Bitset &words) const {
   return false;
 }
 
-Multiverse::Rangeset::Rangeset (const Bitset &bitset, iu16 rangesEnd) : vector() {
+Rangeset::Rangeset (const Bitset &bitset, iu16 rangesEnd) : vector() {
   DS();
   DW(, "creating Rangeset from a bitset:");
   DPRE(bitset.getNextSetBit(rangesEnd) == Bitset::NON_INDEX);
@@ -500,15 +500,42 @@ Multiverse::Rangeset::Rangeset (const Bitset &bitset, iu16 rangesEnd) : vector()
   }), " bits are set");
 }
 
-  vm(story.zcodeFileName, story.screenWidth, story.screenHeight, 0, true, r_initialOutput),
-  saver(move(story.saver)), restorer(move(story.restorer)), actionSet(move(story.words), move(story.dewordingTemplates), move(story.otherTemplates)),
+Rangeset::Rangeset () : vector() {
+}
 
+LocalActionExecutor::ActionResult::ActionResult (ActionSet::Size id, u8string output, HashWrapper<Signature> signature, State state, vector<zword> significantWords) :
+  id(id), output(move(output)), signature(move(signature)), state(move(state)), significantWords(move(significantWords))
+{
+}
+
+LocalActionExecutor::LocalActionExecutor (Story &&story, u8string &r_initialOutput) :
+  vm(story.zcodeFileName, story.screenWidth, story.screenHeight, 0, true, r_initialOutput),
+  saver(move(story.saver)), restorer(move(story.restorer)), actionSet(story.words, story.dewordingTemplates, story.otherTemplates),
+  deworder(move(story.deworder)), significantWordAddrs(move(story.significantWordAddrs)), ignoredByteRangeset()
+{
   if (!vm.isAlive()) {
     throw PlainException(u8("VM died while initialising"));
   }
-  doAction(vm, move(story.prologueInput), r_initialOutput, u8("VM died while running the prologue input"));
+  doAction(vm, story.prologueInput, r_initialOutput, u8("VM died while running the prologue input"));
+}
 
-void Multiverse::doAction(Vm &r_vm, u8string::const_iterator inputBegin, u8string::const_iterator inputEnd, u8string &r_output, const char8_t *deathExceptionMsg) {
+iu16 LocalActionExecutor::getDynamicMemorySize () const noexcept {
+  return vm.getDynamicMemorySize();
+}
+
+Bitset &LocalActionExecutor::getWordSet () noexcept {
+  return *vm.getWordSet();
+}
+
+const ActionSet &LocalActionExecutor::getActionSet () const noexcept {
+  return actionSet;
+}
+
+void LocalActionExecutor::setIgnoredByteRangeset (Rangeset ignoredByteRangeset) noexcept {
+  this->ignoredByteRangeset = move(ignoredByteRangeset);
+}
+
+void LocalActionExecutor::doAction (Vm &r_vm, u8string::const_iterator inputBegin, u8string::const_iterator inputEnd, u8string &r_output, const char8_t *deathExceptionMsg) {
   DPRE(r_vm.isAlive());
 
   r_vm.doAction(inputBegin, inputEnd, r_output);
@@ -517,11 +544,11 @@ void Multiverse::doAction(Vm &r_vm, u8string::const_iterator inputBegin, u8strin
   }
 }
 
-void Multiverse::doAction(Vm &r_vm, const u8string &input, u8string &r_output, const char8_t *deathExceptionMsg) {
+void LocalActionExecutor::doAction (Vm &r_vm, const u8string &input, u8string &r_output, const char8_t *deathExceptionMsg) {
   doAction(r_vm, input.begin(), input.end(), r_output, deathExceptionMsg);
 }
 
-void Multiverse::doSaveAction (State &r_state) {
+void LocalActionExecutor::doSaveAction (State &r_state) {
   vm.setSaveState(&r_state);
   auto _ = finally([&] () {
     vm.setSaveState(nullptr);
@@ -535,7 +562,7 @@ void Multiverse::doSaveAction (State &r_state) {
   }
 }
 
-void Multiverse::doRestoreAction (const State &state) {
+void LocalActionExecutor::doRestoreAction (const State &state) {
   vm.setRestoreState(&state);
   auto _ = finally([&] () {
     vm.setRestoreState(nullptr);
@@ -549,56 +576,81 @@ void Multiverse::doRestoreAction (const State &state) {
   }
 }
 
-  Signature signature = createSignature(vm, ignoredByteRangeset);
+vector<zword> LocalActionExecutor::getSignificantWords () const {
+  vector<zword> significantWords;
+  significantWords.reserve(significantWordAddrs.size());
+
+  const zbyte *m = vm.getDynamicMemory();
+  for (zword significantWordAddr : significantWordAddrs) {
+    DPRE((static_cast<iu>(significantWordAddr) + 1) < vm.getDynamicMemorySize() + 0);
+    auto w = static_cast<zword>(static_cast<zword>(m[significantWordAddr] << 8) | m[significantWordAddr + 1]);
+    significantWords.emplace_back(w);
+  }
+
+  return significantWords;
+}
+
+LocalActionExecutor::ActionResult LocalActionExecutor::getActionResult () {
+  HashWrapper<Signature> signature(Multiverse::Node::createSignature(vm, ignoredByteRangeset));
+  vector<zword> significantWords = getSignificantWords();
   State state;
   doSaveAction(state);
+  return ActionResult(0, u8string(), move(signature), move(state), move(significantWords));
+}
 
-    u8string input;
-    u8string output;
-    State postState;
+void LocalActionExecutor::processNode (vector<ActionResult> &r_results, const HashWrapper<Signature> &parentSignature, const State &parentState) {
+  DS();
 
-      Bitset dewordedWords;
-      for (ActionSet::Size id = 0, end = actionSet.getSize(); id != end; ++id) {
-        ActionSet::Action action = actionSet.get(id);
+  u8string input;
+  u8string output;
+  State state;
+  DW(, "processing node with sig of hash ", parentSignature.hashFast(), ":");
+  Bitset dewordedWords;
+  for (ActionSet::Size id = 0, end = actionSet.getSize(); id != end; ++id) {
+    ActionSet::Action action = actionSet.get(id);
 
-        if (action.includesAnyWords(dewordedWords)) {
-          DW(, "was about to process action of id ",id,", but at least one of the words used in the action is in the deworded set");
-          continue;
-        }
+    if (action.includesAnyWords(dewordedWords)) {
+      DW(, "was about to process action of id ",id,", but at least one of the words used in the action is in the deworded set");
+      continue;
+    }
 
-        input.clear();
-        action.getInput(input);
-        DW(, "processing action **",input.c_str(),"** (id ",id,")");
-        output.clear();
+    input.clear();
+    output.clear();
+    state.clear();
 
-        doRestoreAction(*parentState);
-        doAction(vm, input, output, u8("VM died while doing action"));
-        HashWrapper<Signature> signature(createSignature(vm, ignoredByteRangeset));
+    action.getInput(input);
+    DW(, "processing action **",input.c_str(),"** (id ",id,")");
 
-        auto dewordingWord = action.getDewordingTarget();
-        if (dewordingWord != ActionSet::NON_ID) {
-          DW(, "this action is a dewording one (for word of id ",dewordingWord,")");
-          if (deworder(vm, output)) {
-            DW(, "word of id ",dewordingWord," is missing!");
-            dewordedWords.setBit(dewordingWord);
-          }
-        }
+    doRestoreAction(parentState);
+    doAction(vm, input, output, u8("VM died while doing action"));
+    HashWrapper<Signature> signature(Multiverse::Node::createSignature(vm, ignoredByteRangeset));
 
-        if (signature == parentNode->getSignature()) {
-          DW(, "the resultant VM state is the same as the parent's, so skipping");
-          continue;
-        }
+    auto dewordingWord = action.getDewordingTarget();
+    if (dewordingWord != ActionSet::NON_ID) {
+      DW(, "this action is a dewording one (for word of id ",dewordingWord,")");
+      if (deworder(vm, output)) {
+        DW(, "word of id ",dewordingWord," is missing!");
+        dewordedWords.setBit(dewordingWord);
+      }
+    }
 
-        unique_ptr<Node::Listener> nodeListener = listener->createNodeListener();
-        listener->nodeReached(*this, nodeListener.get(), id, output, signature.get(), vm);
+    if (signature == parentSignature) {
+      DW(, "the resultant VM state is the same as the parent's, so skipping");
+      continue;
+    }
 
-        DW(, "output from the action is **", output.c_str(), "**");
-        try {
-          // XXXX better response from doSaveAction on 'can't save'?
-          doSaveAction(postState);
-        } catch (...) {
-          postState.clear();
-        }
+    vector<zword> significantWords = getSignificantWords();
+
+    DW(, "output from the action is **", output.c_str(), "**");
+    try {
+      doSaveAction(state);
+    } catch (...) {
+      state.clear();
+    }
+
+    r_results.emplace_back(id, output, move(signature), state, move(significantWords));
+  }
+}
 
 Multiverse::Node *const Multiverse::Node::UNPARENTED = static_cast<Node *>(nullptr) + 1;
 const u8string Multiverse::Node::OUTPUT_LINE_TERMINATOR = u8("\n\n");
@@ -612,7 +664,7 @@ Multiverse::Node::Node (unique_ptr<Listener> &&listener, Node *primeParentNode, 
   DW(, "created new Node with sig of hash ", this->signature.hashFast());
 }
 
-Signature Multiverse::createSignature (const Vm &vm, const Rangeset &ignoredByteRangeset) {
+Signature Multiverse::Node::createSignature (const Vm &vm, const Rangeset &ignoredByteRangeset) {
   DS();
   DPRE(vm.isAlive());
 
@@ -621,7 +673,7 @@ Signature Multiverse::createSignature (const Vm &vm, const Rangeset &ignoredByte
   const zbyte *mem = vm.getDynamicMemory();
   const zbyte *initialMem = vm.getInitialDynamicMemory();
   Signature::Writer writer(signature);
-  size_t ec = 0, ms = 0;
+  DI(size_t ec = 0, ms = 0;)
   for (const auto &part : ignoredByteRangeset) {
     //DW(, "part has ignored len ",part.setSize," followed by used size ",part.clearSize);
     writer.appendZeroBytes(part.setSize);
@@ -629,13 +681,13 @@ Signature Multiverse::createSignature (const Vm &vm, const Rangeset &ignoredByte
     initialMem += part.setSize;
 
     for (iu16 i = 0; i != part.clearSize; ++i) {
-      // XXXX something like memcmp, but that returns the first point where the two blocks don't match
-      ec += *mem == *initialMem;
+      // TODO something like memcmp, but that returns the first point where the two blocks don't match
+      DI(ec += *mem == *initialMem;)
       writer.appendByte(*mem ^ *initialMem);
       ++mem;
       ++initialMem;
     }
-    ms += part.clearSize;
+    DI(ms += part.clearSize;)
   }
   DA(mem == vm.getDynamicMemory() + vm.getDynamicMemorySize());
   DW(, "unchanged (of the non-ignoreds): ", ec, " / ", ms, " bytes");
@@ -644,7 +696,7 @@ Signature Multiverse::createSignature (const Vm &vm, const Rangeset &ignoredByte
   return signature;
 }
 
-Signature Multiverse::recreateSignature (const Signature &oldSignature, const Rangeset &extraIgnoredByteRangeset) {
+Signature Multiverse::Node::recreateSignature (const Signature &oldSignature, const Rangeset &extraIgnoredByteRangeset) {
   DS();
 
   Signature signature(oldSignature.getSizeHint());
@@ -915,15 +967,19 @@ Multiverse::Node *const &Multiverse::NodeIterator::operator_ind_ () const {
 }
 
 Multiverse::Multiverse (Story &&story, u8string &r_initialOutput, unique_ptr<Listener> &&listener) :
-  deworder(move(story.deworder)), listener(move(listener)),
-  ignoredBytes(initIgnoredBytes(vm)), ignoredByteRangeset(ignoredBytes, vm.getDynamicMemorySize()), rootNode(nullptr)
+  e(move(story), r_initialOutput), listener(move(listener)),
+  ignoredBytes(), rootNode(nullptr)
 {
   DS();
   DPRE(!!this->listener);
 
+  ignoredBytesChanged();
+
+  LocalActionExecutor::ActionResult actionResult = e.getActionResult();
+
   unique_ptr<Node::Listener> nodeListener(this->listener->createNodeListener());
-  this->listener->nodeReached(*this, nodeListener.get(), ActionSet::NON_ID, r_initialOutput, signature, vm);
-  unique_ptr<Node> node(new Node(move(nodeListener), nullptr, hashed(move(signature)), move(state)));
+  this->listener->nodeReached(*this, nodeListener.get(), ActionSet::NON_ID, r_initialOutput, actionResult.signature.get(), actionResult.significantWords);
+  unique_ptr<Node> node(new Node(move(nodeListener), nullptr, move(actionResult.signature), move(actionResult.state)));
   rootNode = node.get();
   nodes.emplace(ref(rootNode->getSignature()), rootNode);
   this->listener->subtreePrimeAncestorsUpdated(*this, rootNode);
@@ -964,7 +1020,7 @@ Multiverse::~Multiverse () noexcept {
 }
 
 const ActionSet &Multiverse::getActionSet () const {
-  return actionSet;
+  return e.getActionSet();
 }
 
 Multiverse::Listener *Multiverse::getListener () const {
@@ -991,6 +1047,10 @@ Multiverse::Node *Multiverse::getRoot () const {
   return rootNode;
 }
 
+void Multiverse::ignoredBytesChanged () {
+  e.setIgnoredByteRangeset(Rangeset(ignoredBytes, e.getDynamicMemorySize()));
+}
+
 Multiverse::Node *Multiverse::collapseNode (
   Node *node, const Rangeset &extraIgnoredByteRangeset,
   unordered_map<reference_wrapper<const HashWrapper<Signature>>, Node *> &r_survivingNodes,
@@ -1009,7 +1069,7 @@ Multiverse::Node *Multiverse::collapseNode (
   }
 
   const HashWrapper<Signature> &prevSignature = node->getSignature();
-  HashWrapper<Signature> signature(recreateSignature(prevSignature.get(), extraIgnoredByteRangeset));
+  HashWrapper<Signature> signature(Node::recreateSignature(prevSignature.get(), extraIgnoredByteRangeset));
   DW(, " this node now has signature ", signature.hashFast());
 
   auto v1 = find(r_survivingNodes, signature);
@@ -1073,7 +1133,7 @@ void Multiverse::save (const char *pathName) {
   Node::Listener *listener = nullptr;
   derefAndProcessNodeListener(listener, s);
 
-  s.process(*const_cast<Bitset *>(vm.getWordSet()));
+  s.process(e.getWordSet());
   s.process(ignoredBytes);
   s.process(outputStringSet);
   s.derefAndProcess(rootNode);
@@ -1089,7 +1149,6 @@ void Multiverse::load (const char *pathName) {
   auto s = Deserialiser<FileInputIterator, FileInputEndIterator>(i, end);
 
   ignoredBytes.clear();
-  ignoredByteRangeset.clear();
   outputStringSet = StringSet<char8_t>();
   rootNode = nullptr;
   for (const auto &e : nodes) {
@@ -1112,10 +1171,10 @@ void Multiverse::load (const char *pathName) {
     Bitset wordSet;
     s.process(wordSet);
     s.process(ignoredBytes);
+    ignoredBytesChanged();
     s.process(outputStringSet);
     s.derefAndProcess(rootNode);
 
-    ignoredByteRangeset = Rangeset(ignoredBytes, vm.getDynamicMemorySize());
     unordered_set<Node *> seenNodes;
     rootNode->forEach([&] (Node *node) -> bool {
       bool emplaced = get<1>(seenNodes.emplace(node));
@@ -1127,7 +1186,7 @@ void Multiverse::load (const char *pathName) {
       return true;
     });
 
-    vm.setWordSet(move(wordSet));
+    e.getWordSet() = move(wordSet);
     // TODO validate result
   } catch (...) {
     nthrow(PlainException(u8("loading failed")));

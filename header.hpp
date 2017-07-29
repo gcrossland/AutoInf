@@ -9,7 +9,7 @@
 ----------------------------------------------------------------------------- */
 struct Story {
   autoinf::Story _; // TODO compose by subclassing instead
-  autofrotz::zword scoreAddr;
+  size_t scoreSignificantWordAddrI;
 };
 
 int main (int argc, char *argv[]);
@@ -56,14 +56,14 @@ class MultiverseMetricsListener : public autoinf::Multiverse::Listener {
 
   prv static const size_t OUTPUTTAGE_CHILD_OUTPUT_PRESKIP;
 
-  prv const autofrotz::zword scoreAddr;
+  prv const size_t scoreSignificantWordAddrI;
   prv bitset::Bitset interestingChildActionWords;
   prv bool interestingChildActionWordsIsDirty;
 
-  pub MultiverseMetricsListener (autofrotz::zword scoreAddr);
+  pub MultiverseMetricsListener (size_t scoreSignificantWordAddrI);
 
-  pub virtual void nodeReached (const autoinf::Multiverse &multiverse, autoinf::Multiverse::Node::Listener *listener, autoinf::ActionSet::Size parentActionId, const core::u8string &output, const autoinf::Signature &signature, const autofrotz::Vm &vm) override;
-  prv void setScoreValue (NodeMetricsListener *listener, const autofrotz::Vm &vm);
+  pub virtual void nodeReached (const autoinf::Multiverse &multiverse, autoinf::Multiverse::Node::Listener *listener, autoinf::ActionSet::Size parentActionId, const core::u8string &output, const autoinf::Signature &signature, const std::vector<autofrotz::zword> &significantWords) override;
+  prv void setScoreValue (NodeMetricsListener *listener, const std::vector<autofrotz::zword> &significantWords);
   prv void setVisitageData (NodeMetricsListener *listener, const core::u8string &output);
   pub virtual void subtreePrimeAncestorsUpdated (const autoinf::Multiverse &multiverse, const autoinf::Multiverse::Node *node) override;
   prv class VisitageChain {
@@ -131,7 +131,7 @@ class MultiverseView : public MultiverseMetricsListener {
   prv bool deadEndnessIsDirty;
   prv bool antiselectednessIsDirty;
 
-  pub MultiverseView (autofrotz::zword scoreAddr);
+  pub MultiverseView (size_t scoreSignificantWordAddrI);
 
   pub virtual std::tuple<void *, size_t> deduceNodeListenerType (autoinf::Multiverse::Node::Listener *listener) override;
   pub virtual std::tuple<autoinf::Multiverse::Node::Listener *, void *, size_t> constructNodeListener () override;
