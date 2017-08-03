@@ -13,5 +13,6 @@ env.InVariantDir(env['oDir'], ".", lambda env: env.LibAndApp('autoinf', 0, -1, (
   ('core', 0, 0),
   ('bitset', 0, 0),
   ('autofrotz', 0, 0),
-  ('iterators', 0, 0)
+  ('iterators', 0, 0),
+  ('io', 0, 0)
 )))

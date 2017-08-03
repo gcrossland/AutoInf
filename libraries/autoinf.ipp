@@ -3,7 +3,6 @@
 #include <future>
 #include <utility>
 #include <unordered_set>
-#include <cstring>
 
 namespace autoinf {
 
@@ -53,44 +52,13 @@ using std::equal;
 using core::offset;
 using ::operator+;
 using iterators::RevaluedIterator;
+using io::file::FileStream;
 
 /* -----------------------------------------------------------------------------
 ----------------------------------------------------------------------------- */
 
 
 // XXXX move this lot to somewhere more core!!
-
-template<typename _F> class Finally {
-  prv _F functor;
-  prv bool live;
-
-  pub Finally (_F &&functor) : functor(move(functor)), live(true) {
-  }
-
-  Finally (const Finally &) = delete;
-
-  Finally &operator= (const Finally &) = delete;
-
-  pub Finally (Finally &&o) : functor(move(o.functor)), live(o.live) {
-    o.live = false;
-  }
-
-  Finally &operator= (Finally &&) = delete;
-
-  pub ~Finally () noexcept {
-    if (live) {
-      try {
-        functor();
-      } catch (...) {
-        // XXXX
-      }
-    }
-  }
-};
-
-template<typename _F> Finally<_F> finally (_F &&functor) {
-  return Finally<_F>(move(functor));
-}
 
 template<typename Key, typename T, typename Hash, typename KeyEqual, typename Allocator, typename Key_> const T *find (const unordered_map<Key, T, Hash, KeyEqual, Allocator> &map, const Key_ &key) {
   auto e = map.find(key);
@@ -510,7 +478,7 @@ template<typename _InputIterator, typename _InputEndIterator> template<typename 
   std::is_convertible<_WalkingFunctor, std::function<void (_T *, void *, SerialiserBase::SubtypeId, Deserialiser<_InputIterator, _InputEndIterator> &)>>::value
 )> void Deserialiser<_InputIterator, _InputEndIterator>::derefAndProcess (unique_ptr<_T> &o, const _TypeDeductionFunctor &deduceReferentType, const _ConstructionFunctor &constructReferent, const _WalkingFunctor &walkReferent) {
   _T *p = nullptr;
-  auto _ = finally([&] () {
+  finally([&] () {
     o.reset(p);
   });
   this->derefAndProcess(p, deduceReferentType, constructReferent, walkReferent);
@@ -546,7 +514,7 @@ template<typename _InputIterator, typename _InputEndIterator> template<typename 
 
 template<typename _InputIterator, typename _InputEndIterator> template<typename _T> void Deserialiser<_InputIterator, _InputEndIterator>::derefAndProcess (unique_ptr<_T> &o) {
   _T *p = nullptr;
-  auto _ = finally([&] () {
+  finally([&] () {
     o.reset(p);
   });
   this->derefAndProcess(p);
@@ -571,7 +539,7 @@ template<typename _InputIterator, typename _InputEndIterator> template<typename 
 
 template<typename _InputIterator, typename _InputEndIterator> template<typename _T> void Deserialiser<_InputIterator, _InputEndIterator>::derefAndProcess (unique_ptr<_T []> &o, size_t count) {
   _T *p = nullptr;
-  auto _ = finally([&] () {
+  finally([&] () {
     o.reset(p);
   });  this->derefAndProcess(p, count);
 }
@@ -748,7 +716,7 @@ template<typename _c, typename _Size> template<typename _Walker> void StringSet<
     DPRE(Key::list == nullptr);
     Key::list = &list;
     DI(
-      auto _ = finally([] () {
+      finally([] () {
         Key::list = nullptr;
       });
     )
@@ -770,7 +738,7 @@ template<typename _c, typename _Size> _Size StringSet<_c, _Size>::push (const _c
   Key::proposedBegin = begin;
   Key::proposedEnd = end;
   DI(
-    auto _ = finally([] () {
+    finally([] () {
       Key::list = nullptr;
       Key::proposedBegin = nullptr;
       Key::proposedEnd = nullptr;
@@ -876,7 +844,7 @@ template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd)
 
   packaged_task<void ()> dispatcher([&] () {
     DS();
-    auto _ = finally([&] () {
+    finally([&] () {
       DS();
       DW(, "adding done result to queue");
       unique_lock<mutex> l(resultQueueLock);
@@ -912,7 +880,7 @@ template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd)
   });
   auto dispatcherFuture = dispatcher.get_future();
   thread dispatcherThread(move(dispatcher));
-  auto _ = finally([&dispatcherThread] () {
+  finally([&dispatcherThread] () {
     dispatcherThread.join();
   });
 

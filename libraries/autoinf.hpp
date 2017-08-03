@@ -13,6 +13,7 @@
 #include <map>
 #include <unordered_set>
 #include <iterators.hpp>
+#include <io_file.hpp>
 
 namespace autoinf {
 
@@ -20,43 +21,9 @@ namespace autoinf {
 ----------------------------------------------------------------------------- */
 extern DC();
 
-// XXXX move out?
-class FileStream {
-  pub enum Mode {
-    // TODO: more modes (extend CREATEs by doing two fopen()s?)
-    READ_EXISTING,
-    READ_WRITE_EXISTING,
-    READ_WRITE_RECREATE,
-    APPEND_CREATE,
-    READ_APPEND_CREATE
-  };
-
-  prv FILE *h;
-  DI(prv enum State {
-    FREE,
-    READING,
-    WRITING
-  } state;)
-
-  pub FileStream (const char *filename, Mode mode); // TODO sort out filename
-  FileStream (const FileStream &) = delete;
-  FileStream &operator= (const FileStream &) = delete;
-  pub FileStream (FileStream &&) noexcept;
-  pub FileStream &operator= (FileStream &&) noexcept;
-  pub ~FileStream ();
-
-  pub long tell () const;
-  prv void seek (long offset, int origin);
-  pub void seek (long offset);
-  pub void seekToEnd ();
-  pub void sync ();
-  pub size_t read (iu8f *b, size_t s);
-  pub void write (iu8f *b, size_t s);
-};
-
-typedef iterators::InputStreamIterator<FileStream> FileInputIterator;
-typedef iterators::InputStreamEndIterator<FileStream> FileInputEndIterator;
-typedef iterators::OutputStreamIterator<FileStream> FileOutputIterator;
+typedef iterators::InputStreamIterator<io::file::FileStream> FileInputIterator;
+typedef iterators::InputStreamEndIterator<io::file::FileStream> FileInputEndIterator;
+typedef iterators::OutputStreamIterator<io::file::FileStream> FileOutputIterator;
 
 class SerialiserBase {
   prt typedef size_t id;
@@ -536,8 +503,8 @@ class Multiverse {
     std::unordered_map<Node *, Node *> &r_nodeCollapseTargets,
     std::unordered_map<Node *, core::HashWrapper<Signature>> &r_survivingNodePrevSignatures
   );
-  pub void save (const char *pathName);
-  pub void load (const char *pathName);
+  pub void save (const core::u8string &pathName);
+  pub void load (const core::u8string &pathName);
   prv template<typename _Walker> void derefAndProcessNodeListener (Node::Listener *&listener, _Walker &w);
 
   pub class Listener {

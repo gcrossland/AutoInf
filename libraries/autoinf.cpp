@@ -8,138 +8,6 @@ namespace autoinf {
 ----------------------------------------------------------------------------- */
 DC();
 
-u8string createStrerror (int errnum, const char8_t *prefix = u8(" ("), const char8_t *suffix = u8(")")) {
-  u8string msg;
-  if (errnum) {
-    char b[1024];
-    // TODO handle text properly (encoding, initial letter capitalisation)
-    // TODO transplant this and core::createExceptionMessage() to somewhere after local encoding handling (u8main, setlocale calling etc.)
-    strerror_r(errnum, b, sizeof(b) / sizeof(*b));
-
-    msg += u8(" (");
-    msg += reinterpret_cast<char8_t *>(b);
-    msg += u8(")");
-  }
-  return msg;
-}
-
-FileStream::FileStream (const char *filename, Mode mode) {
-  const char *m;
-  switch (mode) {
-    case READ_EXISTING:
-      m = "rb";
-      break;
-    case READ_WRITE_EXISTING:
-      m = "r+b";
-      break;
-    case READ_WRITE_RECREATE:
-      m = "w+b";
-      break;
-    case APPEND_CREATE:
-      m = "ab";
-      break;
-    case READ_APPEND_CREATE:
-      m = "a+b";
-      break;
-    default:
-      DPRE(false);
-      m = "";
-  }
-
-  errno = 0;
-  h = fopen(filename, m);
-  if (!h) {
-    throw PlainException(u8string(u8("failed to open '")) + reinterpret_cast<const char8_t *>(filename) + u8("'") + createStrerror(errno));
-  }
-  DI(state = FREE;)
-
-  setbuf(h, NULL);
-}
-
-FileStream::FileStream (FileStream &&o) noexcept {
-  *this = move(o);
-}
-
-FileStream &FileStream::operator= (FileStream &&o) noexcept {
-  if (this != &o) {
-    h = o.h;
-    o.h = nullptr;
-    DI(state = o.state;)
-  }
-  return *this;
-}
-
-FileStream::~FileStream () {
-  if (h) {
-    fclose(h);
-  }
-}
-
-long FileStream::tell () const {
-  long offset = ftell(h);
-  if (offset == -1) {
-    throw PlainException(u8string(u8("failed to get file pos")) + createStrerror(errno));
-  }
-  return offset;
-}
-
-void FileStream::seek (long offset, int origin) {
-  errno = 0;
-  int r = fseek(h, offset, origin);
-  if (r != 0) {
-    throw PlainException(u8string(u8("failed to set file pos")) + createStrerror(errno));
-  }
-  DI(state = FREE;)
-}
-
-void FileStream::seek (long offset) {
-  seek(offset, SEEK_SET);
-}
-
-void FileStream::seekToEnd () {
-  seek(0, SEEK_END);
-}
-
-void FileStream::sync () {
-  // TODO how does this perform for streams?
-  seek(0, SEEK_CUR);
-}
-
-size_t FileStream::read (iu8f *b, size_t s) {
-  DPRE(state == FREE || state == READING);
-  DPRE(s < numeric_limits<size_t>::max());
-  if (s == 0) {
-    return 0;
-  }
-
-  DI(state = READING;)
-  errno = 0;
-  size_t outSize = fread(b, 1, s, h);
-  if (outSize == 0) {
-    if (feof(h)) {
-      return numeric_limits<size_t>::max();
-    }
-    if (ferror(h)) {
-      throw PlainException(u8string(u8("failed to read from file")) + createStrerror(errno));
-    }
-
-    // Er... we didn't manage to read any bytes, but there's apparently no problem.
-    return read(b, s);
-  }
-
-  return outSize;
-}
-
-void FileStream::write (iu8f *b, size_t s) {
-  DPRE(state == FREE || state == WRITING);
-  DI(state = WRITING;)
-  errno = 0;
-  size_t outSize = fwrite(b, 1, s, h);
-  if (outSize != s) {
-    throw PlainException(u8string(u8("failed to write to file")) + createStrerror(errno));
-  }
-}
-
 constexpr SerialiserBase::id SerialiserBase::NON_ID;
 constexpr SerialiserBase::id SerialiserBase::NULL_ID;
 
@@ -550,7 +418,7 @@ void LocalActionExecutor::doAction (Vm &r_vm, const u8string &input, u8string &r
 
 void LocalActionExecutor::doSaveAction (State &r_state) {
   vm.setSaveState(&r_state);
-  auto _ = finally([&] () {
+  finally([&] () {
     vm.setSaveState(nullptr);
   });
 
@@ -564,7 +432,7 @@ void LocalActionExecutor::doSaveAction (State &r_state) {
 
 void LocalActionExecutor::doRestoreAction (const State &state) {
   vm.setRestoreState(&state);
-  auto _ = finally([&] () {
+  finally([&] () {
     vm.setRestoreState(nullptr);
   });
 
@@ -1116,7 +984,7 @@ Multiverse::Node *Multiverse::collapseNode (
   }
 }
 
-void Multiverse::save (const char *pathName) {
+void Multiverse::save (const u8string &pathName) {
   DS();
   FileStream h(pathName, FileStream::READ_WRITE_RECREATE);
   FileOutputIterator i(h);
@@ -1141,7 +1009,7 @@ void Multiverse::save (const char *pathName) {
   i.flushToStream();
 }
 
-void Multiverse::load (const char *pathName) {
+void Multiverse::load (const u8string &pathName) {
   DS();
   FileStream h(pathName, FileStream::READ_EXISTING);
   FileInputIterator i(h);

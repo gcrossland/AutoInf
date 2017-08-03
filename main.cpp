@@ -36,7 +36,6 @@ using autofrotz::zbyte;
 using autoinf::find;
 using autoinf::contains;
 using std::fill;
-using autoinf::finally;
 using std::thread;
 using std::future_status;
 using Value = NodeMetricsListener::Value;
@@ -819,10 +818,10 @@ bool runCommandLine (Multiverse &multiverse, const u8string &in, u8string &messa
       view->multiverseChanged(multiverse);
     } else if (line.size() > 2 && (line[0] == u8("E")[0] || line[0] == u8("e")[0]) && line[1] == u8("-")[0]) {
       u8string name(line.data() + 2, line.data() + line.size());
-      multiverse.save(reinterpret_cast<const char *>(name.c_str()));
+      multiverse.save(name);
     } else if (line.size() > 2 && (line[0] == u8("O")[0] || line[0] == u8("o")[0]) && line[1] == u8("-")[0]) {
       u8string name(line.data() + 2, line.data() + line.size());
-      multiverse.load(reinterpret_cast<const char *>(name.c_str()));
+      multiverse.load(name);
       view->multiverseChanged(multiverse);
     } else {
       const char8_t *numBegin = line.data();
@@ -891,7 +890,7 @@ void updateMultiverseDisplay (Multiverse &multiverse, const char *outPathName, c
         throw PlainException(u8("unable to open output file"));
       }
     }
-    auto _ = finally([&] {
+    finally([&] {
       if (outPathName) {
         fclose(out);
       }
