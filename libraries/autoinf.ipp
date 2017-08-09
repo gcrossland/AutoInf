@@ -59,6 +59,7 @@ using io::socket::TcpSocketStream;
 using iterators::OutputStreamIterator;
 using iterators::InputStreamIterator;
 using iterators::InputStreamEndIterator;
+using std::future;
 
 /* -----------------------------------------------------------------------------
 ----------------------------------------------------------------------------- */
@@ -878,81 +879,161 @@ template<typename _F, iff(std::is_convertible<_F, std::function<bool (Multiverse
 
 template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd) {
   DS();
-  ActionExecutor *executor;
-  if (executors.empty()) {
-    executor = &e;
-  } else {
-    executor = executors.front().get();
+  size_t processableNodeCount = 0;
+  for (auto i = nodesBegin; i != nodesEnd; ++i) {
+    Node *node = *i;
+    processableNodeCount += !!node->getState();
+  }
+  DW(, "processing ", processableNodeCount, " nodes (out of ", offset(nodesBegin, nodesEnd), ")");
+  if (processableNodeCount == 0) {
+    return;
   }
 
-  size_t nodeCount = offset(nodesBegin, nodesEnd);
-  deque<tuple<Node *, vector<LocalActionExecutor::ActionResult>>> resultQueue;
-  mutex resultQueueLock;
-  condition_variable resultQueueCondVar;
-
-  packaged_task<void ()> dispatcher([&] () {
-    DS();
-    finally([&] () {
-      DS();
-      DW(, "adding done result to queue");
-      unique_lock<mutex> l(resultQueueLock);
-      resultQueue.emplace_back(nullptr, vector<LocalActionExecutor::ActionResult>());
-      resultQueueCondVar.notify_one();
-      DW(, "done adding done result to queue");
-    });
-
-    if (executor != &e) {
-      executor->clearWordSet();
-      executor->setIgnoredByteRangeset(e.getIgnoredByteRangeset());
+  size_t executorCount = min(this->executors.size(), processableNodeCount);
+  ActionExecutor *executors[executorCount == 0 ? 1 : executorCount];
+  if (executorCount == 0) {
+    executorCount = 1;
+    executors[0] = &e;
+  } else {
+    for (size_t i = 0; i != executorCount; ++i) {
+      executors[i] = this->executors[i].get();
     }
+  }
+  size_t executorPerformanceRangeFactor = 3;
 
-    vector<LocalActionExecutor::ActionResult> results;
-    Bitset extraWordSet;
-    for (; nodesBegin != nodesEnd; ++nodesBegin) {
-      DW(, "looking at the next node:");
-      DS();
-      Node *parentNode = *nodesBegin;
-      DW(, "node has sig of hash ", parentNode->getSignature().hashFast(), " and ", parentNode->getChildrenSize(), " children");
-      const State *parentState = parentNode->getState();
-      if (!parentState) {
-        DW(, "  node has already been processed, so skipping");
-        continue;
+  typedef tuple<Node *, vector<ActionExecutor::ActionResult>, bool> ResultSet;
+  vector<vector<ActionExecutor::ActionResult>> pool;
+  pool.resize(executorCount * executorPerformanceRangeFactor);
+  DW(, "the pool has a peak of ", pool.size(), " entries");
+  deque<ResultSet> resultSetQueue;
+  mutex lock;
+  condition_variable poolReadyQueue;
+  condition_variable resultSetChangeQueue;
+
+  auto startProcessingNode = [&] () -> ResultSet * {
+    DS();
+    unique_lock<mutex> l(lock);
+
+    DW(, "getting a pool result vector...");
+    poolReadyQueue.wait(l, [&] () {
+      return !pool.empty();
+    });
+    DW(, "got a pool result vector! (", pool.size() - 1, " remaining)");
+    auto results = move(pool.back());
+    DA(results.empty());
+    pool.pop_back();
+
+    Node *node;
+    do {
+      if (nodesBegin == nodesEnd) {
+        DW(, "there are no more nodes left to dish out; adding terminal entry to result set queue and returning pool entry");
+        if (resultSetQueue.empty() || get<0>(resultSetQueue.back())) {
+          resultSetQueue.emplace_back(nullptr, vector<ActionExecutor::ActionResult>(), true);
+        }
+        pool.emplace_back(move(results));
+        l.unlock();
+        resultSetChangeQueue.notify_one();
+        poolReadyQueue.notify_one();
+        return nullptr;
       }
-      DA(parentNode->getChildrenSize() == 0);
+      node = *(nodesBegin++);
+    } while (!node->getState());
+    DW(, "next unprocessed node is that with sig of hash ", node->getSignature().hashFast(), "; adding corresponding entry to result set queue");
+    resultSetQueue.emplace_back(node, move(results), false);
+    return &resultSetQueue.back();
+  };
+  auto finishProcessingNode = [&] (ResultSet *resultSet) {
+    DS();
+    unique_lock<mutex> l(lock);
 
-      results.clear();
-      executor->processNode(results, executor != &e ? &extraWordSet : nullptr, parentNode->getSignature(), *parentState);
+    get<2>(*resultSet) = true;
+    DW(, "marked result set queue entry as complete");
+    l.unlock();
+    resultSetChangeQueue.notify_one();
+  };
+  auto getNextResultSet = [&] () -> ResultSet {
+    DS();
+    unique_lock<mutex> l(lock);
+
+    DW(, "waiting to get a complete result set...");
+    resultSetChangeQueue.wait(l, [&] () {
+      return !resultSetQueue.empty() && get<2>(resultSetQueue.front());
+    });
+    ResultSet resultSet = move(resultSetQueue.front());
+    resultSetQueue.pop_front();
+    DW(, "got a complete result set - from node with sig of hash ", get<0>(resultSet) ? get<0>(resultSet)->getSignature().hashFast() : 0xDEADDEAD);
+    return resultSet;
+  };
+  auto retireResultSet = [&] (ResultSet &&resultSet) {
+    DS();
+    unique_lock<mutex> l(lock);
+
+    auto results = move(get<1>(resultSet));
+    results.clear();
+    pool.emplace_back(move(results));
+    DW(, "returned pool entry");
+    l.unlock();
+    poolReadyQueue.notify_one();
+  };
+
+  vector<future<void>> dispatcherFutures;
+  dispatcherFutures.reserve(executorCount);
+  vector<thread> dispatcherThreads;
+  dispatcherThreads.reserve(executorCount);
+  finally([&] () {
+    for (auto &dispatcherThread : dispatcherThreads) {
+      dispatcherThread.join();
+    }
+  });
+  for (size_t i = 0; i != executorCount; ++i) {
+    ActionExecutor *executor = executors[i];
+    packaged_task<void ()> dispatcher([&, executor] () {
+      DS();
 
       if (executor != &e) {
-        e.getWordSet() |= move(extraWordSet);
+        executor->clearWordSet();
+        executor->setIgnoredByteRangeset(e.getIgnoredByteRangeset());
+      }
+      Bitset cumulativeExtraWordSet;
+
+      Bitset extraWordSet;
+      while (true) {
+        ResultSet *resultSet = startProcessingNode();
+        if (!resultSet) {
+          break;
+        }
+
+        Node *parentNode = get<0>(*resultSet);
+        DW(, "node has sig of hash ", parentNode->getSignature().hashFast(), " and ", parentNode->getChildrenSize(), " children");
+        const State *parentState = parentNode->getState();
+        DA(!!parentState);
+        DA(parentNode->getChildrenSize() == 0);
+        auto &results = get<1>(*resultSet);
+        DA(results.empty());
+
+        executor->processNode(results, executor != &e ? &extraWordSet : nullptr, parentNode->getSignature(), *parentState);
+        DW(, "finished processing node with sig of hash ", parentNode->getSignature().hashFast(), " (with ", results.size(), " results)");
+
+        if (executor != &e) {
+          cumulativeExtraWordSet |= extraWordSet;
+        }
+
+        finishProcessingNode(resultSet);
       }
 
-      {
-        DW(, "adding the result to queue");
-        unique_lock<mutex> l(resultQueueLock);
-        resultQueue.emplace_back(parentNode, results);
-        resultQueueCondVar.notify_one();
-        DW(, "done adding the result to queue");
+      if (executor != &e) {
+        unique_lock<mutex> l(lock);
+        e.getWordSet() |= move(cumulativeExtraWordSet);
       }
-    }
-  });
-  auto dispatcherFuture = dispatcher.get_future();
-  thread dispatcherThread(move(dispatcher));
-  finally([&dispatcherThread] () {
-    dispatcherThread.join();
-  });
+    });
+    dispatcherFutures.emplace_back(dispatcher.get_future());
+    dispatcherThreads.emplace_back(move(dispatcher));
+  }
 
   size_t processedNodeCount = 0;
   while (true) {
-    unique_lock<mutex> l(resultQueueLock);
-    resultQueueCondVar.wait(l, [&] () {
-      return !resultQueue.empty();
-    });
     DW(, "M getting the next node's results:");
-    auto rs = move(resultQueue.front());
-    resultQueue.pop_front();
-    l.unlock();
-
+    ResultSet rs = getNextResultSet();
     Node *parentNode = get<0>(rs);
     if (!parentNode) {
       DW(, "M it's the end of the queue!");
@@ -989,10 +1070,14 @@ template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd)
 
     parentNode->clearState();
     parentNode->childrenUpdated();
-    listener->nodeProcessed(*this, parentNode, ++processedNodeCount, nodeCount);
+    listener->nodeProcessed(*this, parentNode, ++processedNodeCount, processableNodeCount);
+    retireResultSet(move(rs));
   }
+  DA(processedNodeCount == processableNodeCount);
 
-  dispatcherFuture.get();
+  for (auto &dispatcherFuture : dispatcherFutures) {
+    dispatcherFuture.get();
+  }
 
   listener->nodesProcessed(*this);
 }

@@ -859,6 +859,7 @@ bool runCommandLine (Multiverse &multiverse, const u8string &in, u8string &messa
             t.emplace_back(n);
           }
         }
+        view->nodeProcessingStarting();
         multiverse.processNodes(t.begin(), t.end());
       }
       view->multiverseChanged(multiverse);
@@ -1409,42 +1410,41 @@ void MultiverseView::walkNodeListener (Node::Listener *listener, Deserialiser<Fi
   static_cast<NodeView *>(listener)->beWalked(s);
 }
 
+unique_ptr<Node::Listener> MultiverseView::createNodeListener () {
+  return unique_ptr<Node::Listener>(new NodeView());
+}
+
+void MultiverseView::nodeProcessingStarting () {
+  nodeProcessingStarted = prevNodeProcessingProgressReport = time(NULL);
+  prevNodeProcessingProgressReportSize = 0;
+}
+
 void MultiverseView::nodeProcessed (const Multiverse &multiverse, const Node *node, size_t processedCount, size_t totalCount) {
   MultiverseMetricsListener::nodeProcessed(multiverse, node, processedCount, totalCount);
 
   time_t now = time(NULL);
-  if (processedCount == 1) {
-    firstNodeProcessed = prevNodeProcessingProgressReport = now;
-    prevNodeProcessingProgressReportSize = 0;
+
+  int reportSize = -1;
+  if (processedCount == totalCount) {
+    reportSize = 0;
   } else {
-    int reportSize = -1;
-
-    if (processedCount == totalCount) {
-      reportSize = 0;
-    } else {
-      DA(processedCount > 1);
-      DA(processedCount <= totalCount);
-      if (difftime(now, prevNodeProcessingProgressReport) > 2) {
-        f64 d = difftime(now, firstNodeProcessed);
-        auto remaining = (d / (processedCount - 1)) * (totalCount - processedCount);
-        reportSize = printf("Processed %u (%u%%) of %u nodes (%d secs remaining)", static_cast<iu>(processedCount), static_cast<iu>((100 * processedCount) / totalCount), static_cast<iu>(totalCount), static_cast<is>(ceil(remaining / 10)) * 10);
-      }
-    }
-
-    if (reportSize >= 0) {
-      for (int i = reportSize; i < prevNodeProcessingProgressReportSize; ++i) {
-        fputc(' ', stdout);
-      }
-      prevNodeProcessingProgressReport = now;
-      prevNodeProcessingProgressReportSize = reportSize;
-      fputc('\r', stdout);
-      fflush(stdout);
+    DA(processedCount <= totalCount);
+    if (difftime(now, prevNodeProcessingProgressReport) > 2) {
+      f64 d = difftime(now, nodeProcessingStarted);
+      auto remaining = (d / processedCount) * (totalCount - processedCount);
+      reportSize = printf("Processed %u (%u%%) of %u nodes (%d secs remaining)", static_cast<iu>(processedCount), static_cast<iu>((100 * processedCount) / totalCount), static_cast<iu>(totalCount), static_cast<is>(ceil(remaining / 10)) * 10);
     }
   }
-}
 
-unique_ptr<Node::Listener> MultiverseView::createNodeListener () {
-  return unique_ptr<Node::Listener>(new NodeView());
+  if (reportSize >= 0) {
+    for (int i = reportSize; i < prevNodeProcessingProgressReportSize; ++i) {
+      fputc(' ', stdout);
+    }
+    prevNodeProcessingProgressReport = now;
+    prevNodeProcessingProgressReportSize = reportSize;
+    fputc('\r', stdout);
+    fflush(stdout);
+  }
 }
 
 void MultiverseView::multiverseChanged (const Multiverse &multiverse) {

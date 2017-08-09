@@ -119,7 +119,7 @@ class NodeView : public NodeMetricsListener {
 };
 
 class MultiverseView : public MultiverseMetricsListener {
-  pub time_t firstNodeProcessed;
+  pub time_t nodeProcessingStarted;
   pub time_t prevNodeProcessingProgressReport;
   pub int prevNodeProcessingProgressReportSize;
   pub std::vector<autoinf::Multiverse::Node *> nodesByIndex;
@@ -140,6 +140,7 @@ class MultiverseView : public MultiverseMetricsListener {
   pub virtual void walkNodeListener (autoinf::Multiverse::Node::Listener *listener, autoinf::Deserialiser<autoinf::FileInputIterator, autoinf::FileInputEndIterator> &s) override;
 
   pub virtual std::unique_ptr<autoinf::Multiverse::Node::Listener> createNodeListener () override;
+  pub void nodeProcessingStarting ();
   pub virtual void nodeProcessed (const autoinf::Multiverse &multiverse, const autoinf::Multiverse::Node *node, size_t processedCount, size_t totalCount) override;
   pub void multiverseChanged (const autoinf::Multiverse &multiverse);
   pub void selectionChanged ();
