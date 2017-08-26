@@ -7,6 +7,7 @@ namespace autoinf {
 /* -----------------------------------------------------------------------------
 ----------------------------------------------------------------------------- */
 DC();
+DC(c);
 
 constexpr SerialiserBase::id SerialiserBase::NON_ID;
 constexpr SerialiserBase::id SerialiserBase::NULL_ID;
@@ -371,7 +372,7 @@ Rangeset::Rangeset (const Bitset &bitset, iu16 rangesEnd) : vector() {
 Rangeset::Rangeset () : vector() {
 }
 
-LocalActionExecutor::ActionResult::ActionResult (ActionSet::Size id, u8string output, HashWrapper<Signature> signature, State state, vector<zword> significantWords) :
+ActionExecutor::ActionResult::ActionResult (ActionSet::Size id, u8string output, HashWrapper<Signature> signature, State state, vector<zword> significantWords) :
   id(id), output(move(output)), signature(move(signature)), state(move(state)), significantWords(move(significantWords))
 {
 }
@@ -395,8 +396,16 @@ Bitset &LocalActionExecutor::getWordSet () noexcept {
   return *vm.getWordSet();
 }
 
+void LocalActionExecutor::clearWordSet () noexcept {
+  return getWordSet().clear();
+}
+
 const ActionSet &LocalActionExecutor::getActionSet () const noexcept {
   return actionSet;
+}
+
+const Rangeset &LocalActionExecutor::getIgnoredByteRangeset () const noexcept {
+  return ignoredByteRangeset;
 }
 
 void LocalActionExecutor::setIgnoredByteRangeset (Rangeset ignoredByteRangeset) noexcept {
@@ -458,7 +467,7 @@ vector<zword> LocalActionExecutor::getSignificantWords () const {
   return significantWords;
 }
 
-LocalActionExecutor::ActionResult LocalActionExecutor::getActionResult () {
+ActionExecutor::ActionResult LocalActionExecutor::getActionResult () {
   HashWrapper<Signature> signature(Multiverse::Node::createSignature(vm, ignoredByteRangeset));
   vector<zword> significantWords = getSignificantWords();
   State state;
@@ -466,8 +475,13 @@ LocalActionExecutor::ActionResult LocalActionExecutor::getActionResult () {
   return ActionResult(0, u8string(), move(signature), move(state), move(significantWords));
 }
 
-void LocalActionExecutor::processNode (vector<ActionResult> &r_results, const HashWrapper<Signature> &parentSignature, const State &parentState) {
+void LocalActionExecutor::processNode (vector<ActionResult> &r_results, bitset::Bitset *extraWordSet, const HashWrapper<Signature> &parentSignature, const State &parentState) {
   DS();
+
+  Bitset initialWordSet;
+  if (extraWordSet) {
+    initialWordSet = getWordSet();
+  }
 
   u8string input;
   u8string output;
@@ -517,6 +531,240 @@ void LocalActionExecutor::processNode (vector<ActionResult> &r_results, const Ha
     }
 
     r_results.emplace_back(id, output, move(signature), state, move(significantWords));
+  }
+
+  if (extraWordSet) {
+    *extraWordSet = Bitset::andNot(getWordSet(), move(initialWordSet));
+    extraWordSet->compact(); // TODO automatically compact after operations? (but we need to be clear on when that can happen, for the *Existing*()s' sake)
+  }
+}
+
+string<iu8f> RemoteActionExecutor::getBuildId () {
+  const char *raw = __TIMESTAMP__; // DODGY close enough
+  return string<iu8f>(reinterpret_cast<const iu8f *>(raw), strlen(raw));
+}
+
+RemoteActionExecutor::RemoteActionExecutor (const TcpSocketAddress &addr) : stream(addr, true), out(stream, BUFFER_SIZE), in(stream, BUFFER_SIZE) {
+  const iu8f ID = 0;
+
+  beginRequest(ID);
+  Serialiser<OutputStreamIterator<TcpSocketStream>> s(out);
+  string<iu8f> buildId = getBuildId();
+  s.process(buildId);
+  endRequest(ID);
+
+  beginResponse(ID);
+  check(1, read());
+  endResponse(ID);
+}
+
+void RemoteActionExecutor::beginRequest (iu8f requestId) {
+  DW(c, "beginRequest ", requestId);
+  *(out++) = requestId;
+}
+
+void RemoteActionExecutor::endRequest (iu8f requestId) {
+  DW(c, "endRequest ", requestId);
+  requestId = ~requestId;
+  *(out++) = requestId;
+
+  out.flushToStream();
+}
+
+iu8f RemoteActionExecutor::read () {
+  if (in == InputStreamEndIterator<TcpSocketStream>()) {
+    throw PlainException(u8("received incomplete data from server"));
+  }
+  return *(in++);
+}
+
+void RemoteActionExecutor::check (iu expected, iu received) {
+  if (expected != received) {
+    throw PlainException(u8("received incorrect data from server"));
+  }
+}
+
+void RemoteActionExecutor::beginResponse (iu8f requestId) {
+  DW(c, "beginResponse ", requestId);
+  check(requestId, read());
+}
+
+void RemoteActionExecutor::endResponse (iu8f requestId) {
+  DW(c, "endResponse ", requestId);
+  requestId = ~requestId;
+  check(requestId, read());
+}
+
+void RemoteActionExecutor::clearWordSet () {
+  const iu8f ID = 1;
+
+  beginRequest(ID);
+  endRequest(ID);
+
+  beginResponse(ID);
+  endResponse(ID);
+}
+
+void RemoteActionExecutor::setIgnoredByteRangeset (Rangeset ignoredByteRangeset) {
+  const iu8f ID = 2;
+
+  beginRequest(ID);
+  Serialiser<OutputStreamIterator<TcpSocketStream>> s(out);
+  s.process(ignoredByteRangeset);
+  endRequest(ID);
+
+  beginResponse(ID);
+  endResponse(ID);
+}
+
+void RemoteActionExecutor::processNode (vector<ActionResult> &r_results, Bitset *extraWordSet, const HashWrapper<Signature> &parentSignature, const State &parentState) {
+  const iu8f ID = 3;
+
+  beginRequest(ID);
+  Serialiser<OutputStreamIterator<TcpSocketStream>> s(out);
+  bool hasExtraWordSet = !!extraWordSet;
+  s.process(hasExtraWordSet);
+  s.process(const_cast<HashWrapper<Signature> &>(parentSignature));
+  s.process(const_cast<State &>(parentState)); // TODO sort out const support for read-only Walkers
+  endRequest(ID);
+
+  beginResponse(ID);
+  InputStreamEndIterator<TcpSocketStream> end;
+  Deserialiser<InputStreamIterator<TcpSocketStream>, InputStreamEndIterator<TcpSocketStream>> d(in, end);
+  if (r_results.empty()) {
+    d.process(r_results);
+  } else {
+    thread_local vector<ActionResult> results;
+    d.process(results);
+    for (ActionResult *i = results.data(), *end = i + results.size(); i != end; ++i) {
+      r_results.emplace_back(move(*i));
+    }
+    results.clear();
+  }
+  if (hasExtraWordSet) {
+    d.process(*extraWordSet);
+  }
+  endResponse(ID);
+}
+
+ActionExecutorServer::ActionExecutorServer (ActionExecutor &r_e, const TcpSocketAddress &addr) : r_e(r_e), listeningSocket(addr, 1) {
+}
+
+iu8f ActionExecutorServer::read (InputStreamIterator<TcpSocketStream> &r_in) {
+  if (r_in == InputStreamEndIterator<TcpSocketStream>()) {
+    throw PlainException(u8("received incomplete data from client"));
+  }
+  return *(r_in++);
+}
+
+void ActionExecutorServer::check (iu expected, iu received) {
+  if (expected != received) {
+    throw PlainException(u8("received incorrect data from client"));
+  }
+}
+
+iu8f ActionExecutorServer::beginRequest (InputStreamIterator<TcpSocketStream> &r_in) {
+  DW(c, "beginRequest");
+  if (r_in == InputStreamEndIterator<TcpSocketStream>()) {
+    return numeric_limits<iu8f>::max();
+  }
+  return read(r_in);
+}
+
+void ActionExecutorServer::endRequest (InputStreamIterator<TcpSocketStream> &r_in, iu8f requestId) {
+  DW(c, "endRequest ", requestId);
+  requestId = ~requestId;
+  check(requestId, read(r_in));
+}
+
+void ActionExecutorServer::beginResponse (OutputStreamIterator<TcpSocketStream> &r_out, iu8f requestId) {
+  DW(c, "beginResponse ", requestId);
+  *(r_out++) = requestId;
+}
+
+void ActionExecutorServer::endResponse (OutputStreamIterator<TcpSocketStream> &r_out, iu8f requestId) {
+  DW(c, "endResponse ", requestId);
+  requestId = ~requestId;
+  *(r_out++) = requestId;
+
+  r_out.flushToStream();
+}
+
+void ActionExecutorServer::accept () {
+  TcpSocketStream stream = listeningSocket.accept(true);
+  finally([&] () {
+    stream.close();
+  });
+  InputStreamIterator<TcpSocketStream> in(stream, RemoteActionExecutor::BUFFER_SIZE);
+  InputStreamEndIterator<TcpSocketStream> end;
+  OutputStreamIterator<TcpSocketStream> out(stream, RemoteActionExecutor::BUFFER_SIZE);
+
+  while (true) {
+    iu8f requestId = beginRequest(in);
+    DW(c, "- request is ", requestId);
+    switch (requestId) {
+      case numeric_limits<iu8f>::max():
+        return;
+      case 0: {
+        Deserialiser<InputStreamIterator<TcpSocketStream>, InputStreamEndIterator<TcpSocketStream>> d(in, end);
+        string<iu8f> buildId;
+        d.process(buildId);
+        endRequest(in, requestId);
+
+        bool clientValid = buildId == RemoteActionExecutor::getBuildId();
+
+        beginResponse(out, requestId);
+        *(out++) = clientValid;
+        endResponse(out, requestId);
+
+        if (!clientValid) {
+          return;
+        }
+      } break;
+      case 1: {
+        endRequest(in, requestId);
+
+        r_e.clearWordSet();
+
+        beginResponse(out, requestId);
+        endResponse(out, requestId);
+      } break;
+      case 2: {
+        Deserialiser<InputStreamIterator<TcpSocketStream>, InputStreamEndIterator<TcpSocketStream>> d(in, end);
+        thread_local Rangeset ignoredByteRangeset;
+        d.process(ignoredByteRangeset);
+        endRequest(in, requestId);
+
+        r_e.setIgnoredByteRangeset(ignoredByteRangeset);
+
+        beginResponse(out, requestId);
+        endResponse(out, requestId);
+      } break;
+      case 3: {
+        Deserialiser<InputStreamIterator<TcpSocketStream>, InputStreamEndIterator<TcpSocketStream>> d(in, end);
+        bool hasExtraWordSet;
+        d.process(hasExtraWordSet);
+        thread_local HashWrapper<Signature> parentSignature;
+        d.process(parentSignature);
+        thread_local State parentState;
+        d.process(parentState);
+        endRequest(in, requestId);
+
+        thread_local vector<ActionExecutor::ActionResult> results;
+        results.clear();
+        Bitset extraWordSet;
+        r_e.processNode(results, hasExtraWordSet ? &extraWordSet : nullptr, parentSignature, parentState);
+
+        beginResponse(out, requestId);
+        Serialiser<OutputStreamIterator<TcpSocketStream>> s(out);
+        s.process(results);
+        results.clear();
+        if (hasExtraWordSet) {
+          s.process(extraWordSet);
+        }
+        endResponse(out, requestId);
+      } break;
+    }
   }
 }
 
@@ -843,7 +1091,7 @@ Multiverse::Multiverse (Story &&story, u8string &r_initialOutput, unique_ptr<Lis
 
   ignoredBytesChanged();
 
-  LocalActionExecutor::ActionResult actionResult = e.getActionResult();
+  ActionExecutor::ActionResult actionResult = e.getActionResult();
 
   unique_ptr<Node::Listener> nodeListener(this->listener->createNodeListener());
   this->listener->nodeReached(*this, nodeListener.get(), ActionSet::NON_ID, r_initialOutput, actionResult.signature.get(), actionResult.significantWords);
@@ -917,6 +1165,14 @@ Multiverse::Node *Multiverse::getRoot () const {
 
 void Multiverse::ignoredBytesChanged () {
   e.setIgnoredByteRangeset(Rangeset(ignoredBytes, e.getDynamicMemorySize()));
+}
+
+void Multiverse::addRemoteExecutor (const TcpSocketAddress &addr) {
+  executors.emplace_back(unique_ptr<RemoteActionExecutor>(new RemoteActionExecutor(addr)));
+}
+
+void Multiverse::removeRemoteExecutors () {
+  executors.clear();
 }
 
 Multiverse::Node *Multiverse::collapseNode (

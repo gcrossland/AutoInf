@@ -14,12 +14,14 @@
 #include <unordered_set>
 #include <iterators.hpp>
 #include <io_file.hpp>
+#include <io_socket.hpp>
 
 namespace autoinf {
 
 /* -----------------------------------------------------------------------------
 ----------------------------------------------------------------------------- */
 extern DC();
+extern DC(c);
 
 typedef iterators::InputStreamIterator<io::file::FileStream> FileInputIterator;
 typedef iterators::InputStreamEndIterator<io::file::FileStream> FileInputEndIterator;
@@ -61,12 +63,13 @@ template<typename _OutputIterator> class Serialiser : public SerialiserBase {
   pub void process (is64f &r_value);
   pub void process (core::string<iu8f> &r_value);
   pub void process (core::u8string &r_value);
-  // TODO do we really want custom walking code for each vector? surely we should just call process() for each member
   pub template<typename _T, typename _WalkingFunctor, iff(
     std::is_convertible<_WalkingFunctor, std::function<void (_T &, Serialiser<_OutputIterator> &)>>::value
   )> void process (std::vector<_T> &r_value, const _WalkingFunctor &walkElement);
+  pub template<typename _T> void process (std::vector<_T> &r_value);
   pub void process (bitset::Bitset &r_value);
   pub void process (autofrotz::State &r_value);
+  pub template<typename _Walkable> void process (core::HashWrapper<_Walkable> &r_value);
   pub template<typename _Walkable> void process (_Walkable &r_value);
   prv typedef decltype(allocations) decltype_allocations;
   prv typename decltype_allocations::value_type *findAllocationStart (void *ptr);
@@ -124,10 +127,12 @@ template<typename _InputIterator, typename _InputEndIterator> class Deserialiser
   pub template<typename _T, typename _WalkingFunctor, iff(
     std::is_convertible<_WalkingFunctor, std::function<void (_T &, Deserialiser<_InputIterator, _InputEndIterator> &)>>::value
   )> void process (std::vector<_T> &r_value, const _WalkingFunctor &walkElement);
+  pub template<typename _T> void process (std::vector<_T> &r_value);
   prv template<typename _T, iff(std::is_constructible<_T, Deserialiser<_InputIterator, _InputEndIterator>>::value)> void emplaceBack (std::vector<_T> &r_value);
   prv template<typename _T, iff(!std::is_constructible<_T, Deserialiser<_InputIterator, _InputEndIterator>>::value)> void emplaceBack (std::vector<_T> &r_value);
   pub void process (bitset::Bitset &r_value);
   pub void process (autofrotz::State &r_value);
+  pub template<typename _Walkable> void process (core::HashWrapper<_Walkable> &r_value);
   pub template<typename _Walkable> void process (_Walkable &r_value);
   prv id readAllocationId ();
   pub template<typename _T, typename _TypeDeductionFunctor, typename _ConstructionFunctor, typename _WalkingFunctor, iff(
@@ -370,9 +375,15 @@ struct RangesetPart {
 class Rangeset : public std::vector<RangesetPart> {
   pub Rangeset (const bitset::Bitset &bitset, iu16 size);
   pub Rangeset ();
+
+  pub template<typename _Walker> void beWalked (_Walker &w);
 };
 
-class LocalActionExecutor {
+class ActionExecutor {
+  pub virtual ~ActionExecutor () {};
+
+  pub virtual void clearWordSet () = 0;
+  pub virtual void setIgnoredByteRangeset (Rangeset ignoredByteRangeset) = 0;
   pub struct ActionResult {
     ActionSet::Size id;
     core::u8string output;
@@ -381,8 +392,14 @@ class LocalActionExecutor {
     std::vector<autofrotz::zword> significantWords;
 
     ActionResult (ActionSet::Size id, core::u8string output, core::HashWrapper<Signature> signature, autofrotz::State state, std::vector<autofrotz::zword> significantWords);
-  };
+    template<typename _InputIterator, typename _InputEndIterator> explicit ActionResult (const Deserialiser<_InputIterator, _InputEndIterator> &);
 
+    template<typename _Walker> void beWalked (_Walker &w);
+  };
+  pub virtual void processNode (std::vector<ActionResult> &r_results, bitset::Bitset *extraWordSet, const core::HashWrapper<Signature> &parentSignature, const autofrotz::State &parentState) = 0;
+};
+
+class LocalActionExecutor : public ActionExecutor {
   prv autofrotz::Vm vm;
   prv const std::function<bool (autofrotz::Vm &r_vm)> saver;
   prv const std::function<bool (autofrotz::Vm &r_vm)> restorer;
@@ -395,7 +412,9 @@ class LocalActionExecutor {
 
   pub iu16 getDynamicMemorySize () const noexcept;
   pub bitset::Bitset &getWordSet () noexcept;
+  pub void clearWordSet () noexcept;
   pub const ActionSet &getActionSet () const noexcept;
+  pub const Rangeset &getIgnoredByteRangeset () const noexcept;
   pub void setIgnoredByteRangeset (Rangeset ignoredByteRangeset) noexcept;
   pub static void doAction (autofrotz::Vm &r_vm, core::u8string::const_iterator inputBegin, core::u8string::const_iterator inputEnd, core::u8string &r_output, const char8_t *deathExceptionMsg);
   pub static void doAction (autofrotz::Vm &r_vm, const core::u8string &input, core::u8string &r_output, const char8_t *deathExceptionMsg);
@@ -403,7 +422,46 @@ class LocalActionExecutor {
   prv void doRestoreAction (const autofrotz::State &state);
   prv std::vector<autofrotz::zword> getSignificantWords () const;
   pub ActionResult getActionResult ();
-  pub void processNode (std::vector<ActionResult> &r_results, const core::HashWrapper<Signature> &parentSignature, const autofrotz::State &parentState);
+  pub void processNode (std::vector<ActionResult> &r_results, bitset::Bitset *extraWordSet, const core::HashWrapper<Signature> &parentSignature, const autofrotz::State &parentState);
+};
+
+class RemoteActionExecutor : public ActionExecutor {
+  pub static constexpr size_t BUFFER_SIZE = 65535;
+
+  prv io::socket::TcpSocketStream stream;
+  prv iterators::OutputStreamIterator<io::socket::TcpSocketStream> out;
+  prv iterators::InputStreamIterator<io::socket::TcpSocketStream> in;
+
+  pub static core::string<iu8f> getBuildId ();
+
+  pub RemoteActionExecutor (const io::socket::TcpSocketAddress &addr);
+
+  prv void beginRequest (iu8f requestId);
+  prv void endRequest (iu8f requestId);
+  prv iu8f read ();
+  prv void check (iu expected, iu received);
+  prv void beginResponse (iu8f requestId);
+  prv void endResponse (iu8f requestId);
+
+  pub void clearWordSet ();
+  pub void setIgnoredByteRangeset (Rangeset ignoredByteRangeset);
+  pub void processNode (std::vector<ActionResult> &r_results, bitset::Bitset *extraWordSet, const core::HashWrapper<Signature> &parentSignature, const autofrotz::State &parentState);
+};
+
+class ActionExecutorServer {
+  prv ActionExecutor &r_e;
+  prv io::socket::PassiveTcpSocket listeningSocket;
+
+  pub ActionExecutorServer (ActionExecutor &r_e, const io::socket::TcpSocketAddress &addr);
+
+  prv iu8f read (iterators::InputStreamIterator<io::socket::TcpSocketStream> &r_in);
+  prv void check (iu expected, iu received);
+  prv iu8f beginRequest (iterators::InputStreamIterator<io::socket::TcpSocketStream> &r_in);
+  prv void endRequest (iterators::InputStreamIterator<io::socket::TcpSocketStream> &r_in, iu8f requestId);
+  prv void beginResponse (iterators::OutputStreamIterator<io::socket::TcpSocketStream> &r_out, iu8f requestId);
+  prv void endResponse (iterators::OutputStreamIterator<io::socket::TcpSocketStream> &r_out, iu8f requestId);
+
+  pub void accept ();
 };
 
 class Multiverse {
@@ -477,6 +535,7 @@ class Multiverse {
   prv StringSet<char8_t> outputStringSet;
   prv Node *rootNode;
   prv std::unordered_map<std::reference_wrapper<const core::HashWrapper<Signature>>, Node *> nodes; // XXXX make Node * unique_ptr?
+  prv std::vector<std::unique_ptr<ActionExecutor>> executors;
 
   pub Multiverse (Story &&story, core::u8string &r_initialOutput, std::unique_ptr<Listener> &&listener);
   prv static bitset::Bitset initIgnoredBytes (const autofrotz::Vm &vm);
@@ -494,6 +553,8 @@ class Multiverse {
   pub NodeIterator end () const;
   pub Node *getRoot () const;
   prv void ignoredBytesChanged ();
+  pub void addRemoteExecutor (const io::socket::TcpSocketAddress &addr);
+  pub void removeRemoteExecutors ();
   pub template<typename _I> void processNodes (_I nodesBegin, _I nodesEnd);
   pub template<typename _I> void collapseNodes (_I nodesBegin, _I nodesEnd);
   prv template<typename _I> static bitset::Bitset createExtraIgnoredBytes (const Signature &firstSignature, _I otherSignatureIsBegin, _I otherSignatureIsEnd, LocalActionExecutor &r_e);

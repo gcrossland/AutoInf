@@ -47,6 +47,8 @@ using std::swap;
 using std::unordered_map;
 using core::HashWrapper;
 using core::string;
+using io::socket::TcpSocketAddress;
+using autoinf::ActionExecutorServer;
 
 /* -----------------------------------------------------------------------------
 ----------------------------------------------------------------------------- */
@@ -62,6 +64,7 @@ int main (int argc, char *argv[]) {
     DI(std::shared_ptr<core::debug::Stream> errs(new core::debug::Stream("LOG.TXT"));)
     DOPEN(, errs);
     autoinf::DOPEN(, errs);
+    autoinf::DOPEN(c, errs);
     //autofrotz::DOPEN(, errs);
     //autofrotz::vmlink::DOPEN(, errs);
 
@@ -377,7 +380,8 @@ int main (int argc, char *argv[]) {
     }
     Story story(move(get<1>(*e0)));
 
-    unordered_map<HashWrapper<string<char>>, void (*)(iu argsSize, char **args, Multiverse &multiverse, MultiverseView *view)> modes = {
+    unordered_map<HashWrapper<string<char>>, void (*)(iu argsSize, char **args, Story story)> modes = {
+      {HashWrapper<string<char>>("worker"), runWorker},
       {HashWrapper<string<char>>("cmd"), runCmd},
       {HashWrapper<string<char>>("velocityrun"), runVelocityrun}
     };
@@ -387,12 +391,7 @@ int main (int argc, char *argv[]) {
     }
     auto mode = *e1;
 
-    u8string output;
-    auto scoreSignificantWordAddrI = story.scoreSignificantWordAddrI;
-    Multiverse multiverse(move(story._), output, unique_ptr<Multiverse::Listener>(new MultiverseView(scoreSignificantWordAddrI)));
-    MultiverseView *view = static_cast<MultiverseView *>(multiverse.getListener());
-    view->multiverseChanged(multiverse);
-    (*mode)(static_cast<iu>(argc) - 3, argv + 3, multiverse, view);
+    (*mode)(static_cast<iu>(argc) - 3, argv + 3, move(story));
 
     return 0;
   } catch (exception &e) {
@@ -401,7 +400,40 @@ int main (int argc, char *argv[]) {
   }
 }
 
-void runCmd (iu argsSize, char **args, Multiverse &multiverse, MultiverseView *view) {
+TcpSocketAddress getFirstAddress (const u8string &nodeNameAndPort) {
+  thread_local vector<TcpSocketAddress> addrs;
+  addrs.clear();
+
+  TcpSocketAddress::get(addrs, nodeNameAndPort);
+  if (addrs.empty()) {
+    throw PlainException(u8("failed to get address for '") + nodeNameAndPort + u8("'"));
+  }
+
+  TcpSocketAddress addr = move(addrs.front());
+  addrs.clear();
+  return addr;
+}
+
+void runWorker (iu argsSize, char **args, Story story) {
+  if (argsSize != 1) {
+    throw PlainException(u8("address must be specified"));
+  }
+  TcpSocketAddress addr = getFirstAddress(u8string(reinterpret_cast<char8_t *>(args[0])));
+
+  u8string output;
+  LocalActionExecutor e(move(story._), output);
+  ActionExecutorServer server(e, addr);
+  while (true) {
+    server.accept();
+  }
+}
+
+void runCmd (iu argsSize, char **args, Story story) {
+  u8string output;
+  Multiverse multiverse(move(story._), output, unique_ptr<Multiverse::Listener>(new MultiverseView(story.scoreSignificantWordAddrI)));
+  MultiverseView *view = static_cast<MultiverseView *>(multiverse.getListener());
+  view->multiverseChanged(multiverse);
+
   const char *outPathName = nullptr;
   if (argsSize == 1) {
     outPathName = args[0];
@@ -429,7 +461,12 @@ void runCmd (iu argsSize, char **args, Multiverse &multiverse, MultiverseView *v
   }
 }
 
-void runVelocityrun (iu argsSize, char **args, Multiverse &multiverse, MultiverseView *view) {
+void runVelocityrun (iu argsSize, char **args, Story story) {
+  u8string output;
+  Multiverse multiverse(move(story._), output, unique_ptr<Multiverse::Listener>(new MultiverseView(story.scoreSignificantWordAddrI)));
+  MultiverseView *view = static_cast<MultiverseView *>(multiverse.getListener());
+  view->multiverseChanged(multiverse);
+
   if (argsSize != 6 && argsSize != 7) {
     throw PlainException(u8("command lines to be run initially, each round, on no change in node count, on max score change, on new words being used and on user exit must be specified"));
   }
@@ -794,6 +831,25 @@ bool runCommandLine (Multiverse &multiverse, const u8string &in, u8string &messa
       for (Node *node : selectedNodes) {
         verboseNodes.erase(node);
       }
+    } else if (line.size() > 2 && (line[0] == u8("W")[0] || line[0] == u8("w")[0]) && line[1] == u8("-")[0]) {
+      u8string hostAndPort(line.data() + 2, line.data() + line.size());
+      unique_ptr<TcpSocketAddress> addr;
+      try {
+        addr.reset(new TcpSocketAddress(getFirstAddress(hostAndPort)));
+        multiverse.addRemoteExecutor(*addr);
+      } catch (exception &e) {
+        addr.release();
+        message.append(u8("Error: "));
+        message.append(core::createExceptionMessage(e, false));
+        message.append(u8("\n\n"));
+      }
+      if (addr) {
+        message.append(u8("Added worker at "));
+        addr->getSocketAddress(message);
+        message.append(u8("\n\n"));
+      }
+    } else if (line == u8("R") || line == u8("r")) {
+      multiverse.removeRemoteExecutors();
     } else if (line == u8("P") || line == u8("p")) {
       if (!selectedNodes.empty()) {
         vector<Node *> t;
@@ -902,23 +958,28 @@ void updateMultiverseDisplay (Multiverse &multiverse, const char *outPathName, c
   if (!message.empty()) {
     printf("%s", narrowise(message));
   }
+  #define U "\xCC\xB1" // TODO switch from U+0331 to U+0332
   printf(
-    "%s Hide _Dead End Nodes                   _Show Output\n"
-    "%s Hide A_ntiselected Nodes               _Hide Output\n"
-    "%s Hide Nodes _Beyond Depth...          ──────────────\n"
-    "%s Co_mbine Similar Siblings              _Process    \n"
-    "───────────────────────────────────      Co_llapse   \n"
-    "  Select _All                            _Terminate  \n"
-    "  Select _Unprocesseds                 ──────────────\n"
-    "  _Clear Selection                       Sav_e As... \n"
-    "  _Invert Selection                      _Open...    \n"
-    "  Shrink Selection to Top_Valued...      _Quit        \n"
+    "%s Hide D" U "ead End Nodes                    Add W" U "orker    \n"
+    "%s Hide An" U "tiselected Nodes                R" U "emove Workers\n"
+    "%s Hide Nodes B" U "eyond Depth...           ────────────────\n"
+    "%s Com" U "bine Similar Siblings               P" U "rocess       \n"
+    "───────────────────────────────────      Col" U "lapse      \n"
+    "  Select A" U "ll                             T" U "erminate     \n"
+    "  Select U" U "nprocesseds                  ────────────────\n"
+    "  C" U "lear Selection                        Save" U " As...    \n"
+    "  I" U "nvert Selection                       O" U "pen...       \n"
+    "  Shrink Selection to Top-V" U "alued...      Q" U "uit          \n"
+    "───────────────────────────────────                    \n"
+    "  S" U "how Output                                          \n"
+    "  H" U "ide Output                                          \n"
     ">",
     narrowise(getOptionIcon(view->elideDeadEndNodes)),
     narrowise(getOptionIcon(view->elideAntiselectedNodes)),
     narrowise(getOptionIcon(view->maxDepth != numeric_limits<size_t>::max())),
     narrowise(getOptionIcon(view->combineSimilarSiblings))
   );
+  #undef U
   fflush(stdout);
 }
 
@@ -1586,7 +1647,7 @@ void MultiverseView::printNodeAsLeaf (
     size_t prefixSize = r_prefix.size();
     r_prefix.append(u8("  "));
     printNodeOutput(output, multiverse, r_prefix, out);
-    r_prefix.resize(prefixSize);
+    r_prefix.erase(prefixSize);
   }
 }
 
@@ -1656,7 +1717,7 @@ void MultiverseView::printNodeAsNonleaf (
     bool last = fmtsEnd == 0;
     r_prefix.append(last ? u8("  ") : u8("│ "));
     printNodeOutput(output, multiverse, r_prefix, out);
-    r_prefix.resize(prefixSize);
+    r_prefix.erase(prefixSize);
   }
   for (size_t i = 0; i != fmtsEnd; ++i) {
     if (fmts[i] == NONE) {
@@ -1690,7 +1751,7 @@ void MultiverseView::printNodeAsNonleaf (
     fprintf(out, "%s%s", narrowise(r_prefix), narrowise(last ? u8("└─") : u8("├─")));
     r_prefix.append(last ? u8("  ") : u8("│ "));
     (this->*(fmts[i] == LEAF ? &MultiverseView::printNodeAsLeaf : &MultiverseView::printNodeAsNonleaf))(depth, contains(verboseNodes, childNode) ? &childOuput : nullptr, childNode, node, childActionIdsBegin, childActionIdsEnd, multiverse, r_prefix, out);
-    r_prefix.resize(prefixSize);
+    r_prefix.erase(prefixSize);
   }
 }
 

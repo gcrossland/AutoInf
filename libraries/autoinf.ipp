@@ -3,6 +3,7 @@
 #include <future>
 #include <utility>
 #include <unordered_set>
+#include <cstring>
 
 namespace autoinf {
 
@@ -53,6 +54,11 @@ using core::offset;
 using ::operator+;
 using iterators::RevaluedIterator;
 using io::file::FileStream;
+using io::socket::TcpSocketAddress;
+using io::socket::TcpSocketStream;
+using iterators::OutputStreamIterator;
+using iterators::InputStreamIterator;
+using iterators::InputStreamEndIterator;
 
 /* -----------------------------------------------------------------------------
 ----------------------------------------------------------------------------- */
@@ -165,6 +171,12 @@ template<typename _OutputIterator> template<typename _T, typename _WalkingFuncto
   }
 }
 
+template<typename _OutputIterator> template<typename _T> void Serialiser<_OutputIterator>::process (vector<_T> &r_value) {
+  this->process(r_value, [] (_T &o, decltype(*this) &d) {
+    d.process(o);
+  });
+}
+
 template<typename _OutputIterator> void Serialiser<_OutputIterator>::process (Bitset &r_value) {
   // TODO pull out
   auto p = reinterpret_cast<string<iu> *>(&r_value);
@@ -178,6 +190,10 @@ template<typename _OutputIterator> void Serialiser<_OutputIterator>::process (St
   // TODO pull out
   string<zbyte> &v = *reinterpret_cast<string<zbyte> *>(&r_value);
   this->process(v);
+}
+
+template<typename _OutputIterator> template<typename _Walkable> void Serialiser<_OutputIterator>::process (HashWrapper<_Walkable> &r_value) {
+  this->process(const_cast<_Walkable &>(r_value.get()));
 }
 
 template<typename _OutputIterator> template<typename _Walkable> void Serialiser<_OutputIterator>::process (_Walkable &r_value) {
@@ -409,6 +425,12 @@ template<typename _InputIterator, typename _InputEndIterator> template<typename 
   }
 }
 
+template<typename _InputIterator, typename _InputEndIterator> template<typename _T> void Deserialiser<_InputIterator, _InputEndIterator>::process (vector<_T> &r_value) {
+  this->process(r_value, [] (_T &o, decltype(*this) &d) {
+    d.process(o);
+  });
+}
+
 template<typename _InputIterator, typename _InputEndIterator> template<typename _T, iff(
   std::is_constructible<_T, Deserialiser<_InputIterator, _InputEndIterator>>::value
 )> void Deserialiser<_InputIterator, _InputEndIterator>::emplaceBack (vector<_T> &r_value) {
@@ -437,6 +459,12 @@ template<typename _InputIterator, typename _InputEndIterator> void Deserialiser<
   // TODO pull out
   string<zbyte> &v = *reinterpret_cast<string<zbyte> *>(&r_value);
   this->process(v);
+}
+
+template<typename _InputIterator, typename _InputEndIterator> template<typename _Walkable> void Deserialiser<_InputIterator, _InputEndIterator>::process (HashWrapper<_Walkable> &r_value) {
+  unique_ptr<_Walkable> t(construct<_Walkable>()); // TODO do the stack-based version
+  this->process(*t);
+  r_value = hashed(move(*t));
 }
 
 template<typename _InputIterator, typename _InputEndIterator> template<typename _Walkable> void Deserialiser<_InputIterator, _InputEndIterator>::process (_Walkable &r_value) {
@@ -800,6 +828,25 @@ template<typename ..._Ts> void ActionSet::Template::init (u8string &&segment, Wo
   init(forward<_Ts>(ts)...);
 }
 
+template<typename _Walker> void Rangeset::beWalked (_Walker &w) {
+  w.process(*this, [] (RangesetPart &o, _Walker &w) {
+    w.process(o.setSize);
+    w.process(o.clearSize);
+  });
+}
+
+template<typename _InputIterator, typename _InputEndIterator> ActionExecutor::ActionResult::ActionResult (const Deserialiser<_InputIterator, _InputEndIterator> &) {
+}
+
+template<typename _Walker> void ActionExecutor::ActionResult::beWalked (_Walker &w) {
+  DS();
+  w.process(id);
+  w.process(output);
+  w.process(signature);
+  w.process(state);
+  w.process(significantWords);
+}
+
 template<typename _InputIterator, typename _InputEndIterator> Multiverse::Node::Node (const Deserialiser<_InputIterator, _InputEndIterator> &) : primeParentNode(nullptr), primeParentNodeInvalid(false) {
 }
 
@@ -807,13 +854,7 @@ template<typename _Walker> void Multiverse::Node::beWalked (_Walker &w) {
   DS();
   w.process(listener);
   w.derefAndProcess(primeParentNode);
-  if (w.isSerialising()) {
-    w.process(const_cast<Signature &>(signature.get()));
-  } else {
-    Signature t;
-    w.process(t);
-    signature = hashed(move(t));
-  }
+  w.process(signature);
   w.derefAndProcess(state);
   w.process(children, [] (tuple<ActionSet::Size, StringSet<char8_t>::String, Node *> &o, _Walker &w) {
     DS();
@@ -837,6 +878,13 @@ template<typename _F, iff(std::is_convertible<_F, std::function<bool (Multiverse
 
 template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd) {
   DS();
+  ActionExecutor *executor;
+  if (executors.empty()) {
+    executor = &e;
+  } else {
+    executor = executors.front().get();
+  }
+
   size_t nodeCount = offset(nodesBegin, nodesEnd);
   deque<tuple<Node *, vector<LocalActionExecutor::ActionResult>>> resultQueue;
   mutex resultQueueLock;
@@ -853,7 +901,13 @@ template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd)
       DW(, "done adding done result to queue");
     });
 
+    if (executor != &e) {
+      executor->clearWordSet();
+      executor->setIgnoredByteRangeset(e.getIgnoredByteRangeset());
+    }
+
     vector<LocalActionExecutor::ActionResult> results;
+    Bitset extraWordSet;
     for (; nodesBegin != nodesEnd; ++nodesBegin) {
       DW(, "looking at the next node:");
       DS();
@@ -867,7 +921,11 @@ template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd)
       DA(parentNode->getChildrenSize() == 0);
 
       results.clear();
-      e.processNode(results, parentNode->getSignature(), *parentState);
+      executor->processNode(results, executor != &e ? &extraWordSet : nullptr, parentNode->getSignature(), *parentState);
+
+      if (executor != &e) {
+        e.getWordSet() |= move(extraWordSet);
+      }
 
       {
         DW(, "adding the result to queue");
