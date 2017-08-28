@@ -843,6 +843,7 @@ template<typename _Walker> void ActionExecutor::ActionResult::beWalked (_Walker 
   DS();
   w.process(id);
   w.process(output);
+  w.process(similarSiblingReverseOffset);
   w.process(signature);
   w.process(state);
   w.process(significantWords);
@@ -1041,29 +1042,47 @@ template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd)
     }
     DW(, "M these results are children for the node with sig of hash ", parentNode->getSignature().hashFast());
 
-    for (auto &result : get<1>(rs)) {
+    auto &results = get<1>(rs);
+    Node *resultNodes[results.size()];
+    for (size_t i = 0, end = results.size(); i != end; ++i) {
+      auto &result = results[i];
       ActionSet::Size parentActionId = result.id;
       u8string &resultOutput = result.output;
-      HashWrapper<Signature> &resultSignature = result.signature;
-      State &resultState = result.state;
-      vector<zword> &resultSignificantWords = result.significantWords;
-      DW(, "M the child is for the action of id ",parentActionId,"; the sig is of hash ", resultSignature.hashFast());
-      DA(!(resultSignature == parentNode->getSignature()));
+      size_t similarSiblingReverseOffset = result.similarSiblingReverseOffset;
 
       Node *resultNode;
-      auto v = find(nodes, cref(resultSignature));
-      if (!v) {
-        DW(, "M this is a new node for this multiverse!");
-        unique_ptr<Node::Listener> resultListener = listener->createNodeListener();
-        listener->nodeReached(*this, resultListener.get(), parentActionId, resultOutput, resultSignature.get(), resultSignificantWords);
-        unique_ptr<Node> n(new Node(move(resultListener), Node::UNPARENTED, move(resultSignature), move(resultState)));
-        resultNode = n.get();
-        nodes.emplace(ref(resultNode->getSignature()), resultNode);
-        n.release();
+      if (similarSiblingReverseOffset == 0) {
+        HashWrapper<Signature> &resultSignature = result.signature;
+        State &resultState = result.state;
+        vector<zword> &resultSignificantWords = result.significantWords;
+        DW(, "M the child is for the action of id ",parentActionId,"; the sig is of hash ", resultSignature.hashFast());
+        DA(!(resultSignature == parentNode->getSignature()));
+        DA(!resultSignature.get().empty());
+
+        auto v = find(nodes, cref(resultSignature));
+        if (!v) {
+          DW(, "M this is a new node for this multiverse!");
+          unique_ptr<Node::Listener> resultListener = listener->createNodeListener();
+          listener->nodeReached(*this, resultListener.get(), parentActionId, resultOutput, resultSignature.get(), resultSignificantWords);
+          unique_ptr<Node> n(new Node(move(resultListener), Node::UNPARENTED, move(resultSignature), move(resultState)));
+          resultNode = n.get();
+          nodes.emplace(ref(resultNode->getSignature()), resultNode);
+          n.release();
+        } else {
+          DW(, "M there already exists a node of this signature");
+          resultNode = *v;
+          DA(resultSignature == resultNode->getSignature());
+        }
+
+        resultNodes[i] = resultNode;
       } else {
-        DW(, "M there already exists a node of this signature");
-        resultNode = *v;
-        DA(resultSignature == resultNode->getSignature());
+        DA(similarSiblingReverseOffset <= i);
+        DW(, "M the child is for the action of id ", parentActionId, "; it is the same as that for the action of id ", results[i - similarSiblingReverseOffset].id);
+        DA(result.signature.get().empty());
+        DA(result.state.isEmpty());
+        resultNode = resultNodes[i - similarSiblingReverseOffset];
+        DA(resultNode != Node::UNPARENTED);
+        DI(resultNodes[i] = Node::UNPARENTED;)
       }
       parentNode->addChild(parentActionId, resultOutput, resultNode, *this);
     }

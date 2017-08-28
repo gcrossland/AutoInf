@@ -13,9 +13,14 @@ constexpr SerialiserBase::id SerialiserBase::NON_ID;
 constexpr SerialiserBase::id SerialiserBase::NULL_ID;
 
 Signature::Signature () {
+  DA(empty());
 }
 
 Signature::Signature (size_t sizeHint) : b(sizeHint) {
+}
+
+bool Signature::empty () const noexcept {
+  return b.empty();
 }
 
 size_t Signature::getSizeHint () const noexcept {
@@ -372,8 +377,18 @@ Rangeset::Rangeset (const Bitset &bitset, iu16 rangesEnd) : vector() {
 Rangeset::Rangeset () : vector() {
 }
 
+ActionExecutor::ActionResult::ActionResult (ActionSet::Size id, u8string output, size_t similarSiblingReverseOffset) :
+  id(id), output(move(output)), similarSiblingReverseOffset(similarSiblingReverseOffset)
+{
+}
+
+ActionExecutor::ActionResult::ActionResult (ActionSet::Size id, u8string output, HashWrapper<Signature> signature) :
+  id(id), output(move(output)), similarSiblingReverseOffset(0), signature(move(signature))
+{
+}
+
 ActionExecutor::ActionResult::ActionResult (ActionSet::Size id, u8string output, HashWrapper<Signature> signature, State state, vector<zword> significantWords) :
-  id(id), output(move(output)), signature(move(signature)), state(move(state)), significantWords(move(significantWords))
+  id(id), output(move(output)), similarSiblingReverseOffset(0), signature(move(signature)), state(move(state)), significantWords(move(significantWords))
 {
 }
 
@@ -475,7 +490,20 @@ ActionExecutor::ActionResult LocalActionExecutor::getActionResult () {
   return ActionResult(0, u8string(), move(signature), move(state), move(significantWords));
 }
 
-void LocalActionExecutor::processNode (vector<ActionResult> &r_results, bitset::Bitset *extraWordSet, const HashWrapper<Signature> &parentSignature, const State &parentState) {
+void LocalActionExecutor::processNode (
+  vector<ActionResult> &r_results, bitset::Bitset *extraWordSet,
+  const HashWrapper<Signature> &parentSignature, const State &parentState
+) {
+  processNode(r_results, extraWordSet, parentSignature, parentState, [] (const HashWrapper<Signature> &signature) -> bool {
+    return false;
+  });
+}
+
+void LocalActionExecutor::processNode (
+  vector<ActionResult> &r_results, bitset::Bitset *extraWordSet,
+  const HashWrapper<Signature> &parentSignature, const State &parentState,
+  const function<bool (const HashWrapper<Signature> &signature)> &signatureKnown
+) {
   DS();
 
   Bitset initialWordSet;
@@ -483,11 +511,14 @@ void LocalActionExecutor::processNode (vector<ActionResult> &r_results, bitset::
     initialWordSet = getWordSet();
   }
 
+  Bitset dewordedWords;
+  unordered_map<reference_wrapper<const HashWrapper<Signature>>, size_t> signaturesToResultsI;
+  r_results.reserve(r_results.size() + actionSet.getSize());
+
   u8string input;
   u8string output;
   State state;
   DW(, "processing node with sig of hash ", parentSignature.hashFast(), ":");
-  Bitset dewordedWords;
   for (ActionSet::Size id = 0, end = actionSet.getSize(); id != end; ++id) {
     ActionSet::Action action = actionSet.get(id);
 
@@ -520,6 +551,21 @@ void LocalActionExecutor::processNode (vector<ActionResult> &r_results, bitset::
       DW(, "the resultant VM state is the same as the parent's, so skipping");
       continue;
     }
+    auto v = find(signaturesToResultsI, cref(signature));
+    if (v) {
+      size_t similarSiblingResultI = *v;
+      DA(similarSiblingResultI < r_results.size());
+      DW(, "the resultant VM state was also reached by the sibling with action of id ", r_results[similarSiblingResultI].id);
+      r_results.emplace_back(id, output, r_results.size() - similarSiblingResultI);
+      continue;
+    }
+    if (signatureKnown(signature)) {
+      DW(, "the resultant VM state was also reached by a prior processing run");
+      r_results.emplace_back(id, output, move(signature));
+      signaturesToResultsI.emplace(cref(r_results.back().signature), r_results.size() - 1);
+      continue;
+    }
+    DW(, "the resultant VM state is new (to us, right now, at least)");
 
     vector<zword> significantWords = getSignificantWords();
 
@@ -531,6 +577,7 @@ void LocalActionExecutor::processNode (vector<ActionResult> &r_results, bitset::
     }
 
     r_results.emplace_back(id, output, move(signature), state, move(significantWords));
+    signaturesToResultsI.emplace(cref(r_results.back().signature), r_results.size() - 1);
   }
 
   if (extraWordSet) {
@@ -647,7 +694,7 @@ void RemoteActionExecutor::processNode (vector<ActionResult> &r_results, Bitset 
   endResponse(ID);
 }
 
-ActionExecutorServer::ActionExecutorServer (ActionExecutor &r_e, const TcpSocketAddress &addr) : r_e(r_e), listeningSocket(addr, 1) {
+ActionExecutorServer::ActionExecutorServer (LocalActionExecutor &r_e, const TcpSocketAddress &addr) : r_e(r_e), listeningSocket(addr, 1) {
 }
 
 iu8f ActionExecutorServer::read (InputStreamIterator<TcpSocketStream> &r_in) {
@@ -699,6 +746,7 @@ void ActionExecutorServer::accept () {
   InputStreamEndIterator<TcpSocketStream> end;
   OutputStreamIterator<TcpSocketStream> out(stream, RemoteActionExecutor::BUFFER_SIZE);
 
+  unordered_set<HashWrapper<Signature>> knownSignatures;
   while (true) {
     iu8f requestId = beginRequest(in);
     DW(c, "- request is ", requestId);
@@ -739,6 +787,8 @@ void ActionExecutorServer::accept () {
 
         beginResponse(out, requestId);
         endResponse(out, requestId);
+
+        knownSignatures.clear();
       } break;
       case 3: {
         Deserialiser<InputStreamIterator<TcpSocketStream>, InputStreamEndIterator<TcpSocketStream>> d(in, end);
@@ -753,16 +803,25 @@ void ActionExecutorServer::accept () {
         thread_local vector<ActionExecutor::ActionResult> results;
         results.clear();
         Bitset extraWordSet;
-        r_e.processNode(results, hasExtraWordSet ? &extraWordSet : nullptr, parentSignature, parentState);
+        r_e.processNode(results, hasExtraWordSet ? &extraWordSet : nullptr, parentSignature, parentState, [&] (const HashWrapper<Signature> &signature) -> bool {
+          return contains(knownSignatures, signature);
+        });
 
         beginResponse(out, requestId);
         Serialiser<OutputStreamIterator<TcpSocketStream>> s(out);
         s.process(results);
-        results.clear();
         if (hasExtraWordSet) {
           s.process(extraWordSet);
         }
         endResponse(out, requestId);
+
+        for (auto &result : results) {
+          auto &signature = result.signature;
+          if (!signature.get().empty()) {
+            knownSignatures.emplace(move(signature));
+          }
+        }
+        results.clear();
       } break;
     }
   }

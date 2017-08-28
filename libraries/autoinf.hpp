@@ -166,6 +166,7 @@ class Signature {
   pub template<typename _InputIterator, typename _InputEndIterator> explicit Signature (const Deserialiser<_InputIterator, _InputEndIterator> &);
   pub template<typename _Walker> void beWalked (_Walker &w);
 
+  pub bool empty () const noexcept;
   pub size_t getSizeHint () const noexcept;
   pub size_t hashSlow () const noexcept;
   pub bool operator== (const Signature &r) const noexcept;
@@ -387,10 +388,13 @@ class ActionExecutor {
   pub struct ActionResult {
     ActionSet::Size id;
     core::u8string output;
+    size_t similarSiblingReverseOffset;
     core::HashWrapper<Signature> signature;
     autofrotz::State state;
     std::vector<autofrotz::zword> significantWords;
 
+    ActionResult (ActionSet::Size id, core::u8string output, size_t similarSiblingReverseOffset);
+    ActionResult (ActionSet::Size id, core::u8string output, core::HashWrapper<Signature> signature);
     ActionResult (ActionSet::Size id, core::u8string output, core::HashWrapper<Signature> signature, autofrotz::State state, std::vector<autofrotz::zword> significantWords);
     template<typename _InputIterator, typename _InputEndIterator> explicit ActionResult (const Deserialiser<_InputIterator, _InputEndIterator> &);
 
@@ -422,7 +426,15 @@ class LocalActionExecutor : public ActionExecutor {
   prv void doRestoreAction (const autofrotz::State &state);
   prv std::vector<autofrotz::zword> getSignificantWords () const;
   pub ActionResult getActionResult ();
-  pub void processNode (std::vector<ActionResult> &r_results, bitset::Bitset *extraWordSet, const core::HashWrapper<Signature> &parentSignature, const autofrotz::State &parentState);
+  pub void processNode (
+    std::vector<ActionResult> &r_results, bitset::Bitset *extraWordSet,
+    const core::HashWrapper<Signature> &parentSignature, const autofrotz::State &parentState
+  );
+  pub void processNode (
+    std::vector<ActionResult> &r_results, bitset::Bitset *extraWordSet,
+    const core::HashWrapper<Signature> &parentSignature, const autofrotz::State &parentState,
+    const std::function<bool (const core::HashWrapper<Signature> &signature)> &signatureKnown
+  );
 };
 
 class RemoteActionExecutor : public ActionExecutor {
@@ -449,10 +461,10 @@ class RemoteActionExecutor : public ActionExecutor {
 };
 
 class ActionExecutorServer {
-  prv ActionExecutor &r_e;
+  prv LocalActionExecutor &r_e;
   prv io::socket::PassiveTcpSocket listeningSocket;
 
-  pub ActionExecutorServer (ActionExecutor &r_e, const io::socket::TcpSocketAddress &addr);
+  pub ActionExecutorServer (LocalActionExecutor &r_e, const io::socket::TcpSocketAddress &addr);
 
   prv iu8f read (iterators::InputStreamIterator<io::socket::TcpSocketStream> &r_in);
   prv void check (iu expected, iu received);
