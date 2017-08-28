@@ -1224,14 +1224,17 @@ Multiverse::Node *Multiverse::getRoot () const {
 
 void Multiverse::ignoredBytesChanged () {
   e.setIgnoredByteRangeset(Rangeset(ignoredBytes, e.getDynamicMemorySize()));
+  executorIgnoredBytesCleans.clear();
 }
 
 void Multiverse::addRemoteExecutor (const TcpSocketAddress &addr) {
   executors.emplace_back(unique_ptr<RemoteActionExecutor>(new RemoteActionExecutor(addr)));
+  DA(!executorIgnoredBytesCleans.getBit(executors.size() - 1));
 }
 
 void Multiverse::removeRemoteExecutors () {
   executors.clear();
+  executorIgnoredBytesCleans.clear();
 }
 
 Multiverse::Node *Multiverse::collapseNode (

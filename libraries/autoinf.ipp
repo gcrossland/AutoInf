@@ -988,12 +988,22 @@ template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd)
   });
   for (size_t i = 0; i != executorCount; ++i) {
     ActionExecutor *executor = executors[i];
-    packaged_task<void ()> dispatcher([&, executor] () {
+    bool ignoredBytesDirty = false;
+    if (executor != &e) {
+      DA(executor == this->executors[i].get());
+      if (!executorIgnoredBytesCleans.getBit(i)) {
+        executorIgnoredBytesCleans.setBit(i);
+        ignoredBytesDirty = true;
+      }
+    }
+    packaged_task<void ()> dispatcher([&, executor, ignoredBytesDirty] () {
       DS();
 
       if (executor != &e) {
         executor->clearWordSet();
-        executor->setIgnoredByteRangeset(e.getIgnoredByteRangeset());
+        if (ignoredBytesDirty) {
+          executor->setIgnoredByteRangeset(e.getIgnoredByteRangeset());
+        }
       }
       Bitset cumulativeExtraWordSet;
 
