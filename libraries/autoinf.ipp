@@ -4,6 +4,7 @@
 #include <utility>
 #include <unordered_set>
 #include <cstring>
+#include <numeric>
 
 namespace autoinf {
 

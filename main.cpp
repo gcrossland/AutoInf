@@ -3,6 +3,7 @@
 #include <unordered_set>
 #include <typeinfo>
 #include <climits>
+#include <cmath>
 
 using autofrotz::Vm;
 using autoinf::Multiverse;

@@ -159,6 +159,8 @@ class Signature {
   pub class Iterator;
 
   prv static const iu8f ESCAPE = 200;
+  prv typedef iu32f RunSize;
+
   prv core::string<iu8f> b;
 
   pub Signature ();
@@ -176,7 +178,7 @@ class Signature {
   friend class Writer;
   pub class Writer {
     prv Signature &signature;
-    prv iu32f zeroByteCount;
+    prv RunSize zeroByteCount;
 
     pub Writer (Signature &signature) noexcept;
     Writer (const Writer &) = delete;
@@ -195,7 +197,7 @@ class Signature {
     prv const iu8f *i;
     prv const iu8f *end;
     prv iu8f currentByte;
-    prv decltype(Writer::zeroByteCount) zeroByteCount;
+    prv RunSize zeroByteCount;
 
     pub Iterator () noexcept;
     pub explicit Iterator (const Signature &signature) noexcept;
