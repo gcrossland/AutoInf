@@ -546,12 +546,8 @@ void runVelocityrun (iu argsSize, char **args, Story story) {
 
     size_t nodesSize1 = view->nodesByIndex.size();
     if (nodesSize1 == nodesSize0) {
-      ++nullChangeCount;
-      printf("  node count unchanged (%u %s)\n", nullChangeCount, nullChangeCount == 1 ? "time" : "times");
+      printf("  node count unchanged\n");
       fflush(stdout);
-      if (nullChangeCount >= 32) {
-        break;
-      }
 
       if (!runCommandLineTemplate(multiverse, nullChangeCommandLineTemplate, round + 1, message, history)) {
         break;
@@ -560,6 +556,18 @@ void runVelocityrun (iu argsSize, char **args, Story story) {
       tTotal1 = getUserTime();
       tVm1 = getVmTime();
       printStats(round + 1, tTotal1, tVm1);
+
+      size_t nodesSize2 = view->nodesByIndex.size();
+      if (nodesSize2 == nodesSize1) {
+        ++nullChangeCount;
+        printf("  node count doubly unchanged (%u %s)\n", nullChangeCount, nullChangeCount == 1 ? "time" : "times");
+        fflush(stdout);
+        if (nullChangeCount >= 32) {
+          break;
+        }
+      } else {
+        nullChangeCount = 0;
+      }
     } else {
       nullChangeCount = 0;
     }
@@ -1438,7 +1446,7 @@ void MultiverseView::nodeProcessed (const Multiverse &multiverse, const Node *no
 
   int reportSize = -1;
   if (processedCount == totalCount) {
-    reportSize = 0;
+    printf("Processed %u nodes                                                            \n", static_cast<iu>(totalCount));
   } else {
     DA(processedCount <= totalCount);
     if (difftime(now, prevNodeProcessingProgressReport) > 2) {
