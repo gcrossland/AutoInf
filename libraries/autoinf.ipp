@@ -1114,13 +1114,18 @@ template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd)
 
 template<typename _I> void Multiverse::collapseNodes (_I nodesBegin, _I nodesEnd) {
   DS();
-  DPRE(nodesBegin != nodesEnd);
   DW(, "Collapsing nodes:");
 
   // Build the set of extra ignored bytes (those which aren't the same across all
   // of the given nodes).
 
+  if (nodesBegin == nodesEnd) {
+    return;
+  }
   Node *firstNode = *(nodesBegin++);
+  if (nodesBegin == nodesEnd) {
+    return;
+  }
   DW(, "first node has sig of hash", firstNode->getSignature().hashFast());
   const Signature &firstSignature = firstNode->getSignature().get();
   vector<Signature::Iterator> otherSignatureIs;

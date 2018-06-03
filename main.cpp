@@ -863,24 +863,23 @@ bool runCommandLine (Multiverse &multiverse, const u8string &in, u8string &messa
         view->nodeProcessingStarting();
         multiverse.processNodes(t.begin(), t.end());
       }
-      view->multiverseChanged(multiverse);
+      view->multiverseMayHaveChanged();
     } else if (line == u8("L") || line == u8("l")) {
-      if (!selectedNodes.empty()) {
-        multiverse.collapseNodes(selectedNodes.cbegin(), selectedNodes.cend());
-      }
-      view->multiverseChanged(multiverse);
+      multiverse.collapseNodes(selectedNodes.cbegin(), selectedNodes.cend());
+      view->multiverseMayHaveChanged();
     } else if (line == u8("T") || line == u8("t")) {
       for (Node *node : selectedNodes) {
         node->clearState();
       }
       view->multiverseChanged(multiverse);
+      view->multiverseMayHaveChanged();
     } else if (line.size() > 2 && (line[0] == u8("E")[0] || line[0] == u8("e")[0]) && line[1] == u8("-")[0]) {
       u8string name(line.data() + 2, line.data() + line.size());
       multiverse.save(name);
     } else if (line.size() > 2 && (line[0] == u8("O")[0] || line[0] == u8("o")[0]) && line[1] == u8("-")[0]) {
       u8string name(line.data() + 2, line.data() + line.size());
       multiverse.load(name);
-      view->multiverseChanged(multiverse);
+      view->multiverseMayHaveChanged();
     } else {
       const char8_t *numBegin = line.data();
       const char8_t *numEnd = numBegin + line.size();
@@ -1003,9 +1002,6 @@ template<typename _Walker> void NodeMetricsListener::beWalked (_Walker &w) {
   w.process(scoreValue);
   w.process(locationHash);
   w.process(visitageValue);
-  w.process(novelOutputInParentArcDepthwise);
-  w.process(outputtageValue);
-  w.process(antioutputtageValue);
   w.process(novelOutputInParentArcPrimePathwise);
 }
 
@@ -1255,6 +1251,10 @@ void MultiverseMetricsListener::setWordData (const Node *node, const ActionSet &
 }
 
 void MultiverseMetricsListener::nodesProcessed (const Multiverse &multiverse) {
+  multiverseChanged(multiverse);
+}
+
+void MultiverseMetricsListener::multiverseChanged (const Multiverse &multiverse) {
   doDepthwisePass(multiverse);
 }
 
@@ -1342,12 +1342,14 @@ void MultiverseMetricsListener::nodeCollapsed (const Multiverse &multiverse, con
 }
 
 void MultiverseMetricsListener::nodesCollapsed (const Multiverse &multiverse) {
-  nodesProcessed(multiverse);
+  multiverseChanged(multiverse);
 
   interestingChildActionWordsIsDirty = true;
 }
 
 void MultiverseMetricsListener::loaded (const Multiverse &multiverse) {
+  multiverseChanged(multiverse);
+
   interestingChildActionWordsIsDirty = true;
 }
 
@@ -1448,10 +1450,15 @@ void MultiverseView::nodeProcessed (const Multiverse &multiverse, const Node *no
   }
 }
 
-void MultiverseView::multiverseChanged (const Multiverse &multiverse) {
-  nodesByIndex.clear();
+void MultiverseView::multiverseMayHaveChanged () {
   selectedNodes.clear();
   verboseNodes.clear();
+}
+
+void MultiverseView::multiverseChanged (const Multiverse &multiverse) {
+  MultiverseMetricsListener::multiverseChanged(multiverse);
+
+  nodesByIndex.clear();
   deadEndnessIsDirty = true;
   antiselectednessIsDirty = true;
 
@@ -1465,8 +1472,6 @@ void MultiverseView::selectionChanged () {
 void MultiverseView::studyNodes (const Multiverse &multiverse) {
   DS();
   DA(nodesByIndex.empty());
-  DA(selectedNodes.empty());
-  DA(verboseNodes.empty());
 
   for (const Node *node : multiverse) {
     NodeView *nodeView = static_cast<NodeView *>(node->getListener());

@@ -94,12 +94,13 @@ class MultiverseMetricsListener : public autoinf::Multiverse::Listener {
   pub virtual void nodeProcessed (const autoinf::Multiverse &multiverse, const autoinf::Multiverse::Node *node, size_t processedCount, size_t totalCount) override;
   prv void setWordData (const autoinf::Multiverse::Node *node, const autoinf::ActionSet &actionSet);
   pub virtual void nodesProcessed (const autoinf::Multiverse &multiverse) override;
+  pub virtual void multiverseChanged (const autoinf::Multiverse &multiverse);
   prv void doDepthwisePass (const autoinf::Multiverse &multiverse);
   prv void doPostDepthwisePrimePathwisePass (const autoinf::Multiverse::Node *node, NodeMetricsListener *listener, NodeMetricsListener *parentListener);
   prv void setDepthwiseOutputtageValues (const autoinf::Multiverse::Node *node, NodeMetricsListener *listener, NodeMetricsListener *parentListener);
   pub virtual void nodeCollapsed (const autoinf::Multiverse &multiverse, const autoinf::Multiverse::Node *node, bool childrenUpdated) override;
-  pub void virtual nodesCollapsed (const autoinf::Multiverse &multiverse) override;
-  pub void virtual loaded (const autoinf::Multiverse &multiverse) override;
+  pub virtual void nodesCollapsed (const autoinf::Multiverse &multiverse) override;
+  pub virtual void loaded (const autoinf::Multiverse &multiverse) override;
 
   pub Value getMaxScoreValue (const autoinf::Multiverse &multiverse) const;
   pub const bitset::Bitset &getInterestingChildActionWords (const autoinf::Multiverse &multiverse);
@@ -142,7 +143,8 @@ class MultiverseView : public MultiverseMetricsListener {
   pub virtual std::unique_ptr<autoinf::Multiverse::Node::Listener> createNodeListener () override;
   pub void nodeProcessingStarting ();
   pub virtual void nodeProcessed (const autoinf::Multiverse &multiverse, const autoinf::Multiverse::Node *node, size_t processedCount, size_t totalCount) override;
-  pub void multiverseChanged (const autoinf::Multiverse &multiverse);
+  pub void multiverseMayHaveChanged ();
+  pub virtual void multiverseChanged (const autoinf::Multiverse &multiverse) override;
   pub void selectionChanged ();
   prv void studyNodes (const autoinf::Multiverse &multiverse);
   prv void studyNode (autoinf::Multiverse::Node *node, autoinf::Multiverse::Node *parentNode, autoinf::ActionSet::Size childIndex);
