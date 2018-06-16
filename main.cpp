@@ -1473,12 +1473,7 @@ void MultiverseView::studyNodes (const Multiverse &multiverse) {
   DS();
   DA(nodesByIndex.empty());
 
-  for (const Node *node : multiverse) {
-    NodeView *nodeView = static_cast<NodeView *>(node->getListener());
-    DA(nodeView->index != NodeView::NON_INDEX);
-    nodeView->index = NodeView::NON_INDEX;
-  }
-
+  static_cast<NodeView *>(multiverse.getRoot()->getListener())->index = NodeView::NON_INDEX;
   studyNode(multiverse.getRoot(), nullptr, ActionSet::NON_ID);
   size_t passBegin = 0;
   size_t passEnd = 1;
@@ -1488,8 +1483,22 @@ void MultiverseView::studyNodes (const Multiverse &multiverse) {
     DW(, "studying nodes at depth ",depth);
     for (size_t i = passBegin; i != passEnd; ++i) {
       Node *node = nodesByIndex[i];
+
       for (size_t i = 0, end = node->getChildrenSize(); i != end; ++i) {
         Node *childNode = get<2>(node->getChild(i));
+        if (childNode->getPrimeParentNode() == node) {
+          DW(, " child ",i," is us-prime");
+          NodeView *childNodeView = static_cast<NodeView *>(childNode->getListener());
+          childNodeView->index = NodeView::NON_INDEX;
+        } else {
+          DW(, " child ",i," is not us-prime");
+          DA(static_cast<NodeView *>(childNode->getListener())->index != NodeView::NON_INDEX);
+        }
+      }
+
+      for (size_t i = 0, end = node->getChildrenSize(); i != end; ++i) {
+        Node *childNode = get<2>(node->getChild(i));
+        DW(, " child ",i,"?");
         studyNode(childNode, node, i);
       }
     }
@@ -1501,12 +1510,12 @@ void MultiverseView::studyNodes (const Multiverse &multiverse) {
   } while (passBegin != passEnd);
 }
 
-void MultiverseView::studyNode (Node *node, Node *primeParentNode, ActionSet::Size childIndex) {
+void MultiverseView::studyNode (Node *node, Node *parentNode, ActionSet::Size childIndex) {
   DS();
   DW(, "looking at node with sig of hash ",node->getSignature().hashFast());
   NodeView *nodeView = static_cast<NodeView *>(node->getListener());
 
-  DA(!primeParentNode || (node->getPrimeParentNode() == primeParentNode && node->getPrimeParentArcChildIndex() == childIndex) == (nodeView->index == NodeView::NON_INDEX));
+  DA(!node->getPrimeParentNode() || (node->getPrimeParentNode() == parentNode && node->getPrimeParentArcChildIndex() == childIndex) == (nodeView->index == NodeView::NON_INDEX));
   if (nodeView->index == NodeView::NON_INDEX) {
     nodeView->index = nodesByIndex.size();
     nodeView->primeParentChildIndex = childIndex;
