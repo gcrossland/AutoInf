@@ -82,20 +82,20 @@ int main (int argc, char *argv[]) {
     iu c = 0;
     const ActionSet::Word::CategorySet direction = 1U << (c++);
     const ActionSet::Word::CategorySet noun = 1U << (c++);
-    const ActionSet::Word::CategorySet  mobile = 1U << (c++);
-    const ActionSet::Word::CategorySet  holdable = 1U << (c++);
-    const ActionSet::Word::CategorySet  supporter = 1U << (c++);
-    const ActionSet::Word::CategorySet  container = 1U << (c++);
-    const ActionSet::Word::CategorySet  lockable = 1U << (c++);
-    const ActionSet::Word::CategorySet  locker = 1U << (c++);
-    const ActionSet::Word::CategorySet  openable = 1U << (c++);
-    const ActionSet::Word::CategorySet  animate = 1U << (c++);
-    const ActionSet::Word::CategorySet  wearable = 1U << (c++);
-    const ActionSet::Word::CategorySet  edible = 1U << (c++);
-    const ActionSet::Word::CategorySet  switchable = 1U << (c++);
-    const ActionSet::Word::CategorySet  readable = 1U << (c++);
-    const ActionSet::Word::CategorySet  flammable = 1U << (c++);
-    const ActionSet::Word::CategorySet  attachable = 1U << (c++);
+    const ActionSet::Word::CategorySet container = 1U << (c++);
+    const ActionSet::Word::CategorySet supporter = 1U << (c++);
+    const ActionSet::Word::CategorySet holdable = 1U << (c++);
+    const ActionSet::Word::CategorySet wearable = 1U << (c++);
+    const ActionSet::Word::CategorySet openable = 1U << (c++);
+    const ActionSet::Word::CategorySet lockable = 1U << (c++);
+    const ActionSet::Word::CategorySet locker = 1U << (c++);
+    const ActionSet::Word::CategorySet animate = 1U << (c++);
+    const ActionSet::Word::CategorySet flammable = 1U << (c++);
+    const ActionSet::Word::CategorySet readable = 1U << (c++);
+    const ActionSet::Word::CategorySet edible = 1U << (c++);
+    const ActionSet::Word::CategorySet attachable = 1U << (c++);
+    const ActionSet::Word::CategorySet mobile = 1U << (c++);
+    const ActionSet::Word::CategorySet switchable = 1U << (c++);
     unordered_map<HashWrapper<string<char>>, Story> stories = {
       {HashWrapper<string<char>>("testgame"), {{
         "testgame/testgame.z5",
@@ -286,6 +286,10 @@ int main (int argc, char *argv[]) {
           {u8("take "), holdable, u8(" from "), container, u8("\n")},
           {u8("take "), holdable, u8(" from "), supporter, u8("\n")},
           {u8("don "), wearable, u8("\n")},
+          {u8("doff "), wearable, u8("\n")},
+          {u8("drop "), holdable, u8("\n")},
+          {u8("drop "), holdable, u8(" into "), container, u8("\n")},
+          {u8("drop "), holdable, u8(" onto "), supporter, u8("\n")},
           {u8("unlock "), openable, u8(" with "), holdable, u8("\n")},
           {u8("open "), openable, u8("\n")},
           {u8("close "), openable, u8("\n")},
@@ -302,7 +306,6 @@ int main (int argc, char *argv[]) {
           {u8("chop "), noun, u8("\n")},
           {u8("dig "), noun, u8("\n")},
           {u8("dig "), noun, u8(" with "), holdable, u8("\n")},
-          {u8("doff "), wearable, u8("\n")},
           {u8("drink "), edible, u8("\n")},
           {u8("eat "), edible, u8("\n")},
           {u8("empty "), container, u8(" into "), container, u8("\n")},
@@ -311,9 +314,6 @@ int main (int argc, char *argv[]) {
           {u8("empty "), supporter, u8(" onto "), supporter, u8("\n")},
           {u8("fill "), container, u8("\n")},
           {u8("feed "), holdable, u8(" to "), animate, u8("\n")},
-          {u8("drop "), holdable, u8("\n")},
-          {u8("drop "), holdable, u8(" into "), container, u8("\n")},
-          {u8("drop "), holdable, u8(" onto "), supporter, u8("\n")},
           {u8("hop\n")},
           {u8("hop over "), noun, u8("\n")},
           {u8("attach "), attachable, u8("\n")},
@@ -325,7 +325,7 @@ int main (int argc, char *argv[]) {
           {u8("drag "), mobile, u8("\n")},
           {u8("push "), mobile, u8("\n")},
           {u8("rotate "), mobile, u8("\n")},
-          {u8("push "), noun, u8(" "), direction, u8("\n")},
+          {u8("push "), mobile, u8(" "), direction, u8("\n")},
           {u8("clean "), noun, u8("\n")},
           {u8("look in "), container, u8("\n")},
           {u8("look on "), supporter, u8("\n")},
@@ -346,15 +346,17 @@ int main (int argc, char *argv[]) {
           {u8("feel "), noun, u8("\n")},
           {u8("wake up\n")},
           {u8("wake up "), animate, u8("\n")},
-          {u8("wave "), noun, u8("\n")},
+          {u8("wave "), holdable, u8("\n")},
           {u8("wave\n")},
           {u8("tell "), animate, u8(" to "), 0U, u8("\n")},
-          {u8("ask "), animate, u8(" for "), noun, u8("\n")},
-          {u8("push "), mobile, u8(" to "), noun, u8("\n")},
+          {u8("ask "), animate, u8(" for "), holdable, u8("\n")},
+          {u8("push "), mobile, u8(" to "), container, u8("\n")},
+          {u8("push "), mobile, u8(" to "), supporter, u8("\n")},
           {u8("say xyzzy\n")},
           {u8("say plugh\n")},
           {u8("count "), noun, u8("\n")},
-          {u8("empty "), noun, u8("\n")},
+          {u8("empty "), container, u8("\n")},
+          {u8("empty "), supporter, u8("\n")},
           {u8("free "), animate, u8("\n")},
           {u8("capture "), animate, u8("\n")},
           {u8("capture "), animate, u8(" with "), holdable, u8("\n")},
