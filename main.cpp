@@ -91,7 +91,7 @@ int main (int argc, char *argv[]) {
     const ActionSet::Word::CategorySet  unlocker = 1U << (c++);
     const ActionSet::Word::CategorySet  openable = 1U << (c++);
     const ActionSet::Word::CategorySet  animate = 1U << (c++);
-    const ActionSet::Word::CategorySet  clothing = 1U << (c++);
+    const ActionSet::Word::CategorySet  wearable = 1U << (c++);
     const ActionSet::Word::CategorySet  edible = 1U << (c++);
     const ActionSet::Word::CategorySet  switchable = 1U << (c++);
     const ActionSet::Word::CategorySet  readable = 1U << (c++);
@@ -207,7 +207,7 @@ int main (int argc, char *argv[]) {
           {u8("crossover"), noun | supporter},
           {u8("snake"), noun | holdable | animate},
           {u8("bars of silver"), noun | mobile | holdable},
-          {u8("precious jewelry"), noun | mobile | holdable | clothing},
+          {u8("precious jewelry"), noun | mobile | holdable | wearable},
           {u8("rare coins"), noun | mobile | holdable},
           {u8("Y2"), noun | supporter},
           {u8("window"), noun | lockable | openable},
@@ -259,7 +259,7 @@ int main (int argc, char *argv[]) {
           {u8("limestone formations"), noun | supporter},
           {u8("dust"), noun | mobile | holdable},
           {u8("bear"), noun | animate},
-          {u8("golden chain"), noun | mobile | holdable | clothing},
+          {u8("golden chain"), noun | mobile | holdable | wearable},
           {u8("message"), noun | mobile | holdable},
           {u8("vending machine"), noun | mobile | container | lockable | openable | switchable},
           {u8("batteries"), noun | mobile | holdable | flammable},
@@ -286,7 +286,7 @@ int main (int argc, char *argv[]) {
           {u8("take "), holdable, u8("\n")},
           {u8("take "), holdable, u8(" from "), container, u8("\n")},
           {u8("take "), holdable, u8(" from "), supporter, u8("\n")},
-          {u8("don "), clothing, u8("\n")},
+          {u8("don "), wearable, u8("\n")},
           {u8("unlock "), lockable, u8(" with "), unlocker, u8("\n")},
           {u8("open "), openable, u8("\n")},
           {u8("close "), openable, u8("\n")},
@@ -303,7 +303,7 @@ int main (int argc, char *argv[]) {
           {u8("chop "), noun, u8("\n")},
           {u8("dig "), noun, u8("\n")},
           {u8("dig "), noun, u8(" with "), holdable, u8("\n")},
-          {u8("doff "), clothing, u8("\n")},
+          {u8("doff "), wearable, u8("\n")},
           {u8("drink "), edible, u8("\n")},
           {u8("eat "), edible, u8("\n")},
           {u8("empty "), container, u8(" into "), container, u8("\n")},
