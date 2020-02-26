@@ -1007,10 +1007,11 @@ const char8_t *getOptionIcon (bool enabled) {
 
 constexpr size_t NodeMetricsListener::VALUE_COUNT;
 constexpr Value NodeMetricsListener::NON_VALUE;
+constexpr iu8f NodeMetricsListener::NON_BOOL;
 constexpr is16f NodeMetricsListener::NON_OUTPUTTAGE_VALUE;
 
 NodeMetricsListener::NodeMetricsListener () :
-  locationHash(0), visitageValue(NON_VALUE), novelOutputInParentArcDepthwise(false), outputtageValue(NON_OUTPUTTAGE_VALUE - 1)
+  locationHash(0), visitageValue(NON_VALUE), novelOutputInParentArcDepthwise(false), outputtageValue(NON_OUTPUTTAGE_VALUE - 1), novelOutputInParentArcPrimePathwise(NON_BOOL)
 {
 }
 
@@ -1199,8 +1200,8 @@ void MultiverseMetricsListener::doPrimePathwisePass (const Node *node, NodeMetri
     const Node *childNode = get<2>(node->getChild(i));
     if (childNode->getPrimeParentNode() == node) {
       NodeMetricsListener *childListener = static_cast<NodeMetricsListener *>(childNode->getListener());
-      DA((childNode->getPrimeParentArcChildIndex() == i) != (childListener->visitageValue == NodeMetricsListener::NON_VALUE));
-      childListener->visitageValue = NodeMetricsListener::NON_VALUE;
+      DA((childNode->getPrimeParentArcChildIndex() == i) != (childListener->novelOutputInParentArcPrimePathwise == NodeMetricsListener::NON_BOOL));
+      childListener->novelOutputInParentArcPrimePathwise = NodeMetricsListener::NON_BOOL;
     }
   }
 
@@ -1210,12 +1211,12 @@ void MultiverseMetricsListener::doPrimePathwisePass (const Node *node, NodeMetri
     const Node *childNode = get<2>(child);
     if (childNode->getPrimeParentNode() == node) {
       NodeMetricsListener *childListener = static_cast<NodeMetricsListener *>(childNode->getListener());
-      DA((childNode->getPrimeParentArcChildIndex() == i) == (childListener->visitageValue == NodeMetricsListener::NON_VALUE));
-      if (childListener->visitageValue == NodeMetricsListener::NON_VALUE) {
+      DA((childNode->getPrimeParentArcChildIndex() == i) == (childListener->novelOutputInParentArcPrimePathwise == NodeMetricsListener::NON_BOOL));
+      if (childListener->novelOutputInParentArcPrimePathwise == NodeMetricsListener::NON_BOOL) {
         r_outputtageChain.pushArc(childOutput);
 
         doPrimePathwisePass(childNode, childListener, visitageChain, r_outputtageChain);
-        DA(childListener->visitageValue != NodeMetricsListener::NON_VALUE);
+        DA(childListener->novelOutputInParentArcPrimePathwise != NodeMetricsListener::NON_BOOL);
 
         r_outputtageChain.popArc();
       }

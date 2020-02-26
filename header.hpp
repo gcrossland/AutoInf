@@ -28,6 +28,7 @@ class NodeMetricsListener : public autoinf::Multiverse::Node::Listener {
   pub static constexpr size_t VALUE_COUNT = 9;
   pub typedef is Value;
   pub static constexpr Value NON_VALUE = core::numeric_limits<Value>::max();
+  pub static constexpr iu8f NON_BOOL = core::numeric_limits<iu8f>::max();
   pub static constexpr is16f NON_OUTPUTTAGE_VALUE = core::numeric_limits<is16f>::max();
 
   prv is16f scoreValue;
@@ -39,7 +40,7 @@ class NodeMetricsListener : public autoinf::Multiverse::Node::Listener {
   prv is16f outputtageValue;
   prv is16f antioutputtageValue;
 
-  prv bool novelOutputInParentArcPrimePathwise;
+  prv iu8f novelOutputInParentArcPrimePathwise;
 
   pub NodeMetricsListener ();
   pub template<typename _Walker> void beWalked (_Walker &w);
