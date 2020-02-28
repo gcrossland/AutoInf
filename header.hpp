@@ -25,16 +25,12 @@ void updateMultiverseDisplay (autoinf::Multiverse &multiverse, const char *outPa
 const char8_t *getOptionIcon (bool enabled);
 
 class NodeMetricsListener : public autoinf::Multiverse::Node::Listener {
-  pub static constexpr size_t VALUE_COUNT = 9;
+  pub static constexpr size_t VALUE_COUNT = 7;
   pub typedef is Value;
-  pub static constexpr Value NON_VALUE = core::numeric_limits<Value>::max();
   pub static constexpr iu8f NON_BOOL = core::numeric_limits<iu8f>::max();
   pub static constexpr is16f NON_OUTPUTTAGE_VALUE = core::numeric_limits<is16f>::max();
 
   prv is16f scoreValue;
-
-  prv size_t locationHash;
-  prv Value visitageValue;
 
   prv bool novelOutputInParentArcDepthwise;
   prv is16f outputtageValue;
@@ -53,10 +49,6 @@ class NodeMetricsListener : public autoinf::Multiverse::Node::Listener {
 class MultiverseMetricsListener : public autoinf::Multiverse::Listener {
   pub typedef NodeMetricsListener::Value Value;
 
-  prv static const Value PER_TURN_VISITAGE_MODIFIER;
-  prv static const std::vector<Value> NEW_LOCATION_VISITAGE_MODIFIERS;
-  prv static const Value OLD_LOCATION_VISITAGE_MODIFIER;
-
   prv static const size_t OUTPUTTAGE_CHILD_OUTPUT_PRESKIP;
 
   prv const size_t scoreSignificantWordAddrI;
@@ -67,19 +59,7 @@ class MultiverseMetricsListener : public autoinf::Multiverse::Listener {
 
   pub virtual void nodeReached (const autoinf::Multiverse &multiverse, autoinf::Multiverse::Node::Listener *listener, autoinf::ActionSet::Size parentActionId, const core::u8string &output, const autoinf::Signature &signature, const std::vector<autofrotz::zword> &significantWords) override;
   prv void setScoreValue (NodeMetricsListener *listener, const std::vector<autofrotz::zword> &significantWords);
-  prv void setVisitageData (NodeMetricsListener *listener, const core::u8string &output);
   pub virtual void subtreePrimeAncestorsUpdated (const autoinf::Multiverse &multiverse, const autoinf::Multiverse::Node *node) override;
-  prv class VisitageChain {
-    prv std::vector<size_t> visitedLocationHashes;
-    prv size_t locationHash;
-    prv std::vector<Value>::const_iterator newLocationVisitageModifiersI;
-    prv Value visitageValue;
-
-    pub VisitageChain ();
-
-    pub void pushNode (size_t nodeLocationHash);
-    pub Value getVisitageValue () const;
-  };
   prv class PrimePathwiseOutputtageChain {
     prv bitset::Bitset strings;
     prv autoinf::MultiList<std::vector<iu>, iu> stringSetStack;
@@ -88,11 +68,9 @@ class MultiverseMetricsListener : public autoinf::Multiverse::Listener {
     pub bool novel () const;
     pub void popArc ();
   };
-  prv void doPrimePathwisePassHead (const autoinf::Multiverse::Node *node, VisitageChain &r_visitageChain, PrimePathwiseOutputtageChain &r_outputtageChain);
-  prv void doPrimePathwisePass (const autoinf::Multiverse::Node *node, NodeMetricsListener *listener, VisitageChain visitageChain, PrimePathwiseOutputtageChain &r_outputtageChain);
-  prv void setVisitageValue (const autoinf::Multiverse::Node *node, NodeMetricsListener *listener, const VisitageChain &chain);
+  prv void doPrimePathwisePassHead (const autoinf::Multiverse::Node *node, PrimePathwiseOutputtageChain &r_outputtageChain);
+  prv void doPrimePathwisePass (const autoinf::Multiverse::Node *node, NodeMetricsListener *listener, PrimePathwiseOutputtageChain &r_outputtageChain);
   prv void setPrimePathwiseOutputtageValue (const autoinf::Multiverse::Node *node, NodeMetricsListener *listener, const PrimePathwiseOutputtageChain &chain);
-  prv size_t checkVisitageValueRecursively (const autoinf::Multiverse::Node *node, NodeMetricsListener *listener, VisitageChain chain);
   pub virtual void nodeProcessed (const autoinf::Multiverse &multiverse, const autoinf::Multiverse::Node *node, size_t processedCount, size_t totalCount) override;
   prv void setWordData (const autoinf::Multiverse::Node *node, const autoinf::ActionSet &actionSet);
   pub virtual void nodesProcessed (const autoinf::Multiverse &multiverse) override;

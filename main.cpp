@@ -1006,20 +1006,17 @@ const char8_t *getOptionIcon (bool enabled) {
 }
 
 constexpr size_t NodeMetricsListener::VALUE_COUNT;
-constexpr Value NodeMetricsListener::NON_VALUE;
 constexpr iu8f NodeMetricsListener::NON_BOOL;
 constexpr is16f NodeMetricsListener::NON_OUTPUTTAGE_VALUE;
 
 NodeMetricsListener::NodeMetricsListener () :
-  locationHash(0), visitageValue(NON_VALUE), novelOutputInParentArcDepthwise(false), outputtageValue(NON_OUTPUTTAGE_VALUE - 1), novelOutputInParentArcPrimePathwise(NON_BOOL)
+  novelOutputInParentArcDepthwise(false), outputtageValue(NON_OUTPUTTAGE_VALUE - 1), novelOutputInParentArcPrimePathwise(NON_BOOL)
 {
 }
 
 template<typename _Walker> void NodeMetricsListener::beWalked (_Walker &w) {
   DS();
   w.process(scoreValue);
-  w.process(locationHash);
-  w.process(visitageValue);
   w.process(novelOutputInParentArcPrimePathwise);
 }
 
@@ -1029,31 +1026,22 @@ Value NodeMetricsListener::getValue (size_t i) const {
     case 0:
       return scoreValue;
     case 1:
-      // TODO remove placeholder word metric value
-      return -42;
-    case 2:
-      return visitageValue;
-    case 3:
       return novelOutputInParentArcDepthwise;
-    case 4:
+    case 2:
       return outputtageValue;
-    case 5:
+    case 3:
       return antioutputtageValue;
-    case 6:
+    case 4:
       return static_cast<Value>(outputtageValue) + antioutputtageValue;
-    case 7:
+    case 5:
       return (static_cast<Value>(10000) * outputtageValue) / (outputtageValue - antioutputtageValue);
-    case 8:
+    case 6:
       return novelOutputInParentArcPrimePathwise;
     default:
       DA(false);
       return 0;
   }
 }
-
-const Value MultiverseMetricsListener::PER_TURN_VISITAGE_MODIFIER = -0;
-const vector<Value> MultiverseMetricsListener::NEW_LOCATION_VISITAGE_MODIFIERS = {20, 13, 8, 5};
-const Value MultiverseMetricsListener::OLD_LOCATION_VISITAGE_MODIFIER = -200;
 
 const size_t MultiverseMetricsListener::OUTPUTTAGE_CHILD_OUTPUT_PRESKIP = 1;
 
@@ -1067,7 +1055,6 @@ void MultiverseMetricsListener::nodeReached (const Multiverse &multiverse, Node:
   NodeMetricsListener *listener = static_cast<NodeMetricsListener *>(listener_);
 
   setScoreValue(listener, significantWords);
-  setVisitageData(listener, output);
 }
 
 void MultiverseMetricsListener::setScoreValue (NodeMetricsListener *listener, const vector<zword> &significantWords) {
@@ -1075,70 +1062,12 @@ void MultiverseMetricsListener::setScoreValue (NodeMetricsListener *listener, co
   DW(, "DDDD game score is ",listener->scoreValue);
 }
 
-void MultiverseMetricsListener::setVisitageData (NodeMetricsListener *listener, const u8string &output) {
-  const char8_t *outI = output.data();
-  const char8_t *outEnd = outI + output.size();
-  const char8_t *locationBegin = outI = skipSpaces(outI, outEnd);
-  while (true) {
-    outI = skipNonSpaces(outI, outEnd);
-    if (outI == outEnd) {
-      break;
-    }
-    const char8_t *i = outI + 1;
-    if (i == outEnd || *i == u8(" ")[0]) {
-      break;
-    }
-    outI = i;
-  }
-  const char8_t *locationEnd = outI;
-  DW(, "DDDD location string is ", u8string(locationBegin, locationEnd).c_str());
-
-  listener->locationHash = u8string(locationBegin, locationEnd).hashSlow();
-  DW(, "DDDD location hash is ", listener->locationHash);
-  DA(listener->visitageValue == NodeMetricsListener::NON_VALUE);
-}
-
 void MultiverseMetricsListener::subtreePrimeAncestorsUpdated (const Multiverse &multiverse, const Node *node) {
   NodeMetricsListener *listener = static_cast<NodeMetricsListener *>(node->getListener());
 
-  VisitageChain visitageChain;
   PrimePathwiseOutputtageChain outputtageChain;
-  doPrimePathwisePassHead(node, visitageChain, outputtageChain);
-  doPrimePathwisePass(node, listener, visitageChain, outputtageChain);
-}
-
-MultiverseMetricsListener::VisitageChain::VisitageChain () :
-  locationHash(numeric_limits<size_t>::max()), newLocationVisitageModifiersI(NEW_LOCATION_VISITAGE_MODIFIERS.begin()), visitageValue(0)
-{
-}
-
-void MultiverseMetricsListener::VisitageChain::pushNode (size_t nodeLocationHash) {
-  visitageValue += PER_TURN_VISITAGE_MODIFIER;
-  if (nodeLocationHash == locationHash) {
-    DW(, "DDDD   location didn't change");
-    if (newLocationVisitageModifiersI != NEW_LOCATION_VISITAGE_MODIFIERS.end()) {
-      visitageValue += *newLocationVisitageModifiersI++;
-    }
-  } else {
-    locationHash = nodeLocationHash;
-    auto begin = visitedLocationHashes.begin();
-    auto end = visitedLocationHashes.end();
-    if (find(begin, end, locationHash) != end) {
-      DW(, "DDDD   location changed to one we've visted");
-      newLocationVisitageModifiersI = NEW_LOCATION_VISITAGE_MODIFIERS.end();
-      visitageValue += OLD_LOCATION_VISITAGE_MODIFIER;
-    } else {
-      DW(, "DDDD   location changed to one we've not visted");
-      visitedLocationHashes.emplace_back(locationHash);
-      newLocationVisitageModifiersI = NEW_LOCATION_VISITAGE_MODIFIERS.begin();
-      DA(!NEW_LOCATION_VISITAGE_MODIFIERS.empty());
-      visitageValue += *newLocationVisitageModifiersI++;
-    }
-  }
-}
-
-Value MultiverseMetricsListener::VisitageChain::getVisitageValue () const {
-  return visitageValue;
+  doPrimePathwisePassHead(node, outputtageChain);
+  doPrimePathwisePass(node, listener, outputtageChain);
 }
 
 void MultiverseMetricsListener::PrimePathwiseOutputtageChain::pushArc (const StringSet<char8_t>::String &childOutput) {
@@ -1168,18 +1097,16 @@ void MultiverseMetricsListener::PrimePathwiseOutputtageChain::popArc () {
   stringSetStack.pop();
 }
 
-void MultiverseMetricsListener::doPrimePathwisePassHead (const Node *endNode, VisitageChain &r_visitageChain, PrimePathwiseOutputtageChain &r_outputtageChain) {
+void MultiverseMetricsListener::doPrimePathwisePassHead (const Node *endNode, PrimePathwiseOutputtageChain &r_outputtageChain) {
   const Node *parentNode = endNode->getPrimeParentNode();
   if (!parentNode) {
     DW(, "DDDD   reached the root; starting prime pathwise value work");
     return;
   }
-  doPrimePathwisePassHead(parentNode, r_visitageChain, r_outputtageChain);
+  doPrimePathwisePassHead(parentNode, r_outputtageChain);
 
   DW(, "DDDD   looking at node with sig of hash ",parentNode->getSignature().hashFast());
   NodeMetricsListener *parentListener = static_cast<NodeMetricsListener *>(parentNode->getListener());
-  r_visitageChain.pushNode(parentListener->locationHash);
-  DPRE(parentListener->visitageValue == r_visitageChain.getVisitageValue());
 
   DW(, "DDDD   looking at arc ",endNode->getPrimeParentArcChildIndex());
   const auto &parentArc = parentNode->getChild(endNode->getPrimeParentArcChildIndex());
@@ -1189,11 +1116,7 @@ void MultiverseMetricsListener::doPrimePathwisePassHead (const Node *endNode, Vi
   return;
 }
 
-void MultiverseMetricsListener::doPrimePathwisePass (const Node *node, NodeMetricsListener *listener, VisitageChain visitageChain, PrimePathwiseOutputtageChain &r_outputtageChain) {
-  DA(!node->getPrimeParentNode() || static_cast<NodeMetricsListener *>(node->getPrimeParentNode()->getListener())->visitageValue == visitageChain.getVisitageValue());
-  visitageChain.pushNode(listener->locationHash);
-
-  setVisitageValue(node, listener, visitageChain);
+void MultiverseMetricsListener::doPrimePathwisePass (const Node *node, NodeMetricsListener *listener, PrimePathwiseOutputtageChain &r_outputtageChain) {
   setPrimePathwiseOutputtageValue(node, listener, r_outputtageChain);
 
   for (size_t i = 0, end = node->getChildrenSize(); i != end; ++i) {
@@ -1215,7 +1138,7 @@ void MultiverseMetricsListener::doPrimePathwisePass (const Node *node, NodeMetri
       if (childListener->novelOutputInParentArcPrimePathwise == NodeMetricsListener::NON_BOOL) {
         r_outputtageChain.pushArc(childOutput);
 
-        doPrimePathwisePass(childNode, childListener, visitageChain, r_outputtageChain);
+        doPrimePathwisePass(childNode, childListener, r_outputtageChain);
         DA(childListener->novelOutputInParentArcPrimePathwise != NodeMetricsListener::NON_BOOL);
 
         r_outputtageChain.popArc();
@@ -1224,29 +1147,8 @@ void MultiverseMetricsListener::doPrimePathwisePass (const Node *node, NodeMetri
   }
 }
 
-void MultiverseMetricsListener::setVisitageValue (const Node *node, NodeMetricsListener *listener, const VisitageChain &chain) {
-  listener->visitageValue = chain.getVisitageValue();
-}
-
 void MultiverseMetricsListener::setPrimePathwiseOutputtageValue (const autoinf::Multiverse::Node *node, NodeMetricsListener *listener, const PrimePathwiseOutputtageChain &chain) {
   listener->novelOutputInParentArcPrimePathwise = chain.novel();
-}
-
-size_t MultiverseMetricsListener::checkVisitageValueRecursively (const Node *node, NodeMetricsListener *listener, VisitageChain chain) {
-  DA(!node->getPrimeParentNode() || static_cast<NodeMetricsListener *>(node->getPrimeParentNode()->getListener())->visitageValue == chain.getVisitageValue());
-  chain.pushNode(listener->locationHash);
-  DA(listener->visitageValue == chain.getVisitageValue());
-  size_t c = 1;
-
-  for (size_t i = 0, end = node->getChildrenSize(); i != end; ++i) {
-    Node *childNode = get<2>(node->getChild(i));
-    if (childNode->getPrimeParentNode() == node && childNode->getPrimeParentArcChildIndex() == i) {
-      NodeMetricsListener *childListener = static_cast<NodeMetricsListener *>(childNode->getListener());
-      c += checkVisitageValueRecursively(childNode, childListener, chain);
-    }
-  }
-
-  return c;
 }
 
 void MultiverseMetricsListener::nodeProcessed (const Multiverse &multiverse, const Node *node, size_t processedCount, size_t totalCount) {
