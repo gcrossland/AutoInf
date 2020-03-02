@@ -547,14 +547,14 @@ class Multiverse {
 
   pub class Listener;
 
-  prv LocalActionExecutor e;
+  prv LocalActionExecutor localExecutor;
   prv std::unique_ptr<Listener> listener;
   prv bitset::Bitset ignoredBytes;
   prv StringSet<char8_t> outputStringSet;
   prv Node *rootNode;
   prv std::unordered_map<std::reference_wrapper<const core::HashWrapper<Signature>>, Node *> nodes; // XXXX make Node * unique_ptr?
-  prv std::vector<std::unique_ptr<ActionExecutor>> executors;
-  prv bitset::Bitset executorIgnoredBytesCleans;
+  prv std::vector<std::unique_ptr<RemoteActionExecutor>> remoteExecutors;
+  prv bitset::Bitset remoteExecutorIgnoredBytesCleans;
 
   pub Multiverse (Story &&story, core::u8string &r_initialOutput, std::unique_ptr<Listener> &&listener, const std::vector<autofrotz::zword> &initialIgnoredBytes);
   prv static bitset::Bitset initIgnoredBytes (const std::vector<autofrotz::zword> &initialIgnoredBytes);

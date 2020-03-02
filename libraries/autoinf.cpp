@@ -1145,14 +1145,14 @@ Multiverse::Node *const &Multiverse::NodeIterator::operator_ind_ () const {
 }
 
 Multiverse::Multiverse (Story &&story, u8string &r_initialOutput, unique_ptr<Listener> &&listener, const vector<zword> &initialIgnoredBytes) :
-  e(move(story), r_initialOutput), listener(move(listener)), ignoredBytes(initIgnoredBytes(initialIgnoredBytes)), rootNode(nullptr)
+  localExecutor(move(story), r_initialOutput), listener(move(listener)), ignoredBytes(initIgnoredBytes(initialIgnoredBytes)), rootNode(nullptr)
 {
   DS();
   DPRE(!!this->listener);
 
   ignoredBytesChanged();
 
-  ActionExecutor::ActionResult actionResult = e.getActionResult();
+  ActionExecutor::ActionResult actionResult = localExecutor.getActionResult();
 
   unique_ptr<Node::Listener> nodeListener(this->listener->createNodeListener());
   this->listener->nodeReached(*this, nodeListener.get(), ActionSet::NON_ID, r_initialOutput, actionResult.signature.get(), actionResult.significantWords);
@@ -1179,7 +1179,7 @@ Multiverse::~Multiverse () noexcept {
 }
 
 const ActionSet &Multiverse::getActionSet () const {
-  return e.getActionSet();
+  return localExecutor.getActionSet();
 }
 
 Multiverse::Listener *Multiverse::getListener () const {
@@ -1211,18 +1211,18 @@ Multiverse::Node *Multiverse::getRoot () const {
 }
 
 void Multiverse::ignoredBytesChanged () {
-  e.setIgnoredByteRangeset(Rangeset(ignoredBytes, e.getDynamicMemorySize()));
-  executorIgnoredBytesCleans.clear();
+  localExecutor.setIgnoredByteRangeset(Rangeset(ignoredBytes, localExecutor.getDynamicMemorySize()));
+  remoteExecutorIgnoredBytesCleans.clear();
 }
 
 void Multiverse::addRemoteExecutor (const TcpSocketAddress &addr) {
-  executors.emplace_back(unique_ptr<RemoteActionExecutor>(new RemoteActionExecutor(addr)));
-  DA(!executorIgnoredBytesCleans.getBit(executors.size() - 1));
+  remoteExecutors.emplace_back(unique_ptr<RemoteActionExecutor>(new RemoteActionExecutor(addr)));
+  DA(!remoteExecutorIgnoredBytesCleans.getBit(remoteExecutors.size() - 1));
 }
 
 void Multiverse::removeRemoteExecutors () {
-  executors.clear();
-  executorIgnoredBytesCleans.clear();
+  remoteExecutors.clear();
+  remoteExecutorIgnoredBytesCleans.clear();
 }
 
 Multiverse::Node *Multiverse::collapseNode (
@@ -1307,7 +1307,7 @@ void Multiverse::save (const u8string &pathName) {
   Node::Listener *listener = nullptr;
   derefAndProcessNodeListener(listener, s);
 
-  s.process(e.getWordSet());
+  s.process(localExecutor.getWordSet());
   s.process(ignoredBytes);
   s.process(outputStringSet);
   s.derefAndProcess(rootNode);
@@ -1360,7 +1360,7 @@ void Multiverse::load (const u8string &pathName) {
       return true;
     });
 
-    e.getWordSet() = move(wordSet);
+    localExecutor.getWordSet() = move(wordSet);
     // TODO validate result
   } catch (...) {
     nthrow(PlainException(u8("loading failed")));

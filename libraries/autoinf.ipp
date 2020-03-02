@@ -891,14 +891,14 @@ template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd)
     return;
   }
 
-  size_t executorCount = min(this->executors.size(), processableNodeCount);
+  size_t executorCount = min(this->remoteExecutors.size(), processableNodeCount);
   ActionExecutor *executors[executorCount == 0 ? 1 : executorCount];
   if (executorCount == 0) {
     executorCount = 1;
-    executors[0] = &e;
+    executors[0] = &localExecutor;
   } else {
     for (size_t i = 0; i != executorCount; ++i) {
-      executors[i] = this->executors[i].get();
+      executors[i] = this->remoteExecutors[i].get();
     }
   }
   size_t executorPerformanceRangeFactor = 3;
@@ -990,20 +990,20 @@ template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd)
   for (size_t i = 0; i != executorCount; ++i) {
     ActionExecutor *executor = executors[i];
     bool ignoredBytesDirty = false;
-    if (executor != &e) {
-      DA(executor == this->executors[i].get());
-      if (!executorIgnoredBytesCleans.getBit(i)) {
-        executorIgnoredBytesCleans.setBit(i);
+    if (executor != &localExecutor) {
+      DA(executor == this->remoteExecutors[i].get());
+      if (!remoteExecutorIgnoredBytesCleans.getBit(i)) {
+        remoteExecutorIgnoredBytesCleans.setBit(i);
         ignoredBytesDirty = true;
       }
     }
     packaged_task<void ()> dispatcher([&, executor, ignoredBytesDirty] () {
       DS();
 
-      if (executor != &e) {
+      if (executor != &localExecutor) {
         executor->clearWordSet();
         if (ignoredBytesDirty) {
-          executor->setIgnoredByteRangeset(e.getIgnoredByteRangeset());
+          executor->setIgnoredByteRangeset(localExecutor.getIgnoredByteRangeset());
         }
       }
       Bitset cumulativeExtraWordSet;
@@ -1023,19 +1023,19 @@ template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd)
         auto &results = get<1>(*resultSet);
         DA(results.empty());
 
-        executor->processNode(results, executor != &e ? &extraWordSet : nullptr, parentNode->getSignature(), *parentState);
+        executor->processNode(results, executor != &localExecutor ? &extraWordSet : nullptr, parentNode->getSignature(), *parentState);
         DW(, "finished processing node with sig of hash ", parentNode->getSignature().hashFast(), " (with ", results.size(), " results)");
 
-        if (executor != &e) {
+        if (executor != &localExecutor) {
           cumulativeExtraWordSet |= extraWordSet;
         }
 
         finishProcessingNode(resultSet);
       }
 
-      if (executor != &e) {
+      if (executor != &localExecutor) {
         unique_lock<mutex> l(lock);
-        e.getWordSet() |= move(cumulativeExtraWordSet);
+        localExecutor.getWordSet() |= move(cumulativeExtraWordSet);
       }
     });
     dispatcherFutures.emplace_back(dispatcher.get_future());
@@ -1134,14 +1134,14 @@ template<typename _I> void Multiverse::collapseNodes (_I nodesBegin, _I nodesEnd
     DW(, "other node has sig of hash", node->getSignature().hashFast());
     otherSignatureIs.emplace_back(node->getSignature().get().begin());
   }
-  Bitset extraIgnoredBytes = createExtraIgnoredBytes(firstSignature, otherSignatureIs.begin(), otherSignatureIs.end(), e);
+  Bitset extraIgnoredBytes = createExtraIgnoredBytes(firstSignature, otherSignatureIs.begin(), otherSignatureIs.end(), localExecutor);
 
   // Walk through the node tree, processing each node once (unless all its parents
   // are collapsed away, in which case it'll never be reached), and rebuild the
   // node map with only those nodes which have survived (and with their new
   // signatures).
 
-  Rangeset extraIgnoredByteRangeset(extraIgnoredBytes, e.getDynamicMemorySize());
+  Rangeset extraIgnoredByteRangeset(extraIgnoredBytes, localExecutor.getDynamicMemorySize());
   decltype(nodes) survivingNodes(nodes.bucket_count());
   unordered_map<Node *, Node *> nodeCollapseTargets(nodes.bucket_count());
   unordered_map<Node *, HashWrapper<Signature>> survivingNodePrevSignatures(nodes.bucket_count());
