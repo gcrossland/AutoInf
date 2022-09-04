@@ -685,9 +685,10 @@ bool runCommandLine (Multiverse &multiverse, const u8string &in, u8string &messa
     const char8_t *inPartEnd = inI = skipNonSpaces(inI, inEnd);
     u8string line(inPartBegin, inPartEnd);
 
-    if (line == u8("Q") || line == u8("q")) {
-      return false;
-    } else if (line.size() > 1 && (line[0] == u8("X")[0] || line[0] == u8("x")[0])) {
+    const iu lower = 1U << 5;
+    char8_t accessKey = line.size() > 0 ? static_cast<char8_t>(line[0] | lower) : u8("\0")[0];
+
+    if (line.size() > 1 && accessKey == u8("x")[0]) {
       is n = getNaturalNumber(line.data() + 1, line.data() + line.size());
       if (n >= 0) {
         iu times = static_cast<iu>(n);
@@ -700,244 +701,278 @@ bool runCommandLine (Multiverse &multiverse, const u8string &in, u8string &messa
         }
         return true;
       }
-    } else if (line == u8("D") || line == u8("d")) {
-      elideDeadEndNodes = !elideDeadEndNodes;
-    } else if (line == u8("N") || line == u8("n")) {
-      elideAntiselectedNodes = !elideAntiselectedNodes;
-    } else if (line == u8("B") || line == u8("b")) {
-      maxDepth = numeric_limits<size_t>::max();
-    } else if (line.size() > 2 && (line[0] == u8("B")[0] || line[0] == u8("b")[0]) && line[1] == u8("-")[0]) {
-      is n = getNaturalNumber(line.data() + 2, line.data() + line.size());
-      if (n >= 0) {
-        maxDepth = static_cast<iu>(n);
-      }
-    } else if (line == u8("M") || line == u8("m")) {
-      combineSimilarSiblings = !combineSimilarSiblings;
-    } else if (line == u8("A") || line == u8("a")) {
-      selectedNodes.clear();
-      for (const auto &node : nodesByIndex) {
-        selectedNodes.insert(node);
-      }
-      view->selectionChanged();
-    } else if (line == u8("U") || line == u8("u")) {
-      for (const auto &node : nodesByIndex) {
-        if (node->getState()) {
+    }
+
+    const iu withParam = 1U << 8;
+    iu option = 0;
+    if (line.size() == 1) {
+      option = accessKey;
+    } else if (line.size() > 2 && line[1] == u8("-")[0]) {
+      option = accessKey | withParam;
+    }
+
+    switch (option) {
+      case u8'q':
+        return false;
+      case u8'd': {
+        elideDeadEndNodes = !elideDeadEndNodes;
+      } break;
+      case u8'n': {
+        elideAntiselectedNodes = !elideAntiselectedNodes;
+      } break;
+      case u8'b': {
+        maxDepth = numeric_limits<size_t>::max();
+      } break;
+      case u8'b' | withParam: {
+        is n = getNaturalNumber(line.data() + 2, line.data() + line.size());
+        if (n >= 0) {
+          maxDepth = static_cast<iu>(n);
+        }
+      } break;
+      case u8'm': {
+        combineSimilarSiblings = !combineSimilarSiblings;
+      } break;
+      case u8'a': {
+        selectedNodes.clear();
+        for (const auto &node : nodesByIndex) {
           selectedNodes.insert(node);
         }
-      }
-      view->selectionChanged();
-    } else if (line == u8("C") || line == u8("c")) {
-      selectedNodes.clear();
-      view->selectionChanged();
-    } else if (line == u8("I") || line == u8("i")) {
-      unordered_set<Node *> nextSelectedNodes(nodesByIndex.size() - selectedNodes.size());
-      for (const auto &node : nodesByIndex) {
-        if (!contains(selectedNodes, node)) {
-          nextSelectedNodes.insert(node);
-        }
-      }
-      selectedNodes = move(nextSelectedNodes);
-      view->selectionChanged();
-    } else if (line.size() > 3 && (line[0] == u8("V")[0] || line[0] == u8("v")[0]) && line[1] == u8("-")[0]) {
-      char8_t valueName = line[2];
-      size_t valueIndex;
-      if (valueName >= u8("a")[0] && valueName <= u8("z")[0] && (valueIndex = static_cast<size_t>(valueName - u8("a")[0])) < NodeMetricsListener::valueCount) {
-        if (line.size() > 5 && line[3] == u8(">")[0] && line[4] == u8("=")[0]) {
-          const char8_t *numBegin = line.data() + 5;
-          const char8_t *numEnd = line.data() + line.size();
-          is n = getNaturalNumber(numBegin, numEnd);
-          if (n >= 0) {
-            size_t prevSize = selectedNodes.size();
-            size_t unprocessedCount = 0;
-            for (auto i = selectedNodes.begin(), end = selectedNodes.end(); i != end;) {
-              Node *node = *i;
-              Value value = static_cast<NodeView *>(node->getListener())->getValue(valueIndex);
-              if (value < n) {
-                i = selectedNodes.erase(i);
-                continue;
-              }
-              unprocessedCount += !!node->getState();
-              ++i;
-            }
-
-            char8_t b[1024];
-            sprintf(reinterpret_cast<char *>(b), "Selected %u (%u unprocessed) (from %u) nodes\n\n", static_cast<iu>(selectedNodes.size()), static_cast<iu>(unprocessedCount), static_cast<iu>(prevSize));
-            message.append(b);
-          }
-        } else if (line.size() > 4) {
-          const char8_t *numBegin = line.data() + 3;
-          const char8_t *numEnd = line.data() + line.size() - 1;
-          bool undershoot = false;
-          bool overshootOnEmpty = false;
-          switch (*numEnd) {
-            case U'+':
-              break;
-            case U'-':
-              undershoot = true;
-              break;
-            case U'|':
-              undershoot = true;
-              overshootOnEmpty = true;
-              break;
-            default:
-              numBegin = nullptr;
-              break;
-          }
-          if (numBegin) {
-            is n = getNaturalNumber(numBegin, numEnd);
-            if (n > 0 && !selectedNodes.empty()) {
-              size_t count = static_cast<size_t>(n);
-              if (count < selectedNodes.size()) {
-                vector<tuple<Value, Node *>> nodes;
-                nodes.reserve(selectedNodes.size());
-
-                for (Node *node : selectedNodes) {
-                  Value value = static_cast<NodeView *>(node->getListener())->getValue(valueIndex);
-                  nodes.emplace_back(value, node);
-                }
-                sort(nodes.begin(), nodes.end(), [] (const tuple<Value, Node *> &o0, const tuple<Value, Node *> &o1) -> bool {
-                  return get<0>(o0) > get<0>(o1);
-                });
-
-                if (undershoot) {
-                  Value minValue = get<0>(nodes[count]);
-                  if (overshootOnEmpty && get<0>(nodes[0]) == minValue) {
-                    undershoot = false;
-                  } else {
-                    --count;
-                    for (; count != static_cast<size_t>(-1) && get<0>(nodes[count]) == minValue; --count);
-                    ++count;
-                  }
-                }
-                if (!undershoot) {
-                  Value minValue = get<0>(nodes[count - 1]);
-                  for (auto end = nodes.size(); count != end && get<0>(nodes[count]) == minValue; ++count);
-                }
-
-                selectedNodes.clear();
-                size_t unprocessedCount = 0;
-                for (auto i = nodes.begin(), end = i + count; i != end; ++i) {
-                  Node *node = get<1>(*i);
-                  unprocessedCount += !!node->getState();
-                  selectedNodes.insert(node);
-                }
-                view->selectionChanged();
-
-                char8_t b[1024];
-                char *t = reinterpret_cast<char *>(b);
-                t += sprintf(t, "Selected %u (%u unprocessed) (from %u) nodes", static_cast<iu>(count), static_cast<iu>(unprocessedCount), static_cast<iu>(nodes.size()));
-                if (count != 0) {
-                  t += sprintf(t, " (threshold metric value %d)", get<0>(nodes[count - 1]));
-                }
-                t += sprintf(t, "\n\n");
-                message.append(b);
-              } else {
-                char8_t b[1024];
-                sprintf(reinterpret_cast<char *>(b), "Selected %u nodes (selection unchanged)\n\n", static_cast<iu>(selectedNodes.size()));
-                message.append(b);
-              }
-            }
-          }
-        }
-      }
-    } else if (line == u8("S") || line == u8("s")) {
-      verboseNodes.insert(selectedNodes.cbegin(), selectedNodes.cend());
-    } else if (line == u8("H") || line == u8("h")) {
-      for (Node *node : selectedNodes) {
-        verboseNodes.erase(node);
-      }
-    } else if (line.size() > 2 && (line[0] == u8("W")[0] || line[0] == u8("w")[0]) && line[1] == u8("-")[0]) {
-      u8string hostAndPort(line.data() + 2, line.data() + line.size());
-      unique_ptr<TcpSocketAddress> addr;
-      try {
-        addr.reset(new TcpSocketAddress(getFirstAddress(hostAndPort)));
-        multiverse.addRemoteExecutor(*addr);
-      } catch (exception &e) {
-        addr.release();
-        message.append(u8("Error: "));
-        message.append(core::createExceptionMessage(e, false));
-        message.append(u8("\n\n"));
-      }
-      if (addr) {
-        message.append(u8("Added worker at "));
-        addr->getSocketAddress(message);
-        message.append(u8("\n\n"));
-      }
-    } else if (line == u8("R") || line == u8("r")) {
-      multiverse.removeRemoteExecutors();
-    } else if (line == u8("P") || line == u8("p")) {
-      if (!selectedNodes.empty()) {
-        vector<Node *> t;
-        t.reserve(selectedNodes.size());
-        for (const auto &n : nodesByIndex) {
-          if (contains(selectedNodes, n)) {
-            t.emplace_back(n);
-          }
-        }
-        view->nodeProcessingStarting();
-        multiverse.processNodes(t.begin(), t.end());
-      }
-      view->multiverseMayHaveChanged();
-    } else if (line == u8("L") || line == u8("l")) {
-      multiverse.collapseNodes(selectedNodes.cbegin(), selectedNodes.cend());
-      view->multiverseMayHaveChanged();
-    } else if (line == u8("T") || line == u8("t")) {
-      for (Node *node : selectedNodes) {
-        node->clearState();
-      }
-      view->multiverseChanged(multiverse);
-      view->multiverseMayHaveChanged();
-    } else if (line.size() > 2 && (line[0] == u8("E")[0] || line[0] == u8("e")[0]) && line[1] == u8("-")[0]) {
-      u8string name(line.data() + 2, line.data() + line.size());
-      multiverse.save(name);
-    } else if (line.size() > 2 && (line[0] == u8("O")[0] || line[0] == u8("o")[0]) && line[1] == u8("-")[0]) {
-      u8string name(line.data() + 2, line.data() + line.size());
-      multiverse.load(name);
-      view->multiverseMayHaveChanged();
-    } else if (line == u8("G") || line == u8("g")) {
-      auto bytes = multiverse.getIgnoredBytes();
-      message.append(u8("Ignored bytes: {"));
-      for (size_t i = bytes.getNextSetBit(0); i != Bitset::nonIndex; i = bytes.getNextSetBit(i + 1)) {
-        char8_t b[1024];
-        sprintf(reinterpret_cast<char *>(b), "0x%04X,", static_cast<iu>(i));
-        message.append(b);
-      }
-      message.append(u8("}\n\n"));
-    } else {
-      const char8_t *numBegin = line.data();
-      const char8_t *numEnd = numBegin + line.size();
-      const char8_t *dash = find(numBegin, numEnd, u8("-")[0]);
-
-      const size_t rX = static_cast<size_t>(-1);
-      size_t r0 = rX;
-      size_t r1 = rX;
-
-      is n = getNaturalNumber(numBegin, dash);
-      size_t nn;
-      if (n >= 0 && (nn = static_cast<size_t>(n)) < nodesByIndex.size()) {
-        r0 = nn;
-      }
-      if (dash == numEnd) {
-        r1 = r0 + 1;
-      } else {
-        is n = getNaturalNumber(dash + 1, numEnd);
-        size_t nn;
-        if (n >= 0 && (nn = static_cast<size_t>(n)) < nodesByIndex.size()) {
-          r1 = nn + 1;
-        }
-      }
-
-      if (r0 != rX && r1 != rX) {
-        for (size_t i = r0; i != r1; ++i) {
-          Node *node = nodesByIndex[i];
-          auto pos = selectedNodes.find(node);
-          if (pos == selectedNodes.end()) {
+        view->selectionChanged();
+      } break;
+      case u8'u': {
+        for (const auto &node : nodesByIndex) {
+          if (node->getState()) {
             selectedNodes.insert(node);
-          } else {
-            selectedNodes.erase(pos);
           }
         }
         view->selectionChanged();
+      } break;
+      case u8'c': {
+        selectedNodes.clear();
+        view->selectionChanged();
+      } break;
+      case u8'i': {
+        unordered_set<Node *> nextSelectedNodes(nodesByIndex.size() - selectedNodes.size());
+        for (const auto &node : nodesByIndex) {
+          if (!contains(selectedNodes, node)) {
+            nextSelectedNodes.insert(node);
+          }
+        }
+        selectedNodes = move(nextSelectedNodes);
+        view->selectionChanged();
+      } break;
+      case u8'v' | withParam: {
+        char8_t valueName = line.size() > 2 ? line[2] : u8("\0")[0];
+        size_t valueIndex;
+        if (valueName >= u8("a")[0] && valueName <= u8("z")[0] && (valueIndex = static_cast<size_t>(valueName - u8("a")[0])) < NodeMetricsListener::valueCount) {
+          if (line.size() > 5 && line[3] == u8(">")[0] && line[4] == u8("=")[0]) {
+            const char8_t *numBegin = line.data() + 5;
+            const char8_t *numEnd = line.data() + line.size();
+            is n = getNaturalNumber(numBegin, numEnd);
+            if (n >= 0) {
+              size_t prevSize = selectedNodes.size();
+              size_t unprocessedCount = 0;
+              for (auto i = selectedNodes.begin(), end = selectedNodes.end(); i != end;) {
+                Node *node = *i;
+                Value value = static_cast<NodeView *>(node->getListener())->getValue(valueIndex);
+                if (value < n) {
+                  i = selectedNodes.erase(i);
+                  continue;
+                }
+                unprocessedCount += !!node->getState();
+                ++i;
+              }
+
+              char8_t b[1024];
+              sprintf(reinterpret_cast<char *>(b), "Selected %u (%u unprocessed) (from %u) nodes\n\n", static_cast<iu>(selectedNodes.size()), static_cast<iu>(unprocessedCount), static_cast<iu>(prevSize));
+              message.append(b);
+            }
+          } else if (line.size() > 4) {
+            const char8_t *numBegin = line.data() + 3;
+            const char8_t *numEnd = line.data() + line.size() - 1;
+            bool undershoot = false;
+            bool overshootOnEmpty = false;
+            switch (*numEnd) {
+              case U'+':
+                break;
+              case U'-':
+                undershoot = true;
+                break;
+              case U'|':
+                undershoot = true;
+                overshootOnEmpty = true;
+                break;
+              default:
+                numBegin = nullptr;
+                break;
+            }
+            if (numBegin) {
+              is n = getNaturalNumber(numBegin, numEnd);
+              if (n > 0 && !selectedNodes.empty()) {
+                size_t count = static_cast<size_t>(n);
+                if (count < selectedNodes.size()) {
+                  vector<tuple<Value, Node *>> nodes;
+                  nodes.reserve(selectedNodes.size());
+
+                  for (Node *node : selectedNodes) {
+                    Value value = static_cast<NodeView *>(node->getListener())->getValue(valueIndex);
+                    nodes.emplace_back(value, node);
+                  }
+                  sort(nodes.begin(), nodes.end(), [] (const tuple<Value, Node *> &o0, const tuple<Value, Node *> &o1) -> bool {
+                    return get<0>(o0) > get<0>(o1);
+                  });
+
+                  if (undershoot) {
+                    Value minValue = get<0>(nodes[count]);
+                    if (overshootOnEmpty && get<0>(nodes[0]) == minValue) {
+                      undershoot = false;
+                    } else {
+                      --count;
+                      for (; count != static_cast<size_t>(-1) && get<0>(nodes[count]) == minValue; --count);
+                      ++count;
+                    }
+                  }
+                  if (!undershoot) {
+                    Value minValue = get<0>(nodes[count - 1]);
+                    for (auto end = nodes.size(); count != end && get<0>(nodes[count]) == minValue; ++count);
+                  }
+
+                  selectedNodes.clear();
+                  size_t unprocessedCount = 0;
+                  for (auto i = nodes.begin(), end = i + count; i != end; ++i) {
+                    Node *node = get<1>(*i);
+                    unprocessedCount += !!node->getState();
+                    selectedNodes.insert(node);
+                  }
+                  view->selectionChanged();
+
+                  char8_t b[1024];
+                  char *t = reinterpret_cast<char *>(b);
+                  t += sprintf(t, "Selected %u (%u unprocessed) (from %u) nodes", static_cast<iu>(count), static_cast<iu>(unprocessedCount), static_cast<iu>(nodes.size()));
+                  if (count != 0) {
+                    t += sprintf(t, " (threshold metric value %d)", get<0>(nodes[count - 1]));
+                  }
+                  t += sprintf(t, "\n\n");
+                  message.append(b);
+                } else {
+                  char8_t b[1024];
+                  sprintf(reinterpret_cast<char *>(b), "Selected %u nodes (selection unchanged)\n\n", static_cast<iu>(selectedNodes.size()));
+                  message.append(b);
+                }
+              }
+            }
+          }
+        }
+      } break;
+      case u8's': {
+        verboseNodes.insert(selectedNodes.cbegin(), selectedNodes.cend());
+      } break;
+      case u8'h': {
+        for (Node *node : selectedNodes) {
+          verboseNodes.erase(node);
+        }
+      } break;
+      case u8'w' | withParam: {
+        u8string hostAndPort(line.data() + 2, line.data() + line.size());
+        unique_ptr<TcpSocketAddress> addr;
+        try {
+          addr.reset(new TcpSocketAddress(getFirstAddress(hostAndPort)));
+          multiverse.addRemoteExecutor(*addr);
+        } catch (exception &e) {
+          addr.release();
+          message.append(u8("Error: "));
+          message.append(core::createExceptionMessage(e, false));
+          message.append(u8("\n\n"));
+        }
+        if (addr) {
+          message.append(u8("Added worker at "));
+          addr->getSocketAddress(message);
+          message.append(u8("\n\n"));
+        }
+      } break;
+      case u8'r': {
+        multiverse.removeRemoteExecutors();
+      } break;
+      case u8'p': {
+        if (!selectedNodes.empty()) {
+          vector<Node *> t;
+          t.reserve(selectedNodes.size());
+          for (const auto &n : nodesByIndex) {
+            if (contains(selectedNodes, n)) {
+              t.emplace_back(n);
+            }
+          }
+          view->nodeProcessingStarting();
+          multiverse.processNodes(t.begin(), t.end());
+        }
+        view->multiverseMayHaveChanged();
+      } break;
+      case u8'l': {
+        multiverse.collapseNodes(selectedNodes.cbegin(), selectedNodes.cend());
+        view->multiverseMayHaveChanged();
+      } break;
+      case u8't': {
+        for (Node *node : selectedNodes) {
+          node->clearState();
+        }
+        view->multiverseChanged(multiverse);
+        view->multiverseMayHaveChanged();
+      } break;
+      case u8'e' | withParam: {
+        u8string name(line.data() + 2, line.data() + line.size());
+        multiverse.save(name);
+      } break;
+      case u8'o' | withParam: {
+        u8string name(line.data() + 2, line.data() + line.size());
+        multiverse.load(name);
+        view->multiverseMayHaveChanged();
+      } break;
+      case u8'g': {
+        auto bytes = multiverse.getIgnoredBytes();
+        message.append(u8("Ignored bytes: {"));
+        for (size_t i = bytes.getNextSetBit(0); i != Bitset::nonIndex; i = bytes.getNextSetBit(i + 1)) {
+          char8_t b[1024];
+          sprintf(reinterpret_cast<char *>(b), "0x%04X,", static_cast<iu>(i));
+          message.append(b);
+        }
+        message.append(u8("}\n\n"));
+      } break;
+      default: {
+        const char8_t *numBegin = line.data();
+        const char8_t *numEnd = numBegin + line.size();
+        const char8_t *dash = find(numBegin, numEnd, u8("-")[0]);
+
+        const size_t rX = static_cast<size_t>(-1);
+        size_t r0 = rX;
+        size_t r1 = rX;
+
+        is n = getNaturalNumber(numBegin, dash);
+        size_t nn;
+        if (n >= 0 && (nn = static_cast<size_t>(n)) < nodesByIndex.size()) {
+          r0 = nn;
+        }
+        if (dash == numEnd) {
+          r1 = r0 + 1;
+        } else {
+          is n = getNaturalNumber(dash + 1, numEnd);
+          size_t nn;
+          if (n >= 0 && (nn = static_cast<size_t>(n)) < nodesByIndex.size()) {
+            r1 = nn + 1;
+          }
+        }
+
+        if (r0 != rX && r1 != rX) {
+          for (size_t i = r0; i != r1; ++i) {
+            Node *node = nodesByIndex[i];
+            auto pos = selectedNodes.find(node);
+            if (pos == selectedNodes.end()) {
+              selectedNodes.insert(node);
+            } else {
+              selectedNodes.erase(pos);
+            }
+          }
+          view->selectionChanged();
+        }
       }
     }
 
@@ -1734,7 +1769,7 @@ is getNaturalNumber (const char8_t *iBegin, const char8_t *iEnd) {
     return -1;
   }
 
-  char8_t in[iEnd - iBegin + 1];
+  char8_t in[iEnd - iBegin + 1U];
   copy(iBegin, iEnd, in);
   in[iEnd - iBegin] = u8("\0")[0];
 
