@@ -1,7 +1,7 @@
 /** @file */
 /* -----------------------------------------------------------------------------
    AutoInf Core Engine Library
-   © Geoff Crossland 2006, 2013-2017
+   © Geoff Crossland 2006-2022
 ----------------------------------------------------------------------------- */
 #ifndef AUTOINF_ALREADYINCLUDED
 #define AUTOINF_ALREADYINCLUDED

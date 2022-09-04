@@ -351,7 +351,7 @@ template<typename _InputIterator, typename _InputEndIterator> template<typename 
 
 template<typename _InputIterator, typename _InputEndIterator> iu8f Deserialiser<_InputIterator, _InputEndIterator>::readOctet () {
   if (i == end) {
-    throw PlainException(u8("input was truncated"));
+    throw PlainException(u8"input was truncated");
   }
   iu8f value = *(i++);
   return value;
@@ -360,7 +360,7 @@ template<typename _InputIterator, typename _InputEndIterator> iu8f Deserialiser<
 template<typename _InputIterator, typename _InputEndIterator> void Deserialiser<_InputIterator, _InputEndIterator>::readOctets (iu8f *begin, size_t size) {
   for (iu8f *i = begin, *end = i + size; i != end; ++i) {
     if (this->i == this->end) {
-      throw PlainException(u8("input was truncated"));
+      throw PlainException(u8"input was truncated");
     }
     *i = *(this->i++);
   }
@@ -476,7 +476,7 @@ template<typename _InputIterator, typename _InputEndIterator> template<typename 
 template<typename _InputIterator, typename _InputEndIterator> SerialiserBase::id Deserialiser<_InputIterator, _InputEndIterator>::readAllocationId () {
   id allocationId = readIu<id>();
   if (allocationId >= allocations.size()) {
-    throw PlainException(u8("as-yet-unseen allocation referenced"));
+    throw PlainException(u8"as-yet-unseen allocation referenced");
   }
   return allocationId;
 }
@@ -577,7 +577,7 @@ template<typename _InputIterator, typename _InputEndIterator> template<typename 
 template<typename _InputIterator, typename _InputEndIterator> template<typename _T, typename _P> void Deserialiser<_InputIterator, _InputEndIterator>::process (_T *&o, _P *parent) {
   id allocationId = readAllocationId();
   if (allocationId == nonId) {
-    throw PlainException(u8("serialisation of an as-yet-unseen allocation appears in the input where only a reference to an already-seen allocation was expected"));
+    throw PlainException(u8"serialisation of an as-yet-unseen allocation appears in the input where only a reference to an already-seen allocation was expected");
   }
   size_t offset = readIu<size_t>();
   o = static_cast<_T *>(static_cast<void *>(static_cast<char *>(allocations[allocationId]) + offset));
@@ -667,7 +667,7 @@ template<typename _L, typename _Size> _L &MultiList<_L, _Size>::subList () noexc
 template<typename _L, typename _Size> _Size MultiList<_L, _Size>::push () {
   _Size i = size();
   if (i == numeric_limits<_Size>::max()) {
-    throw PlainException(u8("list at maximum size"));
+    throw PlainException(u8"list at maximum size");
   }
   DPRE(bounds.back() <= list.size());
   bounds.emplace_back(list.size());
@@ -1212,7 +1212,7 @@ template<typename _Walker> void Multiverse::derefAndProcessNodeListener (Node::L
     return tuple<SerialiserBase::SubtypeId, void *, size_t>(0, get<0>(r), get<1>(r));
   }, [&] (SerialiserBase::SubtypeId type) -> tuple<Node::Listener *, void *, size_t> {
     if (type != 0) {
-      throw PlainException(u8("invalid node listener type found"));
+      throw PlainException(u8"invalid node listener type found");
     }
     return listener->constructNodeListener();
   }, [&] (Node::Listener *nodeListener, void *, SerialiserBase::SubtypeId, _Walker &w) {

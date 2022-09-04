@@ -208,7 +208,7 @@ ActionSet::ActionSet (const vector<Word> &words, const vector<Template> &dewordi
   DS();
   for (const Template &templ : dewordingTemplates) {
     if (templ.words.size() != 1) {
-      throw PlainException(u8("dewording action templates must contain exactly one action word"));
+      throw PlainException(u8"dewording action templates must contain exactly one action word");
     }
   }
 
@@ -398,9 +398,9 @@ LocalActionExecutor::LocalActionExecutor (Story &&story, u8string &r_initialOutp
   deworder(move(story.deworder)), significantWordAddrs(move(story.significantWordAddrs)), ignoredByteRangeset()
 {
   if (!vm.isAlive()) {
-    throw PlainException(u8("VM died while initialising"));
+    throw PlainException(u8"VM died while initialising");
   }
-  doAction(vm, story.prologueInput, r_initialOutput, u8("VM died while running the prologue input"));
+  doAction(vm, story.prologueInput, r_initialOutput, u8"VM died while running the prologue input");
 }
 
 iu16 LocalActionExecutor::getDynamicMemorySize () const noexcept {
@@ -450,7 +450,7 @@ void LocalActionExecutor::doSaveAction (State &r_state) {
   DPRE(vm.isAlive());
 
   if (!succeeded) {
-    throw PlainException(u8("save action didn't cause saving"));
+    throw PlainException(u8"save action didn't cause saving");
   }
 }
 
@@ -464,7 +464,7 @@ void LocalActionExecutor::doRestoreAction (const State &state) {
   DPRE(vm.isAlive());
 
   if (!succeeded) {
-    throw PlainException(u8("restore action didn't cause restoration"));
+    throw PlainException(u8"restore action didn't cause restoration");
   }
 }
 
@@ -535,7 +535,7 @@ void LocalActionExecutor::processNode (
     DW(, "processing action **",input.c_str(),"** (id ",id,")");
 
     doRestoreAction(parentState);
-    doAction(vm, input, output, u8("VM died while doing action"));
+    doAction(vm, input, output, u8"VM died while doing action");
     HashWrapper<Signature> signature(Multiverse::Node::createSignature(vm, ignoredByteRangeset));
 
     auto dewordingWord = action.getDewordingTarget();
@@ -618,14 +618,14 @@ void RemoteActionExecutor::endRequest (iu8f requestId) {
 
 iu8f RemoteActionExecutor::read () {
   if (in == InputStreamEndIterator<TcpSocketStream>()) {
-    throw PlainException(u8("received incomplete data from server"));
+    throw PlainException(u8"received incomplete data from server");
   }
   return *(in++);
 }
 
 void RemoteActionExecutor::check (iu expected, iu received) {
   if (expected != received) {
-    throw PlainException(u8("received incorrect data from server"));
+    throw PlainException(u8"received incorrect data from server");
   }
 }
 
@@ -694,14 +694,14 @@ ActionExecutorServer::ActionExecutorServer (LocalActionExecutor &r_e, const TcpS
 
 iu8f ActionExecutorServer::read (InputStreamIterator<TcpSocketStream> &r_in) {
   if (r_in == InputStreamEndIterator<TcpSocketStream>()) {
-    throw PlainException(u8("received incomplete data from client"));
+    throw PlainException(u8"received incomplete data from client");
   }
   return *(r_in++);
 }
 
 void ActionExecutorServer::check (iu expected, iu received) {
   if (expected != received) {
-    throw PlainException(u8("received incorrect data from client"));
+    throw PlainException(u8"received incorrect data from client");
   }
 }
 
@@ -823,7 +823,7 @@ void ActionExecutorServer::accept () {
 }
 
 Multiverse::Node *const Multiverse::Node::unparented = static_cast<Node *>(nullptr) + 1;
-const u8string Multiverse::Node::outputLineTerminator = u8("\n\n");
+const u8string Multiverse::Node::outputLineTerminator = u8"\n\n";
 
 Multiverse::Node::Node (unique_ptr<Listener> &&listener, Node *primeParentNode, HashWrapper<Signature> &&signature, State &&state) :
   listener(move(listener)), primeParentNode(primeParentNode), primeParentNodeInvalid(false), signature(move(signature)), state(), children()
@@ -1355,7 +1355,7 @@ void Multiverse::load (const u8string &pathName) {
     localExecutor.getWordSet() = move(wordSet);
     // TODO validate result
   } catch (...) {
-    nthrow(PlainException(u8("loading failed")));
+    nthrow(PlainException(u8"loading failed"));
 /*
     unordered_set<Node *> seenNodes;
     rootNode->forEach([&] (Node *node) -> bool {

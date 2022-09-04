@@ -50,6 +50,7 @@ using core::HashWrapper;
 using core::string;
 using io::socket::TcpSocketAddress;
 using autoinf::ActionExecutorServer;
+using core::offset;
 
 /* -----------------------------------------------------------------------------
 ----------------------------------------------------------------------------- */
@@ -70,15 +71,15 @@ int main (int argc, char *argv[]) {
     //autofrotz::vmlink::DOPEN(, errs);
 
     if (argc < 3) {
-      throw PlainException(u8("Syntax: autoinf <story> <mode> ..."));
+      throw PlainException(u8"Syntax: autoinf <story> <mode> ...");
     }
 
     const iu width = 70;
     const iu height = 64;
-    const u8string saveActionInput(u8("save\n\1\n"));
-    const u8string restoreActionInput(u8("restore\n\1\n"));
-    const u8string noResurrectionSaveActionInput(u8("no\n") + saveActionInput);
-    const u8string noResurrectionRestoreActionInput(u8("no\n") + restoreActionInput);
+    const u8string saveActionInput(u8"save\n\1\n");
+    const u8string restoreActionInput(u8"restore\n\1\n");
+    const u8string noResurrectionSaveActionInput(u8"no\n" + saveActionInput);
+    const u8string noResurrectionRestoreActionInput(u8"no\n" + restoreActionInput);
     iu c = 0;
     const ActionSet::Word::CategorySet direction = 1U << (c++);
     const ActionSet::Word::CategorySet noun = 1U << (c++);
@@ -105,38 +106,38 @@ int main (int argc, char *argv[]) {
         "testgame/testgame.z5",
         width,
         height,
-        u8("verbose\nfullscore\n"),
+        u8"verbose\nfullscore\n",
         [&saveActionInput] (Vm &r_vm) -> bool {
           u8string o;
-          LocalActionExecutor::doAction(r_vm, saveActionInput, o, u8("VM died while saving a state"));
+          LocalActionExecutor::doAction(r_vm, saveActionInput, o, u8"VM died while saving a state");
           return r_vm.getSaveCount() != 0;
         },
         [&restoreActionInput] (Vm &r_vm) -> bool {
           u8string o;
-          LocalActionExecutor::doAction(r_vm, restoreActionInput, o, u8("VM died while restoring a state"));
+          LocalActionExecutor::doAction(r_vm, restoreActionInput, o, u8"VM died while restoring a state");
           return r_vm.getRestoreCount() != 0;
         },
         vector<ActionSet::Word> {
-          {u8("red sphere"), 0b011},
-          {u8("blue sphere"), 0b011},
-          {u8("green sphere"), 0b001},
-          {u8("wheel"), 0b101},
-          {u8("light"), 0b1001},
+          {u8"red sphere", 0b011},
+          {u8"blue sphere", 0b011},
+          {u8"green sphere", 0b001},
+          {u8"wheel", 0b101},
+          {u8"light", 0b1001},
         },
         vector<ActionSet::Template> {
-          {u8("examine "), 0b001U, u8("\n")},
+          {u8"examine ", 0b001U, u8"\n"},
         },
         [] (const Vm &vm, const u8string &output) -> bool {
-          return output.find(u8("You can't see")) != std::string::npos;
+          return output.find(u8"You can't see") != std::string::npos;
         },
         vector<ActionSet::Template> {
-          {u8("east\n")},
-          {u8("west\n")},
-          {u8("take "), 0b010U, u8("\n")},
-          {u8("drop "), 0b010U, u8("\n")},
-          {u8("open "), 0b010U, u8("\n")},
-          {u8("turn "), 0b100U, u8(". pull "), 0b100U, u8("\n")},
-          {u8("enter "), 0b1000U, u8("\n")}
+          {u8"east\n"},
+          {u8"west\n"},
+          {u8"take ", 0b010U, u8"\n"},
+          {u8"drop ", 0b010U, u8"\n"},
+          {u8"open ", 0b010U, u8"\n"},
+          {u8"turn ", 0b100U, u8". pull ", 0b100U, u8"\n"},
+          {u8"enter ", 0b1000U, u8"\n"}
         },
         vector<autofrotz::zword> {
           0x08C8
@@ -146,234 +147,234 @@ int main (int argc, char *argv[]) {
         "advent/advent.z5",
         width,
         height,
-        u8("verbose\nfullscore\n"),
+        u8"verbose\nfullscore\n",
         [&saveActionInput, &noResurrectionSaveActionInput] (Vm &r_vm) -> bool {
           u8string o;
-          LocalActionExecutor::doAction(r_vm, saveActionInput, o, u8("VM died while saving a state"));
+          LocalActionExecutor::doAction(r_vm, saveActionInput, o, u8"VM died while saving a state");
 
-          if (r_vm.getSaveCount() == 0 && o.find(u8("Please answer yes or no.")) != u8string::npos) {
-            LocalActionExecutor::doAction(r_vm, noResurrectionSaveActionInput, o, u8("VM died while declining resurrection and saving a state"));
+          if (r_vm.getSaveCount() == 0 && o.find(u8"Please answer yes or no.") != u8string::npos) {
+            LocalActionExecutor::doAction(r_vm, noResurrectionSaveActionInput, o, u8"VM died while declining resurrection and saving a state");
           }
 
           return r_vm.getSaveCount() != 0;
         },
         [&restoreActionInput, &noResurrectionRestoreActionInput] (Vm &r_vm) -> bool {
           u8string o;
-          LocalActionExecutor::doAction(r_vm, restoreActionInput, o, u8("VM died while restoring a state"));
+          LocalActionExecutor::doAction(r_vm, restoreActionInput, o, u8"VM died while restoring a state");
 
-          if (r_vm.getRestoreCount() == 0 && o.find(u8("Please answer yes or no.")) != u8string::npos) {
-            LocalActionExecutor::doAction(r_vm, noResurrectionRestoreActionInput, o, u8("VM died while declining resurrection and restoring a state"));
+          if (r_vm.getRestoreCount() == 0 && o.find(u8"Please answer yes or no.") != u8string::npos) {
+            LocalActionExecutor::doAction(r_vm, noResurrectionRestoreActionInput, o, u8"VM died while declining resurrection and restoring a state");
           }
 
           return r_vm.getRestoreCount() != 0;
         },
         vector<ActionSet::Word> {
-          {u8("north"), direction},
-          {u8("south"), direction},
-          {u8("east"), direction},
-          {u8("west"), direction},
-          {u8("northeast"), direction},
-          {u8("northwest"), direction},
-          {u8("southeast"), direction},
-          {u8("southwest"), direction},
-          {u8("up above"), direction},
-          {u8("ground"), direction},
-          {u8("inside"), direction},
-          {u8("outside"), direction},
-          {u8("hill"), noun | supporter | flammable | diggable},
-          {u8("other side of hill"), noun | supporter | flammable | diggable},
-          {u8("spring"), noun | container | edible | diggable},
-          {u8("pipes"), noun | container | openable | configurable | target},
-          {u8("keys"), noun | mobile | holdable | locker},
-          {u8("tasty food"), noun | mobile | holdable | edible | flammable},
-          {u8("brass lantern"), noun | mobile | holdable | container | openable | switchable},
-          {u8("bottle"), noun | mobile | holdable | container | edible | target},
-          {u8("streambed"), noun | container | diggable},
-          {u8("slit"), noun | openable | diggable},
-          {u8("depression"), noun | diggable},
-          {u8("grate"), noun | lockable | openable},
-          {u8("cobbles"), noun | target},
-          {u8("wicker cage"), noun | mobile | holdable | container | lockable | openable | flammable | configurable},
-          {u8("debris"), noun | mobile | holdable | flammable | diggable | target},
-          {u8("note"), noun | mobile | holdable | readable | flammable},
-          {u8("rod"), noun | mobile | holdable | flammable | blaster | target},
-          {u8("bird"), noun | holdable | animate | flammable | target},
-          {u8("pit"), noun | container},
-          {u8("crack"), noun | container | openable | diggable},
-          {u8("wide stone staircase"), noun | supporter},
-          {u8("rough stone steps"), noun | supporter},
-          {u8("dome"), noun},
-          {u8("large gold nugget"), noun | mobile | holdable},
-          {u8("diamonds"), noun | mobile | holdable},
-          {u8("bridge"), noun | supporter | flammable},
-          {u8("fissure"), noun | container},
-          {u8("crossover"), noun | supporter},
-          {u8("snake"), noun | holdable | animate | flammable | target},
-          {u8("bars of silver"), noun | mobile | holdable},
-          {u8("precious jewelry"), noun | mobile | holdable | wearable},
-          {u8("rare coins"), noun | mobile | holdable},
-          {u8("Y2"), noun | supporter | diggable | target},
-          {u8("window"), noun | lockable | openable | configurable | target},
-          {u8("marks"), noun},
-          {u8("shadowy figure"), noun | animate | flammable | target},
-          {u8("rocks"), noun | mobile | holdable | supporter | diggable | target},
-          {u8("orange column"), noun | supporter | flammable | diggable | target},
-          {u8("bedrock block"), noun | supporter | diggable | target},
-          {u8("beanstalk"), noun | mobile | supporter | flammable},
-          {u8("hole above pit"), noun | target},
-          {u8("plant"), noun | mobile | holdable | flammable | diggable},
-          {u8("thin rock slabs"), noun | mobile | holdable | supporter | openable | target},
-          {u8("pool of oil"), noun | flammable},
-          {u8("slab"), noun | mobile | supporter | diggable | target},
-          {u8("boulders"), noun | mobile | supporter | diggable | target},
-          {u8("stalactite"), noun | supporter | diggable | target},
-          {u8("dragon"), noun | animate | blaster | target},
-          {u8("rug"), noun | mobile | holdable | supporter | flammable},
-          {u8("treasure chest"), noun | mobile | container | lockable | openable | flammable},
-          {u8("leaves"), noun | mobile | holdable | flammable},
-          {u8("scrawled inscription"), noun | readable | blaster},
-          {u8("nest of golden eggs"), noun | mobile | holdable | target},
-          {u8("rusty door"), noun | lockable | openable | target},
-          {u8("waterfall"), noun | container | edible | diggable},
-          {u8("trident"), noun | mobile | holdable | flammable | blaster | target},
-          {u8("carpet"), noun | supporter | flammable},
-          {u8("curtains"), noun | holdable | openable | flammable},
-          {u8("moss"), noun | mobile | holdable | diggable},
-          {u8("pillow"), noun | mobile | holdable | supporter | openable | target},
-          {u8("drawings"), noun | mobile | holdable | readable | flammable | target},
-          {u8("vase"), noun | mobile | holdable | container | target},
-          {u8("shards"), noun | mobile | holdable},
-          {u8("emerald"), noun | mobile | holdable},
-          {u8("tablet"), noun | mobile | holdable | target},
-          {u8("platinum pyramid"), noun | mobile | holdable},
-          {u8("clam"), noun | mobile | holdable | container | openable},
-          {u8("pearl"), noun | mobile | holdable},
-          {u8("sign"), noun | readable},
-          {u8("Spelunker Today"), noun | mobile | holdable | readable | flammable},
-          {u8("mirror"), noun | mobile | holdable | configurable | blaster | target},
-          {u8("troll"), noun | animate | flammable | target},
-          {u8("volcano"), noun | supporter | container | diggable | blaster | target},
-          {u8("sparks of ash"), noun},
-          {u8("jagged roof"), noun | target},
-          {u8("gorge"), noun | container | diggable},
-          {u8("river of fire"), noun | target},
-          {u8("geyser"), noun | blaster | target},
-          {u8("rare spices"), noun | mobile | holdable | edible | flammable},
-          {u8("limestone formations"), noun | supporter | diggable | target},
-          {u8("dust"), noun | mobile | holdable | target},
-          {u8("bear"), noun | animate | flammable | target},
-          {u8("golden chain"), noun | mobile | holdable | wearable | lockable | openable | attachable},
-          {u8("message"), noun | mobile | holdable | flammable},
-          {u8("vending machine"), noun | mobile | container | lockable | openable | switchable | flammable | configurable | target},
-          {u8("batteries"), noun | mobile | holdable | flammable},
-          {u8("dwarf"), noun | animate | flammable | target},
-          {u8("axe"), noun | mobile | holdable},
-          {u8("collection of adventure game materials"), noun | mobile | holdable | readable | flammable}
+          {u8"north", direction},
+          {u8"south", direction},
+          {u8"east", direction},
+          {u8"west", direction},
+          {u8"northeast", direction},
+          {u8"northwest", direction},
+          {u8"southeast", direction},
+          {u8"southwest", direction},
+          {u8"up above", direction},
+          {u8"ground", direction},
+          {u8"inside", direction},
+          {u8"outside", direction},
+          {u8"hill", noun | supporter | flammable | diggable},
+          {u8"other side of hill", noun | supporter | flammable | diggable},
+          {u8"spring", noun | container | edible | diggable},
+          {u8"pipes", noun | container | openable | configurable | target},
+          {u8"keys", noun | mobile | holdable | locker},
+          {u8"tasty food", noun | mobile | holdable | edible | flammable},
+          {u8"brass lantern", noun | mobile | holdable | container | openable | switchable},
+          {u8"bottle", noun | mobile | holdable | container | edible | target},
+          {u8"streambed", noun | container | diggable},
+          {u8"slit", noun | openable | diggable},
+          {u8"depression", noun | diggable},
+          {u8"grate", noun | lockable | openable},
+          {u8"cobbles", noun | target},
+          {u8"wicker cage", noun | mobile | holdable | container | lockable | openable | flammable | configurable},
+          {u8"debris", noun | mobile | holdable | flammable | diggable | target},
+          {u8"note", noun | mobile | holdable | readable | flammable},
+          {u8"rod", noun | mobile | holdable | flammable | blaster | target},
+          {u8"bird", noun | holdable | animate | flammable | target},
+          {u8"pit", noun | container},
+          {u8"crack", noun | container | openable | diggable},
+          {u8"wide stone staircase", noun | supporter},
+          {u8"rough stone steps", noun | supporter},
+          {u8"dome", noun},
+          {u8"large gold nugget", noun | mobile | holdable},
+          {u8"diamonds", noun | mobile | holdable},
+          {u8"bridge", noun | supporter | flammable},
+          {u8"fissure", noun | container},
+          {u8"crossover", noun | supporter},
+          {u8"snake", noun | holdable | animate | flammable | target},
+          {u8"bars of silver", noun | mobile | holdable},
+          {u8"precious jewelry", noun | mobile | holdable | wearable},
+          {u8"rare coins", noun | mobile | holdable},
+          {u8"Y2", noun | supporter | diggable | target},
+          {u8"window", noun | lockable | openable | configurable | target},
+          {u8"marks", noun},
+          {u8"shadowy figure", noun | animate | flammable | target},
+          {u8"rocks", noun | mobile | holdable | supporter | diggable | target},
+          {u8"orange column", noun | supporter | flammable | diggable | target},
+          {u8"bedrock block", noun | supporter | diggable | target},
+          {u8"beanstalk", noun | mobile | supporter | flammable},
+          {u8"hole above pit", noun | target},
+          {u8"plant", noun | mobile | holdable | flammable | diggable},
+          {u8"thin rock slabs", noun | mobile | holdable | supporter | openable | target},
+          {u8"pool of oil", noun | flammable},
+          {u8"slab", noun | mobile | supporter | diggable | target},
+          {u8"boulders", noun | mobile | supporter | diggable | target},
+          {u8"stalactite", noun | supporter | diggable | target},
+          {u8"dragon", noun | animate | blaster | target},
+          {u8"rug", noun | mobile | holdable | supporter | flammable},
+          {u8"treasure chest", noun | mobile | container | lockable | openable | flammable},
+          {u8"leaves", noun | mobile | holdable | flammable},
+          {u8"scrawled inscription", noun | readable | blaster},
+          {u8"nest of golden eggs", noun | mobile | holdable | target},
+          {u8"rusty door", noun | lockable | openable | target},
+          {u8"waterfall", noun | container | edible | diggable},
+          {u8"trident", noun | mobile | holdable | flammable | blaster | target},
+          {u8"carpet", noun | supporter | flammable},
+          {u8"curtains", noun | holdable | openable | flammable},
+          {u8"moss", noun | mobile | holdable | diggable},
+          {u8"pillow", noun | mobile | holdable | supporter | openable | target},
+          {u8"drawings", noun | mobile | holdable | readable | flammable | target},
+          {u8"vase", noun | mobile | holdable | container | target},
+          {u8"shards", noun | mobile | holdable},
+          {u8"emerald", noun | mobile | holdable},
+          {u8"tablet", noun | mobile | holdable | target},
+          {u8"platinum pyramid", noun | mobile | holdable},
+          {u8"clam", noun | mobile | holdable | container | openable},
+          {u8"pearl", noun | mobile | holdable},
+          {u8"sign", noun | readable},
+          {u8"Spelunker Today", noun | mobile | holdable | readable | flammable},
+          {u8"mirror", noun | mobile | holdable | configurable | blaster | target},
+          {u8"troll", noun | animate | flammable | target},
+          {u8"volcano", noun | supporter | container | diggable | blaster | target},
+          {u8"sparks of ash", noun},
+          {u8"jagged roof", noun | target},
+          {u8"gorge", noun | container | diggable},
+          {u8"river of fire", noun | target},
+          {u8"geyser", noun | blaster | target},
+          {u8"rare spices", noun | mobile | holdable | edible | flammable},
+          {u8"limestone formations", noun | supporter | diggable | target},
+          {u8"dust", noun | mobile | holdable | target},
+          {u8"bear", noun | animate | flammable | target},
+          {u8"golden chain", noun | mobile | holdable | wearable | lockable | openable | attachable},
+          {u8"message", noun | mobile | holdable | flammable},
+          {u8"vending machine", noun | mobile | container | lockable | openable | switchable | flammable | configurable | target},
+          {u8"batteries", noun | mobile | holdable | flammable},
+          {u8"dwarf", noun | animate | flammable | target},
+          {u8"axe", noun | mobile | holdable},
+          {u8"collection of adventure game materials", noun | mobile | holdable | readable | flammable}
         },
         vector<ActionSet::Template> {
-          {u8("examine "), 0U, u8("\n")},
+          {u8"examine ", 0U, u8"\n"},
         },
         [] (const Vm &vm, const u8string &output) -> bool {
           return
-            output.find(u8("You can't see ")) != u8string::npos ||
-            output.find(u8("I only understood you as far as ")) != u8string::npos ||
-            output.find(u8("That's not something you need to refer to in the course of this game.")) != u8string::npos
+            output.find(u8"You can't see ") != u8string::npos ||
+            output.find(u8"I only understood you as far as ") != u8string::npos ||
+            output.find(u8"That's not something you need to refer to in the course of this game.") != u8string::npos
           ;
         },
         vector<ActionSet::Template> {
-          {u8(""), direction, u8("\n")},
-          {u8("get in "), container, u8("\n")},
-          {u8("exit "), container, u8("\n")},
-          {u8("get on "), supporter, u8("\n")},
-          {u8("get off "), supporter, u8("\n")},
-          {u8("take "), holdable, u8("\n")},
-          {u8("take "), holdable, u8(" from "), container, u8("\n")},
-          {u8("take "), holdable, u8(" from "), supporter, u8("\n")},
-          {u8("don "), wearable, u8("\n")},
-          {u8("doff "), wearable, u8("\n")},
-          {u8("drop "), holdable, u8("\n")},
-          {u8("drop "), holdable, u8(" into "), container, u8("\n")},
-          {u8("drop "), holdable, u8(" onto "), supporter, u8("\n")},
-          {u8("unlock "), openable, u8(" with "), holdable, u8("\n")},
-          {u8("open "), openable, u8("\n")},
-          {u8("close "), openable, u8("\n")},
-          {u8("lock "), lockable, u8(" with "), locker, u8("\n")},
-          {u8("say "), 0U, u8(" to "), animate, u8("\n")},
-          {u8("ask "), animate, u8(" about "), 0U, u8("\n")},
-          {u8("attack "), noun, u8("\n")},
-          {u8("blow "), holdable, u8("\n")},
-          {u8("burn "), flammable, u8("\n")},
-          {u8("burn "), flammable, u8(" with "), holdable, u8("\n")},
-          {u8("buy "), noun, u8("\n")},
-          {u8("climb "), supporter, u8("\n")},
-          {u8("consult "), readable, u8(" about "), 0U, u8("\n")},
-          {u8("chop "), noun, u8("\n")},
-          {u8("dig "), diggable, u8("\n")},
-          {u8("dig "), diggable, u8(" with "), holdable, u8("\n")},
-          {u8("drink "), edible, u8("\n")},
-          {u8("eat "), edible, u8("\n")},
-          {u8("empty "), container, u8(" into "), container, u8("\n")},
-          {u8("empty "), container, u8(" onto "), supporter, u8("\n")},
-          {u8("empty "), supporter, u8(" into "), container, u8("\n")},
-          {u8("empty "), supporter, u8(" onto "), supporter, u8("\n")},
-          {u8("fill "), container, u8("\n")},
-          {u8("feed "), holdable, u8(" to "), animate, u8("\n")},
-          {u8("hop\n")},
-          {u8("hop over "), noun, u8("\n")},
-          {u8("attach "), attachable, u8("\n")},
-          {u8("attach "), attachable, u8(" to "), noun, u8("\n")},
-          {u8("embrace "), animate, u8("\n")},
-          {u8("hear\n")},
-          {u8("hear "), noun, u8("\n")},
-          {u8("look under "), noun, u8("\n")},
-          {u8("drag "), mobile, u8("\n")},
-          {u8("push "), mobile, u8("\n")},
-          {u8("rotate "), mobile, u8("\n")},
-          {u8("push "), mobile, u8(" "), direction, u8("\n")},
-          {u8("clean "), noun, u8("\n")},
-          {u8("look in "), container, u8("\n")},
-          {u8("look on "), supporter, u8("\n")},
-          {u8("adjust "), configurable, u8("\n")},
-          {u8("display "), holdable, u8(" to "), animate, u8("\n")},
-          {u8("sing\n")},
-          {u8("nap\n")},
-          {u8("smell\n")},
-          {u8("smell "), noun, u8("\n")},
-          {u8("squash "), noun, u8("\n")},
-          {u8("dive\n")},
-          {u8("swing "), mobile, u8("\n")},
-          {u8("switch on "), switchable, u8("\n")},
-          {u8("switch off "), switchable, u8("\n")},
-          {u8("taste "), noun, u8("\n")},
-          {u8("tell "), animate, u8(" about "), 0U, u8("\n")},
-          {u8("throw "), holdable, u8(" at "), target, u8("\n")},
-          {u8("feel "), noun, u8("\n")},
-          {u8("wake up\n")},
-          {u8("wake up "), animate, u8("\n")},
-          {u8("wave "), holdable, u8("\n")},
-          {u8("wave\n")},
-          {u8("tell "), animate, u8(" to "), 0U, u8("\n")},
-          {u8("ask "), animate, u8(" for "), holdable, u8("\n")},
-          {u8("push "), mobile, u8(" to "), container, u8("\n")},
-          {u8("push "), mobile, u8(" to "), supporter, u8("\n")},
-          {u8("say xyzzy\n")},
-          {u8("say plugh\n")},
-          {u8("count "), noun, u8("\n")},
-          {u8("empty "), container, u8("\n")},
-          {u8("empty "), supporter, u8("\n")},
-          {u8("free "), animate, u8("\n")},
-          {u8("capture "), animate, u8("\n")},
-          {u8("capture "), animate, u8(" with "), holdable, u8("\n")},
-          {u8("say plover\n")},
-          {u8("douse water on "), noun, u8("\n")},
-          {u8("douse oil on "), noun, u8("\n")},
-          {u8("kick "), noun, u8("\n")},
-          {u8("blast "), noun, u8(" with "), blaster, u8("\n")},
-          {u8("say fee\n")},
-          {u8("say fie\n")},
-          {u8("say foe\n")},
-          {u8("say foo\n")},
-          {u8("say abracadabra\n")}
+          {u8"", direction, u8"\n"},
+          {u8"get in ", container, u8"\n"},
+          {u8"exit ", container, u8"\n"},
+          {u8"get on ", supporter, u8"\n"},
+          {u8"get off ", supporter, u8"\n"},
+          {u8"take ", holdable, u8"\n"},
+          {u8"take ", holdable, u8" from ", container, u8"\n"},
+          {u8"take ", holdable, u8" from ", supporter, u8"\n"},
+          {u8"don ", wearable, u8"\n"},
+          {u8"doff ", wearable, u8"\n"},
+          {u8"drop ", holdable, u8"\n"},
+          {u8"drop ", holdable, u8" into ", container, u8"\n"},
+          {u8"drop ", holdable, u8" onto ", supporter, u8"\n"},
+          {u8"unlock ", openable, u8" with ", holdable, u8"\n"},
+          {u8"open ", openable, u8"\n"},
+          {u8"close ", openable, u8"\n"},
+          {u8"lock ", lockable, u8" with ", locker, u8"\n"},
+          {u8"say ", 0U, u8" to ", animate, u8"\n"},
+          {u8"ask ", animate, u8" about ", 0U, u8"\n"},
+          {u8"attack ", noun, u8"\n"},
+          {u8"blow ", holdable, u8"\n"},
+          {u8"burn ", flammable, u8"\n"},
+          {u8"burn ", flammable, u8" with ", holdable, u8"\n"},
+          {u8"buy ", noun, u8"\n"},
+          {u8"climb ", supporter, u8"\n"},
+          {u8"consult ", readable, u8" about ", 0U, u8"\n"},
+          {u8"chop ", noun, u8"\n"},
+          {u8"dig ", diggable, u8"\n"},
+          {u8"dig ", diggable, u8" with ", holdable, u8"\n"},
+          {u8"drink ", edible, u8"\n"},
+          {u8"eat ", edible, u8"\n"},
+          {u8"empty ", container, u8" into ", container, u8"\n"},
+          {u8"empty ", container, u8" onto ", supporter, u8"\n"},
+          {u8"empty ", supporter, u8" into ", container, u8"\n"},
+          {u8"empty ", supporter, u8" onto ", supporter, u8"\n"},
+          {u8"fill ", container, u8"\n"},
+          {u8"feed ", holdable, u8" to ", animate, u8"\n"},
+          {u8"hop\n"},
+          {u8"hop over ", noun, u8"\n"},
+          {u8"attach ", attachable, u8"\n"},
+          {u8"attach ", attachable, u8" to ", noun, u8"\n"},
+          {u8"embrace ", animate, u8"\n"},
+          {u8"hear\n"},
+          {u8"hear ", noun, u8"\n"},
+          {u8"look under ", noun, u8"\n"},
+          {u8"drag ", mobile, u8"\n"},
+          {u8"push ", mobile, u8"\n"},
+          {u8"rotate ", mobile, u8"\n"},
+          {u8"push ", mobile, u8" ", direction, u8"\n"},
+          {u8"clean ", noun, u8"\n"},
+          {u8"look in ", container, u8"\n"},
+          {u8"look on ", supporter, u8"\n"},
+          {u8"adjust ", configurable, u8"\n"},
+          {u8"display ", holdable, u8" to ", animate, u8"\n"},
+          {u8"sing\n"},
+          {u8"nap\n"},
+          {u8"smell\n"},
+          {u8"smell ", noun, u8"\n"},
+          {u8"squash ", noun, u8"\n"},
+          {u8"dive\n"},
+          {u8"swing ", mobile, u8"\n"},
+          {u8"switch on ", switchable, u8"\n"},
+          {u8"switch off ", switchable, u8"\n"},
+          {u8"taste ", noun, u8"\n"},
+          {u8"tell ", animate, u8" about ", 0U, u8"\n"},
+          {u8"throw ", holdable, u8" at ", target, u8"\n"},
+          {u8"feel ", noun, u8"\n"},
+          {u8"wake up\n"},
+          {u8"wake up ", animate, u8"\n"},
+          {u8"wave ", holdable, u8"\n"},
+          {u8"wave\n"},
+          {u8"tell ", animate, u8" to ", 0U, u8"\n"},
+          {u8"ask ", animate, u8" for ", holdable, u8"\n"},
+          {u8"push ", mobile, u8" to ", container, u8"\n"},
+          {u8"push ", mobile, u8" to ", supporter, u8"\n"},
+          {u8"say xyzzy\n"},
+          {u8"say plugh\n"},
+          {u8"count ", noun, u8"\n"},
+          {u8"empty ", container, u8"\n"},
+          {u8"empty ", supporter, u8"\n"},
+          {u8"free ", animate, u8"\n"},
+          {u8"capture ", animate, u8"\n"},
+          {u8"capture ", animate, u8" with ", holdable, u8"\n"},
+          {u8"say plover\n"},
+          {u8"douse water on ", noun, u8"\n"},
+          {u8"douse oil on ", noun, u8"\n"},
+          {u8"kick ", noun, u8"\n"},
+          {u8"blast ", noun, u8" with ", blaster, u8"\n"},
+          {u8"say fee\n"},
+          {u8"say fie\n"},
+          {u8"say foe\n"},
+          {u8"say foo\n"},
+          {u8"say abracadabra\n"}
         },
         vector<autofrotz::zword> {
           0x3BEB /* or 0x3C0B or 0x3C0D */
@@ -383,7 +384,7 @@ int main (int argc, char *argv[]) {
     // TODO uargs
     auto e0 = stories.find(core::hashed(string<char>(argv[1])));
     if (e0 == stories.end()) {
-      throw PlainException(u8string(u8("unknown story '")) + reinterpret_cast<char8_t *>(argv[1]) + u8("' specified"));
+      throw PlainException(u8string(u8"unknown story '") + reinterpret_cast<char8_t *>(argv[1]) + u8"' specified");
     }
     Story story(move(get<1>(*e0)));
 
@@ -394,7 +395,7 @@ int main (int argc, char *argv[]) {
     };
     auto e1 = find(modes, core::hashed(string<char>(argv[2])));
     if (!e1) {
-      throw PlainException(u8string(u8("unknown mode '")) + reinterpret_cast<char8_t *>(argv[2]) + u8("' specified"));
+      throw PlainException(u8string(u8"unknown mode '") + reinterpret_cast<char8_t *>(argv[2]) + u8"' specified");
     }
     auto mode = *e1;
 
@@ -413,7 +414,7 @@ TcpSocketAddress getFirstAddress (const u8string &nodeNameAndPort) {
 
   TcpSocketAddress::get(addrs, nodeNameAndPort);
   if (addrs.empty()) {
-    throw PlainException(u8("failed to get address for '") + nodeNameAndPort + u8("'"));
+    throw PlainException(u8"failed to get address for '" + nodeNameAndPort + u8"'");
   }
 
   TcpSocketAddress addr = move(addrs.front());
@@ -423,7 +424,7 @@ TcpSocketAddress getFirstAddress (const u8string &nodeNameAndPort) {
 
 void runWorker (iu argsSize, char **args, Story story) {
   if (argsSize != 1) {
-    throw PlainException(u8("address must be specified"));
+    throw PlainException(u8"address must be specified");
   }
   TcpSocketAddress addr = getFirstAddress(u8string(reinterpret_cast<char8_t *>(args[0])));
 
@@ -452,7 +453,7 @@ void runCmd (iu argsSize, char **args, Story story) {
   u8string in;
   while (true) {
     readLine(in);
-    size_t comment = in.find(u8("#")[0]);
+    size_t comment = in.find(u8'#');
     if (comment != u8string::npos) {
       in.erase(comment);
     }
@@ -475,7 +476,7 @@ void runVelocityrun (iu argsSize, char **args, Story story) {
   view->multiverseChanged(multiverse);
 
   if (argsSize != 6 && argsSize != 7) {
-    throw PlainException(u8("command lines to be run initially, each round, on no change in node count, on max score change, on new words being used and on user exit must be specified"));
+    throw PlainException(u8"command lines to be run initially, each round, on no change in node count, on max score change, on new words being used and on user exit must be specified");
   }
   // TODO uargs
   u8string initialCommandLineTemplate(reinterpret_cast<char8_t *>(args[0]));
@@ -492,7 +493,7 @@ void runVelocityrun (iu argsSize, char **args, Story story) {
     float v1;
     float v2;
     if (sscanf(args[6], "%d,%f,%f", &v0, &v1, &v2) != 3 || v0 < 0) {
-      throw PlainException(u8("invalid initial stats state specified"));
+      throw PlainException(u8"invalid initial stats state specified");
     }
     initialRoundCount = static_cast<unsigned int>(v0);
     initialTTotal = v1;
@@ -629,7 +630,7 @@ bool runCommandLineTemplate (Multiverse &r_multiverse, const u8string &inTemplat
   size_t i = 0;
   while (true) {
     size_t i0 = i;
-    i = inTemplate.find(u8("%")[0], i);
+    i = inTemplate.find(u8'%', i);
     if (i == u8string::npos) {
       in.append(inTemplate, i0, u8string::npos);
       break;
@@ -658,7 +659,7 @@ void appendWordList (u8string &r_o, const Bitset &words, const Multiverse &multi
   bool first = true;
   for (size_t i = words.getNextSetBit(0); i != Bitset::nonIndex; i = words.getNextSetBit(i + 1)) {
     if (!first) {
-      r_o.append(u8(", "));
+      r_o.append(u8", ");
     }
     auto word = actionSet.getWord(i);
     r_o.append(word.begin(), word.end());
@@ -686,9 +687,9 @@ bool runCommandLine (Multiverse &multiverse, const u8string &in, u8string &messa
     u8string line(inPartBegin, inPartEnd);
 
     const iu lower = 1U << 5;
-    char8_t accessKey = line.size() > 0 ? static_cast<char8_t>(line[0] | lower) : u8("\0")[0];
+    char8_t accessKey = line.size() > 0 ? static_cast<char8_t>(line[0] | lower) : u8'\0';
 
-    if (line.size() > 1 && accessKey == u8("x")[0]) {
+    if (line.size() > 1 && accessKey == u8'x') {
       is n = getNaturalNumber(line.data() + 1, line.data() + line.size());
       if (n >= 0) {
         iu times = static_cast<iu>(n);
@@ -707,7 +708,7 @@ bool runCommandLine (Multiverse &multiverse, const u8string &in, u8string &messa
     iu option = 0;
     if (line.size() == 1) {
       option = accessKey;
-    } else if (line.size() > 2 && line[1] == u8("-")[0]) {
+    } else if (line.size() > 2 && line[1] == u8'-') {
       option = accessKey | withParam;
     }
 
@@ -762,10 +763,10 @@ bool runCommandLine (Multiverse &multiverse, const u8string &in, u8string &messa
         view->selectionChanged();
       } break;
       case u8'v' | withParam: {
-        char8_t valueName = line.size() > 2 ? line[2] : u8("\0")[0];
+        char8_t valueName = line.size() > 2 ? line[2] : u8'\0';
         size_t valueIndex;
-        if (valueName >= u8("a")[0] && valueName <= u8("z")[0] && (valueIndex = static_cast<size_t>(valueName - u8("a")[0])) < NodeMetricsListener::valueCount) {
-          if (line.size() > 5 && line[3] == u8(">")[0] && line[4] == u8("=")[0]) {
+        if (valueName >= u8'a' && valueName <= u8'z' && (valueIndex = static_cast<size_t>(valueName - u8'a')) < NodeMetricsListener::valueCount) {
+          if (line.size() > 5 && line[3] == u8'>' && line[4] == u8'=') {
             const char8_t *numBegin = line.data() + 5;
             const char8_t *numEnd = line.data() + line.size();
             is n = getNaturalNumber(numBegin, numEnd);
@@ -880,14 +881,14 @@ bool runCommandLine (Multiverse &multiverse, const u8string &in, u8string &messa
           multiverse.addRemoteExecutor(*addr);
         } catch (exception &e) {
           addr.release();
-          message.append(u8("Error: "));
+          message.append(u8"Error: ");
           message.append(core::createExceptionMessage(e, false));
-          message.append(u8("\n\n"));
+          message.append(u8"\n\n");
         }
         if (addr) {
-          message.append(u8("Added worker at "));
+          message.append(u8"Added worker at ");
           addr->getSocketAddress(message);
-          message.append(u8("\n\n"));
+          message.append(u8"\n\n");
         }
       } break;
       case u8'r': {
@@ -929,18 +930,18 @@ bool runCommandLine (Multiverse &multiverse, const u8string &in, u8string &messa
       } break;
       case u8'g': {
         auto bytes = multiverse.getIgnoredBytes();
-        message.append(u8("Ignored bytes: {"));
+        message.append(u8"Ignored bytes: {");
         for (size_t i = bytes.getNextSetBit(0); i != Bitset::nonIndex; i = bytes.getNextSetBit(i + 1)) {
           char8_t b[1024];
           sprintf(reinterpret_cast<char *>(b), "0x%04X,", static_cast<iu>(i));
           message.append(b);
         }
-        message.append(u8("}\n\n"));
+        message.append(u8"}\n\n");
       } break;
       default: {
         const char8_t *numBegin = line.data();
         const char8_t *numEnd = numBegin + line.size();
-        const char8_t *dash = find(numBegin, numEnd, u8("-")[0]);
+        const char8_t *dash = find(numBegin, numEnd, u8'-');
 
         const size_t rX = static_cast<size_t>(-1);
         size_t r0 = rX;
@@ -979,9 +980,9 @@ bool runCommandLine (Multiverse &multiverse, const u8string &in, u8string &messa
     Bitset newWords(view->getInterestingChildActionWords(multiverse));
     newWords.andNot(seenWords0);
     if (!newWords.empty()) {
-      message.append(u8("New words: "));
+      message.append(u8"New words: ");
       appendWordList(message, newWords, multiverse);
-      message.append(u8("\n\n"));
+      message.append(u8"\n\n");
     }
   }
 
@@ -1002,7 +1003,7 @@ void updateMultiverseDisplay (Multiverse &multiverse, const char *outPathName, c
     if (outPathName) {
       out = fopen(outPathName, "wb");
       if (!out) {
-        throw PlainException(u8("unable to open output file"));
+        throw PlainException(u8"unable to open output file");
       }
     }
     finally([&] {
@@ -1043,7 +1044,7 @@ void updateMultiverseDisplay (Multiverse &multiverse, const char *outPathName, c
 }
 
 const char8_t *getOptionIcon (bool enabled) {
-  return enabled ? u8("\u2612") : u8("\u2610");
+  return enabled ? u8"\u2612" : u8"\u2610";
 }
 
 constexpr size_t NodeMetricsListener::valueCount;
@@ -1585,9 +1586,9 @@ u8string MultiverseView::renderActionInput (ActionSet::Size *actionIdsI, ActionS
   for (; actionIdsI != actionIdsEnd; ++actionIdsI) {
     auto actionId = *actionIdsI;
     DA(actionId != ActionSet::nonId);
-    actionInput.append(u8(" \""));
+    actionInput.append(u8" \"");
     actionSet.get(actionId).getInput(actionInput);
-    actionInput.data()[actionInput.size() - 1] = u8("\"")[0];
+    actionInput.data()[actionInput.size() - 1] = u8'"';
   }
   return actionInput;
 }
@@ -1597,14 +1598,14 @@ void MultiverseView::printNodeOutput (const StringSet<char8_t>::String *output, 
   DPRE(output);
   multiverse.getOutputStringSet().rebuildString(*output, o);
   char8_t c;
-  while (!o.empty() && ((c = o.back()) == u8("\n")[0] || c == u8(">")[0])) {
+  while (!o.empty() && ((c = o.back()) == u8'\n' || c == u8'>')) {
     o.pop_back();
   }
-  o.push_back(u8("\n")[0]);
+  o.push_back(u8'\n');
 
   auto lineStart = o.cbegin();
   for (auto i = o.cbegin(), end = o.cend(); i != end; ++i) {
-    if (*i == u8("\n")[0]) {
+    if (*i == u8'\n') {
       fprintf(out, "%s%.*s\n", narrowise(prefix), static_cast<int>(i - lineStart), narrowise(&*lineStart));
       lineStart = i + 1;
     }
@@ -1616,12 +1617,12 @@ void MultiverseView::printNodeAsLeaf (
   ActionSet::Size *actionIdsI, ActionSet::Size *actionIdsEnd,
   const Multiverse &multiverse, u8string &r_prefix, FILE *out
 ) {
-  printNodeHeader(u8("{")[0], u8("}")[0], node, actionIdsI, actionIdsEnd, multiverse, out);
+  printNodeHeader(u8'{', u8'}', node, actionIdsI, actionIdsEnd, multiverse, out);
   fprintf(out, "\n");
 
   if (output) {
     size_t prefixSize = r_prefix.size();
-    r_prefix.append(u8("  "));
+    r_prefix.append(u8"  ");
     printNodeOutput(output, multiverse, r_prefix, out);
     r_prefix.erase(prefixSize);
   }
@@ -1632,7 +1633,7 @@ void MultiverseView::printNodeAsNonLeaf (
   ActionSet::Size *actionIdsI, ActionSet::Size *actionIdsEnd,
   const Multiverse &multiverse, u8string &r_prefix, FILE *out
 ) {
-  printNodeHeader(u8("(")[0], u8(")")[0], node, actionIdsI, actionIdsEnd, multiverse, out);
+  printNodeHeader(u8'(', u8')', node, actionIdsI, actionIdsEnd, multiverse, out);
   if (node->getState()) {
     fprintf(out, " / unprocessed\n");
   } else {
@@ -1691,7 +1692,7 @@ void MultiverseView::printNodeAsNonLeaf (
   size_t prefixSize = r_prefix.size();
   if (output) {
     bool last = fmtsEnd == 0;
-    r_prefix.append(last ? u8("  ") : u8("│ "));
+    r_prefix.append(last ? u8"  " : u8"│ ");
     printNodeOutput(output, multiverse, r_prefix, out);
     r_prefix.erase(prefixSize);
   }
@@ -1724,8 +1725,8 @@ void MultiverseView::printNodeAsNonLeaf (
       childActionIdsEnd = childActionIdsBegin + 1;
     }
 
-    fprintf(out, "%s%s", narrowise(r_prefix), narrowise(last ? u8("└─") : u8("├─")));
-    r_prefix.append(last ? u8("  ") : u8("│ "));
+    fprintf(out, "%s%s", narrowise(r_prefix), narrowise(last ? u8"└─" : u8"├─"));
+    r_prefix.append(last ? u8"  " : u8"│ ");
     (this->*(fmts[i] == leaf ? &MultiverseView::printNodeAsLeaf : &MultiverseView::printNodeAsNonLeaf))(depth, contains(verboseNodes, childNode) ? &childOuput : nullptr, childNode, node, childActionIdsBegin, childActionIdsEnd, multiverse, r_prefix, out);
     r_prefix.erase(prefixSize);
   }
@@ -1734,15 +1735,15 @@ void MultiverseView::printNodeAsNonLeaf (
 size_t readLine (char8_t *b, size_t bSize) {
   // TODO convert input from native
   if (!fgets(reinterpret_cast<char *>(b), static_cast<int>(bSize), stdin)) {
-    throw PlainException(u8("failed to read input"));
+    throw PlainException(u8"failed to read input");
   }
   size_t size = 0;
   for (; b[size] != 0; ++size) {
     if (b[size] >= 128) {
-      b[size] = u8("?")[0];
+      b[size] = u8'?';
     }
   }
-  if (size > 0 && b[size - 1] == u8("\n")[0]) {
+  if (size > 0 && b[size - 1] == u8'\n') {
     --size;
   }
   return size;
@@ -1755,12 +1756,12 @@ void readLine (u8string &r_out) {
 }
 
 const char8_t *skipSpaces (const char8_t *i, const char8_t *end) {
-  for (; i != end && *i == u8(" ")[0]; ++i);
+  for (; i != end && *i == u8' '; ++i);
   return i;
 }
 
 const char8_t *skipNonSpaces (const char8_t *i, const char8_t *end) {
-  for (; i != end && *i != u8(" ")[0]; ++i);
+  for (; i != end && *i != u8' '; ++i);
   return i;
 }
 
@@ -1769,9 +1770,9 @@ is getNaturalNumber (const char8_t *iBegin, const char8_t *iEnd) {
     return -1;
   }
 
-  char8_t in[iEnd - iBegin + 1U];
+  char8_t in[offset(iBegin, iEnd) + 1];
   copy(iBegin, iEnd, in);
-  in[iEnd - iBegin] = u8("\0")[0];
+  in[iEnd - iBegin] = u8'\0';
 
   const char8_t *inBegin = in;
   const char8_t *inEnd = inBegin + (iEnd - iBegin);
