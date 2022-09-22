@@ -9,8 +9,8 @@ namespace autoinf {
 DC();
 DC(c);
 
-constexpr SerialiserBase::id SerialiserBase::NON_ID;
-constexpr SerialiserBase::id SerialiserBase::NULL_ID;
+constexpr SerialiserBase::id SerialiserBase::nonId;
+constexpr SerialiserBase::id SerialiserBase::nullId;
 
 Signature::Signature () {
   DA(empty());
@@ -55,12 +55,12 @@ void Signature::Writer::flushZeroBytes () {
 
   // Bytes appear literally, except for ESCAPE. ESCAPE + x as an ieu means a run
   // of x 0s when x != 0 and ESCAPE when x == 0.
-  DSA(ESCAPE != 0, "");
+  DSA(escape != 0, "");
   if (zeroByteCount < 3) {
     iu8f b[2] = {0, 0};
     signature.b.append(b, zeroByteCount);
   } else {
-    iu8f b[1 + numeric_limits<decltype(zeroByteCount)>::max_ie_octets] = {ESCAPE,};
+    iu8f b[1 + numeric_limits<decltype(zeroByteCount)>::max_ie_octets] = {escape,};
     iu8f *bEnd = b + 1;
     writeIeu(bEnd, zeroByteCount);
     signature.b.append(b, bEnd);
@@ -73,8 +73,8 @@ void Signature::Writer::appendByte (iu8 byte) {
     appendZeroBytes(1);
   } else {
     flushZeroBytes();
-    if (byte == ESCAPE) {
-      iu8f b[2] = {ESCAPE, 0};
+    if (byte == escape) {
+      iu8f b[2] = {escape, 0};
       signature.b.append(b, 2);
     } else {
       signature.b.push_back(byte);
@@ -108,14 +108,14 @@ void Signature::Iterator::advance () noexcept {
   }
 
   iu8f b = *(i++);
-  if (b != ESCAPE) {
+  if (b != escape) {
     currentByte = b;
     zeroByteCount = 0;
   } else {
     auto v = readValidIeu<decltype(zeroByteCount)>(i);
     DA(v != 1 && v != 2);
     if (v == 0) {
-      currentByte = ESCAPE;
+      currentByte = escape;
       zeroByteCount = 0;
     } else {
       currentByte = 0;
@@ -312,7 +312,7 @@ ActionSet::Action::Action (const ActionSet &actionSet, Size id, MultiList<core::
 
 ActionSet::Size ActionSet::Action::getDewordingTarget () const {
   if (!dewording) {
-    return NON_ID;
+    return nonId;
   }
 
   DA(getWordCount() == 1);
@@ -354,13 +354,13 @@ bool ActionSet::Action::includesAnyWords (const Bitset &words) const {
 Rangeset::Rangeset (const Bitset &bitset, iu16 rangesEnd) : vector() {
   DS();
   DW(, "creating Rangeset from a bitset:");
-  DPRE(bitset.getNextSetBit(rangesEnd) == Bitset::NON_INDEX);
+  DPRE(bitset.getNextSetBit(rangesEnd) == Bitset::nonIndex);
 
   for (size_t end = 0; end != rangesEnd;) {
     size_t prevEnd = end;
     size_t begin = bitset.getNextClearBit(end);
     end = bitset.getNextSetBit(begin + 1);
-    if (end == Bitset::NON_INDEX) {
+    if (end == Bitset::nonIndex) {
       end = rangesEnd;
     }
     this->push_back(RangesetPart{static_cast<iu16f>(begin - prevEnd), static_cast<iu16f>(end - begin)});
@@ -539,7 +539,7 @@ void LocalActionExecutor::processNode (
     HashWrapper<Signature> signature(Multiverse::Node::createSignature(vm, ignoredByteRangeset));
 
     auto dewordingWord = action.getDewordingTarget();
-    if (dewordingWord != ActionSet::NON_ID) {
+    if (dewordingWord != ActionSet::nonId) {
       DW(, "this action is a dewording one (for word of id ",dewordingWord,")");
       if (deworder(vm, output)) {
         DW(, "word of id ",dewordingWord," is missing!");
@@ -591,18 +591,16 @@ string<iu8f> RemoteActionExecutor::getBuildId () {
   return string<iu8f>(reinterpret_cast<const iu8f *>(raw), strlen(raw));
 }
 
-RemoteActionExecutor::RemoteActionExecutor (const TcpSocketAddress &addr) : stream(addr, true), out(stream, BUFFER_SIZE), in(stream, BUFFER_SIZE) {
-  const iu8f ID = 0;
-
-  beginRequest(ID);
+RemoteActionExecutor::RemoteActionExecutor (const TcpSocketAddress &addr) : stream(addr, true), out(stream, bufferSize), in(stream, bufferSize) {
+  beginRequest(ActionExecutorServer::initId);
   Serialiser<OutputStreamIterator<TcpSocketStream>> s(out);
   string<iu8f> buildId = getBuildId();
   s.process(buildId);
-  endRequest(ID);
+  endRequest(ActionExecutorServer::initId);
 
-  beginResponse(ID);
+  beginResponse(ActionExecutorServer::initId);
   check(1, read());
-  endResponse(ID);
+  endResponse(ActionExecutorServer::initId);
 }
 
 void RemoteActionExecutor::beginRequest (iu8f requestId) {
@@ -643,42 +641,36 @@ void RemoteActionExecutor::endResponse (iu8f requestId) {
 }
 
 void RemoteActionExecutor::clearWordSet () {
-  const iu8f ID = 1;
+  beginRequest(ActionExecutorServer::clearWordSetId);
+  endRequest(ActionExecutorServer::clearWordSetId);
 
-  beginRequest(ID);
-  endRequest(ID);
-
-  beginResponse(ID);
-  endResponse(ID);
+  beginResponse(ActionExecutorServer::clearWordSetId);
+  endResponse(ActionExecutorServer::clearWordSetId);
 }
 
 void RemoteActionExecutor::setIgnoredByteRangeset (Rangeset ignoredByteRangeset) {
-  const iu8f ID = 2;
-
-  beginRequest(ID);
+  beginRequest(ActionExecutorServer::setIgnoredByteRangesetId);
   Serialiser<OutputStreamIterator<TcpSocketStream>> s(out);
   s.process(ignoredByteRangeset);
-  endRequest(ID);
+  endRequest(ActionExecutorServer::setIgnoredByteRangesetId);
 
-  beginResponse(ID);
-  endResponse(ID);
+  beginResponse(ActionExecutorServer::setIgnoredByteRangesetId);
+  endResponse(ActionExecutorServer::setIgnoredByteRangesetId);
 }
 
 void RemoteActionExecutor::processNode (
   vector<ActionResult> &r_results, Bitset *extraWordSet,
   const HashWrapper<Signature> &parentSignature, const State &parentState
 ) {
-  const iu8f ID = 3;
-
-  beginRequest(ID);
+  beginRequest(ActionExecutorServer::processNodeId);
   Serialiser<OutputStreamIterator<TcpSocketStream>> s(out);
   bool hasExtraWordSet = !!extraWordSet;
   s.process(hasExtraWordSet);
   s.process(const_cast<HashWrapper<Signature> &>(parentSignature));
   s.process(const_cast<State &>(parentState)); // TODO sort out const support for read-only Walkers
-  endRequest(ID);
+  endRequest(ActionExecutorServer::processNodeId);
 
-  beginResponse(ID);
+  beginResponse(ActionExecutorServer::processNodeId);
   InputStreamEndIterator<TcpSocketStream> end;
   Deserialiser<InputStreamIterator<TcpSocketStream>, InputStreamEndIterator<TcpSocketStream>> d(in, end);
   if (r_results.empty()) {
@@ -694,7 +686,7 @@ void RemoteActionExecutor::processNode (
   if (hasExtraWordSet) {
     d.process(*extraWordSet);
   }
-  endResponse(ID);
+  endResponse(ActionExecutorServer::processNodeId);
 }
 
 ActionExecutorServer::ActionExecutorServer (LocalActionExecutor &r_e, const TcpSocketAddress &addr) : r_e(r_e), listeningSocket(addr, 1) {
@@ -745,9 +737,9 @@ void ActionExecutorServer::accept () {
   finally([&] () {
     stream.close();
   });
-  InputStreamIterator<TcpSocketStream> in(stream, RemoteActionExecutor::BUFFER_SIZE);
+  InputStreamIterator<TcpSocketStream> in(stream, RemoteActionExecutor::bufferSize);
   InputStreamEndIterator<TcpSocketStream> end;
-  OutputStreamIterator<TcpSocketStream> out(stream, RemoteActionExecutor::BUFFER_SIZE);
+  OutputStreamIterator<TcpSocketStream> out(stream, RemoteActionExecutor::bufferSize);
 
   unordered_set<HashWrapper<Signature>> knownSignatures;
   while (true) {
@@ -756,7 +748,7 @@ void ActionExecutorServer::accept () {
     switch (requestId) {
       case numeric_limits<iu8f>::max():
         return;
-      case 0: {
+      case ActionExecutorServer::initId: {
         Deserialiser<InputStreamIterator<TcpSocketStream>, InputStreamEndIterator<TcpSocketStream>> d(in, end);
         string<iu8f> buildId;
         d.process(buildId);
@@ -772,7 +764,7 @@ void ActionExecutorServer::accept () {
           return;
         }
       } break;
-      case 1: {
+      case ActionExecutorServer::clearWordSetId: {
         endRequest(in, requestId);
 
         r_e.clearWordSet();
@@ -780,7 +772,7 @@ void ActionExecutorServer::accept () {
         beginResponse(out, requestId);
         endResponse(out, requestId);
       } break;
-      case 2: {
+      case ActionExecutorServer::setIgnoredByteRangesetId: {
         Deserialiser<InputStreamIterator<TcpSocketStream>, InputStreamEndIterator<TcpSocketStream>> d(in, end);
         thread_local Rangeset ignoredByteRangeset;
         d.process(ignoredByteRangeset);
@@ -793,7 +785,7 @@ void ActionExecutorServer::accept () {
 
         knownSignatures.clear();
       } break;
-      case 3: {
+      case ActionExecutorServer::processNodeId: {
         Deserialiser<InputStreamIterator<TcpSocketStream>, InputStreamEndIterator<TcpSocketStream>> d(in, end);
         bool hasExtraWordSet;
         d.process(hasExtraWordSet);
@@ -830,8 +822,8 @@ void ActionExecutorServer::accept () {
   }
 }
 
-Multiverse::Node *const Multiverse::Node::UNPARENTED = static_cast<Node *>(nullptr) + 1;
-const u8string Multiverse::Node::OUTPUT_LINE_TERMINATOR = u8("\n\n");
+Multiverse::Node *const Multiverse::Node::unparented = static_cast<Node *>(nullptr) + 1;
+const u8string Multiverse::Node::outputLineTerminator = u8("\n\n");
 
 Multiverse::Node::Node (unique_ptr<Listener> &&listener, Node *primeParentNode, HashWrapper<Signature> &&signature, State &&state) :
   listener(move(listener)), primeParentNode(primeParentNode), primeParentNodeInvalid(false), signature(move(signature)), state(), children()
@@ -899,7 +891,7 @@ Multiverse::Node::Listener *Multiverse::Node::getListener () const {
 
 Multiverse::Node *Multiverse::Node::getPrimeParentNode () const {
   DPRE(!primeParentNodeInvalid);
-  DPRE(primeParentNode != UNPARENTED);
+  DPRE(primeParentNode != unparented);
   return primeParentNode;
 }
 
@@ -957,7 +949,7 @@ void Multiverse::Node::addChild (ActionSet::Size actionId, const u8string &outpu
 
   thread_local StringSet<char8_t>::String o;
   DA(o.empty());
-  multiverse.outputStringSet.createString(output, OUTPUT_LINE_TERMINATOR, o);
+  multiverse.outputStringSet.createString(output, outputLineTerminator, o);
   children.emplace_back(actionId, o, node);
   o.clear();
 
@@ -979,7 +971,7 @@ bool Multiverse::Node::updatePrimeParent (Node *newParentNode, bool changedAbove
     DW(, "  same parent");
   } else if (!primeParentNode) {
     DW(, "  this Node is already the root!");
-  } else if (primeParentNode == UNPARENTED) {
+  } else if (primeParentNode == unparented) {
     DW(, "  this Node is unparented");
     changed = true;
   } else {
@@ -1100,7 +1092,7 @@ void Multiverse::Node::rebuildPrimeParents (Multiverse &multiverse) {
           }
           childNode->primeParentNodeInvalid = false;
 
-          DA(childNode->primeParentNode != UNPARENTED);
+          DA(childNode->primeParentNode != unparented);
           if (childNode->primeParentNode != node) {
             childNode->primeParentNode = node;
             if (!enshadowed) {
@@ -1155,7 +1147,7 @@ Multiverse::Multiverse (Story &&story, u8string &r_initialOutput, unique_ptr<Lis
   ActionExecutor::ActionResult actionResult = localExecutor.getActionResult();
 
   unique_ptr<Node::Listener> nodeListener(this->listener->createNodeListener());
-  this->listener->nodeReached(*this, nodeListener.get(), ActionSet::NON_ID, r_initialOutput, actionResult.signature.get(), actionResult.significantWords);
+  this->listener->nodeReached(*this, nodeListener.get(), ActionSet::nonId, r_initialOutput, actionResult.signature.get(), actionResult.significantWords);
   unique_ptr<Node> node(new Node(move(nodeListener), nullptr, move(actionResult.signature), move(actionResult.state)));
   rootNode = node.get();
   nodes.emplace(ref(rootNode->getSignature()), rootNode);
@@ -1292,7 +1284,7 @@ Multiverse::Node *Multiverse::collapseNode (
 
 void Multiverse::save (const u8string &pathName) {
   DS();
-  FileStream h(pathName, FileStream::READ_WRITE_RECREATE);
+  FileStream h(pathName, FileStream::Mode::readWriteRecreate);
   FileOutputIterator i(h);
   auto s = Serialiser<FileOutputIterator>(i);
 
@@ -1317,7 +1309,7 @@ void Multiverse::save (const u8string &pathName) {
 
 void Multiverse::load (const u8string &pathName) {
   DS();
-  FileStream h(pathName, FileStream::READ_EXISTING);
+  FileStream h(pathName, FileStream::Mode::readExisting);
   FileInputIterator i(h);
   FileInputEndIterator end;
   auto s = Deserialiser<FileInputIterator, FileInputEndIterator>(i, end);

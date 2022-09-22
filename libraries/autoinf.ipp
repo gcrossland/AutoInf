@@ -85,8 +85,8 @@ template<typename Key, typename Hash, typename KeyEqual, typename Allocator, typ
 
 
 
-template<typename _OutputIterator> Serialiser<_OutputIterator>::Serialiser (_OutputIterator &r_i) : i(r_i), nextId(NULL_ID + 1) {
-  allocations.emplace(nullptr, tuple<id, void *>(NULL_ID, static_cast<char *>(nullptr) + 1));
+template<typename _OutputIterator> Serialiser<_OutputIterator>::Serialiser (_OutputIterator &r_i) : i(r_i), nextId(nullId + 1) {
+  allocations.emplace(nullptr, tuple<id, void *>(nullId, static_cast<char *>(nullptr) + 1));
   DA(!!findAllocationStart(nullptr));
 }
 
@@ -229,7 +229,7 @@ template<typename _OutputIterator> template<typename _T, typename _TypeDeduction
     allocations.emplace(allocationStart, tuple<id, void *>(nextId++, static_cast<char *>(allocationStart) + size));
     // TODO check that new entries to the allocations set don't overlap?
 
-    writeIu(NON_ID);
+    writeIu(nonId);
     writeIu(type);
     walkReferent(o, allocationStart, type, *this);
   } else {
@@ -256,7 +256,7 @@ template<typename _OutputIterator> template<typename _T> void Serialiser<_Output
     DW(, "added allocation ", nextId, " - nonarray, nonpolymorphic, size ", sizeof(_T));
     allocations.emplace(ptr, tuple<id, void *>(nextId++, static_cast<char *>(ptr) + sizeof(_T)));
 
-    writeIu(NON_ID);
+    writeIu(nonId);
     this->process(*o);
   } else {
     writeIu(get<0>(*allocation));
@@ -277,7 +277,7 @@ template<typename _OutputIterator> template<typename _T> void Serialiser<_Output
     DW(, "adding allocation ", nextId, " - array, size ", count, " of ", sizeof(_T));
     allocations.emplace(ptr, tuple<id, void *>(nextId++, static_cast<char *>(ptr) + size));
 
-    writeIu(NON_ID);
+    writeIu(nonId);
     writeIu(count);
     for (_T *i = o, *end = o + count; i != end; ++i) {
       this->process(*i);
@@ -296,7 +296,7 @@ template<typename _OutputIterator> template<typename _T, typename _P> void Seria
   id allocationId;
   size_t offset;
   if (!o) {
-    allocationId = NULL_ID;
+    allocationId = nullId;
     offset = 0;
   } else {
     void *ptr = o;
@@ -327,9 +327,9 @@ template<typename _OutputIterator> template<typename _T> void Serialiser<_Output
 template<typename _InputIterator, typename _InputEndIterator> Deserialiser<_InputIterator, _InputEndIterator>::Deserialiser (
   _InputIterator &r_i, const _InputEndIterator &end
 ) : i(r_i), end(end), allocations() {
-  DA(allocations.size() == NON_ID);
+  DA(allocations.size() == nonId);
   allocations.emplace_back(nullptr);
-  DA(allocations.size() == NULL_ID);
+  DA(allocations.size() == nullId);
   allocations.emplace_back(nullptr);
 }
 
@@ -487,7 +487,7 @@ template<typename _InputIterator, typename _InputEndIterator> template<typename 
 )> void Deserialiser<_InputIterator, _InputEndIterator>::derefAndProcess (_T *&o, const _TypeDeductionFunctor &, const _ConstructionFunctor &constructReferent, const _WalkingFunctor &walkReferent) {
   DPRE(!o, "o must be null");
   id allocationId = readAllocationId();
-  if (allocationId == NON_ID) {
+  if (allocationId == nonId) {
     SubtypeId type = readIu<SubtypeId>();
 
     void *allocationStart;
@@ -517,7 +517,7 @@ template<typename _InputIterator, typename _InputEndIterator> template<typename 
 template<typename _InputIterator, typename _InputEndIterator> template<typename _T> void Deserialiser<_InputIterator, _InputEndIterator>::derefAndProcess (_T *&o) {
   DPRE(!o, "o must be null");
   id allocationId = readAllocationId();
-  if (allocationId == NON_ID) {
+  if (allocationId == nonId) {
     o = construct<_T>();
     DW(, "added allocation ", allocations.size(), " - nonarray, nonpolymorphic, size ", sizeof(_T));
     allocations.emplace_back(o);
@@ -553,7 +553,7 @@ template<typename _InputIterator, typename _InputEndIterator> template<typename 
 template<typename _InputIterator, typename _InputEndIterator> template<typename _T> void Deserialiser<_InputIterator, _InputEndIterator>::derefAndProcess (_T *&o, size_t count) {
   DPRE(!o, "o must be null");
   id allocationId = readAllocationId();
-  if (allocationId == NON_ID) {
+  if (allocationId == nonId) {
     size_t count = readIu<size_t>();
 
     o = new _T[count];
@@ -576,7 +576,7 @@ template<typename _InputIterator, typename _InputEndIterator> template<typename 
 
 template<typename _InputIterator, typename _InputEndIterator> template<typename _T, typename _P> void Deserialiser<_InputIterator, _InputEndIterator>::process (_T *&o, _P *parent) {
   id allocationId = readAllocationId();
-  if (allocationId == NON_ID) {
+  if (allocationId == nonId) {
     throw PlainException(u8("serialisation of an as-yet-unseen allocation appears in the input where only a reference to an already-seen allocation was expected"));
   }
   size_t offset = readIu<size_t>();
@@ -690,7 +690,7 @@ template<typename _L, typename _Size> _L &MultiList<_L, _Size>::compact () {
   return list;
 }
 
-template<typename _c, typename _Size> constexpr _Size StringSet<_c, _Size>::Key::PROPOSED;
+template<typename _c, typename _Size> constexpr _Size StringSet<_c, _Size>::Key::proposed;
 template<typename _c, typename _Size> thread_local MultiList<core::string<_c>, _Size> *StringSet<_c, _Size>::Key::list;
 template<typename _c, typename _Size> thread_local const _c *StringSet<_c, _Size>::Key::proposedBegin;
 template<typename _c, typename _Size> thread_local const _c *StringSet<_c, _Size>::Key::proposedEnd;
@@ -703,7 +703,7 @@ template<typename _c, typename _Size> size_t StringSet<_c, _Size>::Key::hashSlow
 
   const _c *begin;
   const _c *end;
-  if (i == PROPOSED) {
+  if (i == proposed) {
     DPRE(proposedBegin != nullptr);
     DPRE(proposedEnd != nullptr);
     begin = proposedBegin;
@@ -725,12 +725,12 @@ template<typename _c, typename _Size> bool StringSet<_c, _Size>::Key::operator==
     return true;
   }
 
-  if (i != PROPOSED && r.i != PROPOSED) {
+  if (i != proposed && r.i != proposed) {
     return false;
   }
 
-  _Size realI = i + r.i - PROPOSED;
-  DA((i == realI && r.i == PROPOSED) || (r.i == realI && i == PROPOSED));
+  _Size realI = i + r.i - proposed;
+  DA((i == realI && r.i == proposed) || (r.i == realI && i == proposed));
   DPRE(proposedBegin != nullptr);
   DPRE(proposedEnd != nullptr);
   auto s = list->get(realI);
@@ -775,7 +775,7 @@ template<typename _c, typename _Size> _Size StringSet<_c, _Size>::push (const _c
     });
   )
 
-  HashWrapper<Key> proposed(Key::PROPOSED);
+  HashWrapper<Key> proposed(Key::proposed);
 
   auto e = set.find(proposed);
   if (e != set.end()) {
@@ -1075,7 +1075,7 @@ template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd)
           DW(, "M this is a new node for this multiverse!");
           unique_ptr<Node::Listener> resultListener = listener->createNodeListener();
           listener->nodeReached(*this, resultListener.get(), parentActionId, resultOutput, resultSignature.get(), resultSignificantWords);
-          unique_ptr<Node> n(new Node(move(resultListener), Node::UNPARENTED, move(resultSignature), move(resultState)));
+          unique_ptr<Node> n(new Node(move(resultListener), Node::unparented, move(resultSignature), move(resultState)));
           resultNode = n.get();
           nodes.emplace(ref(resultNode->getSignature()), resultNode);
           n.release();
@@ -1092,8 +1092,8 @@ template<typename _I> void Multiverse::processNodes (_I nodesBegin, _I nodesEnd)
         DA(result.signature.get().empty());
         DA(result.state.isEmpty());
         resultNode = resultNodes[i - similarSiblingReverseOffset];
-        DA(resultNode != Node::UNPARENTED);
-        DI(resultNodes[i] = Node::UNPARENTED;)
+        DA(resultNode != Node::unparented);
+        DI(resultNodes[i] = Node::unparented;)
       }
       parentNode->addChild(parentActionId, resultOutput, resultNode, *this);
     }

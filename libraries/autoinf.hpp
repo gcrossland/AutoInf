@@ -29,8 +29,8 @@ typedef iterators::OutputStreamIterator<io::file::FileStream> FileOutputIterator
 
 class SerialiserBase {
   prt typedef size_t id;
-  prt static constexpr id NON_ID = 0;
-  prt static constexpr id NULL_ID = 1;
+  prt static constexpr id nonId = 0;
+  prt static constexpr id nullId = 1;
   pub typedef size_t SubtypeId;
 };
 
@@ -158,7 +158,7 @@ template<typename _InputIterator, typename _InputEndIterator> class Deserialiser
 class Signature {
   pub class Iterator;
 
-  prv static const iu8f ESCAPE = 200;
+  prv static const iu8f escape = 200;
   prv typedef iu32f RunSize;
 
   prv core::string<iu8f> b;
@@ -263,7 +263,7 @@ template<typename _L, typename _Size = typename _L::size_type> class MultiList {
 
 template<typename _c, typename _Size = iu> class StringSet {
   prv class Key {
-    pub static constexpr _Size PROPOSED = core::numeric_limits<_Size>::max();
+    pub static constexpr _Size proposed = core::numeric_limits<_Size>::max();
     pub static thread_local MultiList<core::string<_c>, _Size> *list;
     pub static thread_local const _c *proposedBegin;
     pub static thread_local const _c *proposedEnd;
@@ -292,7 +292,7 @@ template<typename _c, typename _Size = iu> class StringSet {
 
 class ActionSet {
   pub typedef iu16f Size;
-  pub static constexpr Size NON_ID = static_cast<Size>(-1);
+  pub static constexpr Size nonId = static_cast<Size>(-1);
   pub typedef iu8f SubSize;
   pub class Action;
 
@@ -441,7 +441,7 @@ class LocalActionExecutor : public ActionExecutor {
 };
 
 class RemoteActionExecutor : public ActionExecutor {
-  pub static constexpr size_t BUFFER_SIZE = 65535;
+  pub static constexpr size_t bufferSize = 65535;
 
   prv io::socket::TcpSocketStream stream;
   prv iterators::OutputStreamIterator<io::socket::TcpSocketStream> out;
@@ -467,6 +467,11 @@ class RemoteActionExecutor : public ActionExecutor {
 };
 
 class ActionExecutorServer {
+  pub static constexpr iu8f initId = 0;
+  pub static constexpr iu8f clearWordSetId = 1;
+  pub static constexpr iu8f setIgnoredByteRangesetId = 2;
+  pub static constexpr iu8f processNodeId = 3;
+
   prv LocalActionExecutor &r_e;
   prv io::socket::PassiveTcpSocket listeningSocket;
 
@@ -486,8 +491,8 @@ class Multiverse {
   pub class Node {
     pub class Listener;
 
-    pub static Node *const UNPARENTED;
-    prv static const core::u8string OUTPUT_LINE_TERMINATOR;
+    pub static Node *const unparented;
+    prv static const core::u8string outputLineTerminator;
 
     prv std::unique_ptr<Listener> listener;
     prv Node *primeParentNode;

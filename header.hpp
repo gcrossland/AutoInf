@@ -25,10 +25,10 @@ void updateMultiverseDisplay (autoinf::Multiverse &multiverse, const char *outPa
 const char8_t *getOptionIcon (bool enabled);
 
 class NodeMetricsListener : public autoinf::Multiverse::Node::Listener {
-  pub static constexpr size_t VALUE_COUNT = 7;
+  pub static constexpr size_t valueCount = 7;
   pub typedef is Value;
-  pub static constexpr iu8f NON_BOOL = core::numeric_limits<iu8f>::max();
-  pub static constexpr is16f NON_OUTPUTTAGE_VALUE = core::numeric_limits<is16f>::max();
+  pub static constexpr iu8f nonBool = core::numeric_limits<iu8f>::max();
+  pub static constexpr is16f nonOutputtageValue = core::numeric_limits<is16f>::max();
 
   prv is16f scoreValue;
 
@@ -49,7 +49,7 @@ class NodeMetricsListener : public autoinf::Multiverse::Node::Listener {
 class MultiverseMetricsListener : public autoinf::Multiverse::Listener {
   pub typedef NodeMetricsListener::Value Value;
 
-  prv static const size_t OUTPUTTAGE_CHILD_OUTPUT_PRESKIP;
+  prv static const size_t outputtageChildOutputPreskip;
 
   prv const size_t scoreSignificantWordAddrI;
   prv bitset::Bitset interestingChildActionWords;
@@ -90,7 +90,7 @@ class MultiverseMetricsListener : public autoinf::Multiverse::Listener {
 
 class NodeView : public NodeMetricsListener {
   pub size_t index;
-  pub static constexpr size_t NON_INDEX = static_cast<size_t>(-1);
+  pub static constexpr size_t nonIndex = static_cast<size_t>(-1);
   pub autoinf::ActionSet::Size primeParentChildIndex;
   pub bool isDeadEnd;
   pub bool isAntiselected;
@@ -144,7 +144,7 @@ class MultiverseView : public MultiverseMetricsListener {
     autoinf::ActionSet::Size *actionIdsI, autoinf::ActionSet::Size *actionIdsEnd,
     const autoinf::Multiverse &multiverse, core::u8string &r_prefix, FILE *out
   );
-  prv void printNodeAsNonleaf (
+  prv void printNodeAsNonLeaf (
     size_t depth, const autoinf::StringSet<char8_t>::String *output, autoinf::Multiverse::Node *node, autoinf::Multiverse::Node *parentNode,
     autoinf::ActionSet::Size *actionIdsI, autoinf::ActionSet::Size *actionIdsEnd,
     const autoinf::Multiverse &multiverse, core::u8string &r_prefix, FILE *out

@@ -656,7 +656,7 @@ bool runCommandLineTemplate (Multiverse &r_multiverse, const u8string &inTemplat
 void appendWordList (u8string &r_o, const Bitset &words, const Multiverse &multiverse) {
   auto &actionSet = multiverse.getActionSet();
   bool first = true;
-  for (size_t i = words.getNextSetBit(0); i != Bitset::NON_INDEX; i = words.getNextSetBit(i + 1)) {
+  for (size_t i = words.getNextSetBit(0); i != Bitset::nonIndex; i = words.getNextSetBit(i + 1)) {
     if (!first) {
       r_o.append(u8(", "));
     }
@@ -741,7 +741,7 @@ bool runCommandLine (Multiverse &multiverse, const u8string &in, u8string &messa
     } else if (line.size() > 3 && (line[0] == u8("V")[0] || line[0] == u8("v")[0]) && line[1] == u8("-")[0]) {
       char8_t valueName = line[2];
       size_t valueIndex;
-      if (valueName >= u8("a")[0] && valueName <= u8("z")[0] && (valueIndex = static_cast<size_t>(valueName - u8("a")[0])) < NodeMetricsListener::VALUE_COUNT) {
+      if (valueName >= u8("a")[0] && valueName <= u8("z")[0] && (valueIndex = static_cast<size_t>(valueName - u8("a")[0])) < NodeMetricsListener::valueCount) {
         if (line.size() > 5 && line[3] == u8(">")[0] && line[4] == u8("=")[0]) {
           const char8_t *numBegin = line.data() + 5;
           const char8_t *numEnd = line.data() + line.size();
@@ -897,7 +897,7 @@ bool runCommandLine (Multiverse &multiverse, const u8string &in, u8string &messa
     } else if (line == u8("G") || line == u8("g")) {
       auto bytes = multiverse.getIgnoredBytes();
       message.append(u8("Ignored bytes: {"));
-      for (size_t i = bytes.getNextSetBit(0); i != Bitset::NON_INDEX; i = bytes.getNextSetBit(i + 1)) {
+      for (size_t i = bytes.getNextSetBit(0); i != Bitset::nonIndex; i = bytes.getNextSetBit(i + 1)) {
         char8_t b[1024];
         sprintf(reinterpret_cast<char *>(b), "0x%04X,", static_cast<iu>(i));
         message.append(b);
@@ -1011,12 +1011,12 @@ const char8_t *getOptionIcon (bool enabled) {
   return enabled ? u8("\u2612") : u8("\u2610");
 }
 
-constexpr size_t NodeMetricsListener::VALUE_COUNT;
-constexpr iu8f NodeMetricsListener::NON_BOOL;
-constexpr is16f NodeMetricsListener::NON_OUTPUTTAGE_VALUE;
+constexpr size_t NodeMetricsListener::valueCount;
+constexpr iu8f NodeMetricsListener::nonBool;
+constexpr is16f NodeMetricsListener::nonOutputtageValue;
 
 NodeMetricsListener::NodeMetricsListener () :
-  novelOutputInParentArcDepthwise(false), outputtageValue(NON_OUTPUTTAGE_VALUE - 1), novelOutputInParentArcPrimePathwise(NON_BOOL)
+  novelOutputInParentArcDepthwise(false), outputtageValue(nonOutputtageValue - 1), novelOutputInParentArcPrimePathwise(nonBool)
 {
 }
 
@@ -1027,7 +1027,7 @@ template<typename _Walker> void NodeMetricsListener::beWalked (_Walker &w) {
 }
 
 Value NodeMetricsListener::getValue (size_t i) const {
-  DPRE(i < VALUE_COUNT);
+  DPRE(i < valueCount);
   switch (i) {
     case 0:
       return scoreValue;
@@ -1049,7 +1049,7 @@ Value NodeMetricsListener::getValue (size_t i) const {
   }
 }
 
-const size_t MultiverseMetricsListener::OUTPUTTAGE_CHILD_OUTPUT_PRESKIP = 1;
+const size_t MultiverseMetricsListener::outputtageChildOutputPreskip = 1;
 
 MultiverseMetricsListener::MultiverseMetricsListener (size_t scoreSignificantWordAddrI) :
   scoreSignificantWordAddrI(scoreSignificantWordAddrI), interestingChildActionWordsIsDirty(false)
@@ -1077,8 +1077,8 @@ void MultiverseMetricsListener::subtreePrimeAncestorsUpdated (const Multiverse &
 }
 
 void MultiverseMetricsListener::PrimePathwiseOutputtageChain::pushArc (const StringSet<char8_t>::String &childOutput) {
-  if (childOutput.size() >= OUTPUTTAGE_CHILD_OUTPUT_PRESKIP) {
-    for (auto i = childOutput.begin() + OUTPUTTAGE_CHILD_OUTPUT_PRESKIP, end = childOutput.end(); i != end; ++i) {
+  if (childOutput.size() >= outputtageChildOutputPreskip) {
+    for (auto i = childOutput.begin() + outputtageChildOutputPreskip, end = childOutput.end(); i != end; ++i) {
       iu string = *i;
       if (!strings.getBit(string)) {
         strings.setBit(string);
@@ -1129,8 +1129,8 @@ void MultiverseMetricsListener::doPrimePathwisePass (const Node *node, NodeMetri
     const Node *childNode = get<2>(node->getChild(i));
     if (childNode->getPrimeParentNode() == node) {
       NodeMetricsListener *childListener = static_cast<NodeMetricsListener *>(childNode->getListener());
-      DA((childNode->getPrimeParentArcChildIndex() == i) != (childListener->novelOutputInParentArcPrimePathwise == NodeMetricsListener::NON_BOOL));
-      childListener->novelOutputInParentArcPrimePathwise = NodeMetricsListener::NON_BOOL;
+      DA((childNode->getPrimeParentArcChildIndex() == i) != (childListener->novelOutputInParentArcPrimePathwise == NodeMetricsListener::nonBool));
+      childListener->novelOutputInParentArcPrimePathwise = NodeMetricsListener::nonBool;
     }
   }
 
@@ -1140,12 +1140,12 @@ void MultiverseMetricsListener::doPrimePathwisePass (const Node *node, NodeMetri
     const Node *childNode = get<2>(child);
     if (childNode->getPrimeParentNode() == node) {
       NodeMetricsListener *childListener = static_cast<NodeMetricsListener *>(childNode->getListener());
-      DA((childNode->getPrimeParentArcChildIndex() == i) == (childListener->novelOutputInParentArcPrimePathwise == NodeMetricsListener::NON_BOOL));
-      if (childListener->novelOutputInParentArcPrimePathwise == NodeMetricsListener::NON_BOOL) {
+      DA((childNode->getPrimeParentArcChildIndex() == i) == (childListener->novelOutputInParentArcPrimePathwise == NodeMetricsListener::nonBool));
+      if (childListener->novelOutputInParentArcPrimePathwise == NodeMetricsListener::nonBool) {
         r_outputtageChain.pushArc(childOutput);
 
         doPrimePathwisePass(childNode, childListener, r_outputtageChain);
-        DA(childListener->novelOutputInParentArcPrimePathwise != NodeMetricsListener::NON_BOOL);
+        DA(childListener->novelOutputInParentArcPrimePathwise != NodeMetricsListener::nonBool);
 
         r_outputtageChain.popArc();
       }
@@ -1190,7 +1190,7 @@ void MultiverseMetricsListener::doDepthwisePass (const autoinf::Multiverse &mult
 
   const Node *rootNode = multiverse.getRoot();
   NodeMetricsListener *rootListener = static_cast<NodeMetricsListener *>(rootNode->getListener());
-  rootListener->outputtageValue = NodeMetricsListener::NON_OUTPUTTAGE_VALUE;
+  rootListener->outputtageValue = NodeMetricsListener::nonOutputtageValue;
   rootListener->novelOutputInParentArcDepthwise = false;
   nodes.emplace_back(rootNode);
 
@@ -1208,15 +1208,15 @@ void MultiverseMetricsListener::doDepthwisePass (const autoinf::Multiverse &mult
         const Node *childNode = get<2>(child);
         NodeMetricsListener *childListener = static_cast<NodeMetricsListener *>(childNode->getListener());
 
-        DA((childNode->getPrimeParentNode() == node && childNode->getPrimeParentArcChildIndex() == i) == (childListener->outputtageValue != NodeMetricsListener::NON_OUTPUTTAGE_VALUE));
-        if (childListener->outputtageValue != NodeMetricsListener::NON_OUTPUTTAGE_VALUE) {
-          childListener->outputtageValue = NodeMetricsListener::NON_OUTPUTTAGE_VALUE;
+        DA((childNode->getPrimeParentNode() == node && childNode->getPrimeParentArcChildIndex() == i) == (childListener->outputtageValue != NodeMetricsListener::nonOutputtageValue));
+        if (childListener->outputtageValue != NodeMetricsListener::nonOutputtageValue) {
+          childListener->outputtageValue = NodeMetricsListener::nonOutputtageValue;
           childListener->novelOutputInParentArcDepthwise = false;
           nodes.emplace_back(childNode);
         }
 
-        if (childOutput.size() >= OUTPUTTAGE_CHILD_OUTPUT_PRESKIP) {
-          for (auto i = childOutput.begin() + OUTPUTTAGE_CHILD_OUTPUT_PRESKIP, end = childOutput.end(); i != end; ++i) {
+        if (childOutput.size() >= outputtageChildOutputPreskip) {
+          for (auto i = childOutput.begin() + outputtageChildOutputPreskip, end = childOutput.end(); i != end; ++i) {
             iu string = *i;
             if (!stringsToThisDepth.getBit(string)) {
               stringsToNextDepth.setBit(string);
@@ -1238,10 +1238,10 @@ void MultiverseMetricsListener::doPostDepthwisePrimePathwisePass (const Node *no
     Node *childNode = get<2>(node->getChild(i));
     if (childNode->getPrimeParentNode() == node) {
       NodeMetricsListener *childListener = static_cast<NodeMetricsListener *>(childNode->getListener());
-      DA((childNode->getPrimeParentArcChildIndex() == i) == (childListener->outputtageValue == NodeMetricsListener::NON_OUTPUTTAGE_VALUE));
-      if (childListener->outputtageValue == NodeMetricsListener::NON_OUTPUTTAGE_VALUE) {
+      DA((childNode->getPrimeParentArcChildIndex() == i) == (childListener->outputtageValue == NodeMetricsListener::nonOutputtageValue));
+      if (childListener->outputtageValue == NodeMetricsListener::nonOutputtageValue) {
         doPostDepthwisePrimePathwisePass(childNode, childListener, listener);
-        DA(childListener->outputtageValue != NodeMetricsListener::NON_OUTPUTTAGE_VALUE);
+        DA(childListener->outputtageValue != NodeMetricsListener::nonOutputtageValue);
       }
     }
   }
@@ -1304,10 +1304,10 @@ const Bitset &MultiverseMetricsListener::getInterestingChildActionWords (const M
   return interestingChildActionWords;
 }
 
-constexpr size_t NodeView::NON_INDEX;
+constexpr size_t NodeView::nonIndex;
 
 NodeView::NodeView () :
-  index(NON_INDEX - 1), primeParentChildIndex(ActionSet::NON_ID), isDeadEnd(false), isAntiselected(false)
+  index(nonIndex - 1), primeParentChildIndex(ActionSet::nonId), isDeadEnd(false), isAntiselected(false)
 {
 }
 
@@ -1399,8 +1399,8 @@ void MultiverseView::studyNodes (const Multiverse &multiverse) {
   DS();
   DA(nodesByIndex.empty());
 
-  static_cast<NodeView *>(multiverse.getRoot()->getListener())->index = NodeView::NON_INDEX;
-  studyNode(multiverse.getRoot(), nullptr, ActionSet::NON_ID);
+  static_cast<NodeView *>(multiverse.getRoot()->getListener())->index = NodeView::nonIndex;
+  studyNode(multiverse.getRoot(), nullptr, ActionSet::nonId);
   size_t passBegin = 0;
   size_t passEnd = 1;
   DA(passEnd == nodesByIndex.size());
@@ -1415,10 +1415,10 @@ void MultiverseView::studyNodes (const Multiverse &multiverse) {
         if (childNode->getPrimeParentNode() == node) {
           DW(, " child ",i," is us-prime");
           NodeView *childNodeView = static_cast<NodeView *>(childNode->getListener());
-          childNodeView->index = NodeView::NON_INDEX;
+          childNodeView->index = NodeView::nonIndex;
         } else {
           DW(, " child ",i," is not us-prime");
-          DA(static_cast<NodeView *>(childNode->getListener())->index != NodeView::NON_INDEX);
+          DA(static_cast<NodeView *>(childNode->getListener())->index != NodeView::nonIndex);
         }
       }
 
@@ -1441,8 +1441,8 @@ void MultiverseView::studyNode (Node *node, Node *parentNode, ActionSet::Size ch
   DW(, "looking at node with sig of hash ",node->getSignature().hashFast());
   NodeView *nodeView = static_cast<NodeView *>(node->getListener());
 
-  DA(!node->getPrimeParentNode() || (node->getPrimeParentNode() == parentNode && node->getPrimeParentArcChildIndex() == childIndex) == (nodeView->index == NodeView::NON_INDEX));
-  if (nodeView->index == NodeView::NON_INDEX) {
+  DA(!node->getPrimeParentNode() || (node->getPrimeParentNode() == parentNode && node->getPrimeParentArcChildIndex() == childIndex) == (nodeView->index == NodeView::nonIndex));
+  if (nodeView->index == NodeView::nonIndex) {
     nodeView->index = nodesByIndex.size();
     nodeView->primeParentChildIndex = childIndex;
     nodesByIndex.emplace_back(node);
@@ -1523,7 +1523,7 @@ void MultiverseView::printNodes (const Multiverse &multiverse, FILE *out) {
   markDeadEndAndAntiselectedNodes();
 
   u8string prefix;
-  printNodeAsNonleaf(0, nullptr, multiverse.getRoot(), nullptr, nullptr, nullptr, multiverse, prefix, out);
+  printNodeAsNonLeaf(0, nullptr, multiverse.getRoot(), nullptr, nullptr, nullptr, multiverse, prefix, out);
 }
 
 void MultiverseView::printNodeHeader (
@@ -1539,7 +1539,7 @@ void MultiverseView::printNodeHeader (
   fprintf(out, "%s", narrowise(renderActionInput(actionIdsI, actionIdsEnd, multiverse.getActionSet())));
   fprintf(out, " -> [%s]", narrowise(hexise(static_cast<iu>(node->getSignature().hashFast()))));
   fprintf(out, " {");
-  for (size_t i = 0; i != NodeView::VALUE_COUNT; ++i) {
+  for (size_t i = 0; i != NodeView::valueCount; ++i) {
     fprintf(out, "%s%d", i == 0 ? "" : ", ", nodeView->getValue(i));
   }
   fprintf(out, "}");
@@ -1549,7 +1549,7 @@ u8string MultiverseView::renderActionInput (ActionSet::Size *actionIdsI, ActionS
   u8string actionInput;
   for (; actionIdsI != actionIdsEnd; ++actionIdsI) {
     auto actionId = *actionIdsI;
-    DA(actionId != ActionSet::NON_ID);
+    DA(actionId != ActionSet::nonId);
     actionInput.append(u8(" \""));
     actionSet.get(actionId).getInput(actionInput);
     actionInput.data()[actionInput.size() - 1] = u8("\"")[0];
@@ -1592,7 +1592,7 @@ void MultiverseView::printNodeAsLeaf (
   }
 }
 
-void MultiverseView::printNodeAsNonleaf (
+void MultiverseView::printNodeAsNonLeaf (
   size_t depth, const StringSet<char8_t>::String *output, Node *node, Node *parentNode,
   ActionSet::Size *actionIdsI, ActionSet::Size *actionIdsEnd,
   const Multiverse &multiverse, u8string &r_prefix, FILE *out
@@ -1606,9 +1606,9 @@ void MultiverseView::printNodeAsNonleaf (
   }
 
   enum {
-    NONE,
-    LEAF,
-    NONLEAF
+    none,
+    leaf,
+    nonLeaf
   } fmts[node->getChildrenSize()];
   size_t fmtsEnd;
   unique_ptr<unordered_map<Node *, vector<ActionSet::Size>>> childGroups;
@@ -1631,9 +1631,9 @@ void MultiverseView::printNodeAsNonleaf (
 
       bool elided = (elideDeadEndNodes && childNodeView->isDeadEnd) || (elideAntiselectedNodes && childNodeView->isAntiselected);
       bool elision = elideDeadEndNodes || elideAntiselectedNodes;
-      auto fmt = (childNode->getPrimeParentNode() == node && childNodeView->primeParentChildIndex == i && !elided) ? NONLEAF : !elision ? LEAF : NONE;
+      auto fmt = (childNode->getPrimeParentNode() == node && childNodeView->primeParentChildIndex == i && !elided) ? nonLeaf : !elision ? leaf : none;
       fmts[i] = fmt;
-      if (fmt != NONE) {
+      if (fmt != none) {
         fmtsEnd = i + 1;
 
         if (childGroups) {
@@ -1643,7 +1643,7 @@ void MultiverseView::printNodeAsNonleaf (
             t.reserve(8);
             childGroupsI = get<0>(childGroups->emplace(childNode, move(t)));
           } else {
-            DA(fmt == LEAF);
+            DA(fmt == leaf);
           }
           get<1>(*childGroupsI).emplace_back(childActionId);
         }
@@ -1661,7 +1661,7 @@ void MultiverseView::printNodeAsNonleaf (
     r_prefix.erase(prefixSize);
   }
   for (size_t i = 0; i != fmtsEnd; ++i) {
-    if (fmts[i] == NONE) {
+    if (fmts[i] == none) {
       continue;
     }
     bool last = i == fmtsEnd - 1;
@@ -1691,7 +1691,7 @@ void MultiverseView::printNodeAsNonleaf (
 
     fprintf(out, "%s%s", narrowise(r_prefix), narrowise(last ? u8("└─") : u8("├─")));
     r_prefix.append(last ? u8("  ") : u8("│ "));
-    (this->*(fmts[i] == LEAF ? &MultiverseView::printNodeAsLeaf : &MultiverseView::printNodeAsNonleaf))(depth, contains(verboseNodes, childNode) ? &childOuput : nullptr, childNode, node, childActionIdsBegin, childActionIdsEnd, multiverse, r_prefix, out);
+    (this->*(fmts[i] == leaf ? &MultiverseView::printNodeAsLeaf : &MultiverseView::printNodeAsNonLeaf))(depth, contains(verboseNodes, childNode) ? &childOuput : nullptr, childNode, node, childActionIdsBegin, childActionIdsEnd, multiverse, r_prefix, out);
     r_prefix.erase(prefixSize);
   }
 }
