@@ -128,8 +128,8 @@ template<typename _InputIterator, typename _InputEndIterator> class Deserialiser
     std::is_convertible<_WalkingFunctor, std::function<void (_T &, Deserialiser<_InputIterator, _InputEndIterator> &)>>::value
   )> void process (std::vector<_T> &r_value, const _WalkingFunctor &walkElement);
   pub template<typename _T> void process (std::vector<_T> &r_value);
-  prv template<typename _T, iff(std::is_constructible<_T, Deserialiser<_InputIterator, _InputEndIterator>>::value)> void emplaceBack (std::vector<_T> &r_value);
-  prv template<typename _T, iff(!std::is_constructible<_T, Deserialiser<_InputIterator, _InputEndIterator>>::value)> void emplaceBack (std::vector<_T> &r_value);
+  prv template<typename _T, iff(std::is_constructible<_T, const SerialiserBase &>::value)> void emplaceBack (std::vector<_T> &r_value);
+  prv template<typename _T, iff(!std::is_constructible<_T, const SerialiserBase &>::value)> void emplaceBack (std::vector<_T> &r_value);
   pub void process (bitset::Bitset &r_value);
   pub void process (autofrotz::State &r_value);
   pub template<typename _Walkable> void process (core::HashWrapper<_Walkable> &r_value);
@@ -144,8 +144,8 @@ template<typename _InputIterator, typename _InputEndIterator> class Deserialiser
     std::is_convertible<_WalkingFunctor, std::function<void (_T *, void *, SubtypeId, Deserialiser<_InputIterator, _InputEndIterator> &)>>::value
   )> void derefAndProcess (std::unique_ptr<_T> &o, const _TypeDeductionFunctor &, const _ConstructionFunctor &constructReferent, const _WalkingFunctor &walkReferent);
   pub template<typename _T> void derefAndProcess (_T *&o);
-  prv template<typename _T, iff(std::is_constructible<_T, Deserialiser<_InputIterator, _InputEndIterator>>::value)> _T *construct ();
-  prv template<typename _T, iff(!std::is_constructible<_T, Deserialiser<_InputIterator, _InputEndIterator>>::value)> _T *construct ();
+  prv template<typename _T, iff(std::is_constructible<_T, const SerialiserBase &>::value)> _T *construct ();
+  prv template<typename _T, iff(!std::is_constructible<_T, const SerialiserBase &>::value)> _T *construct ();
   pub template<typename _T> void derefAndProcess (std::unique_ptr<_T> &o);
   pub template<typename _T> void derefAndProcess (_T *&o, size_t count);
   pub template<typename _T> void derefAndProcess (std::unique_ptr<_T []> &o, size_t count);
@@ -165,7 +165,7 @@ class Signature {
 
   pub Signature ();
   pub explicit Signature (size_t sizeHint);
-  pub template<typename _InputIterator, typename _InputEndIterator> explicit Signature (const Deserialiser<_InputIterator, _InputEndIterator> &);
+  pub explicit Signature (const SerialiserBase &);
   pub template<typename _Walker> void beWalked (_Walker &w);
 
   pub bool empty () const noexcept;
@@ -397,7 +397,7 @@ class ActionExecutor {
     ActionResult (ActionSet::Size id, core::u8string output, size_t similarSiblingReverseOffset);
     ActionResult (ActionSet::Size id, core::u8string output, core::HashWrapper<Signature> signature);
     ActionResult (ActionSet::Size id, core::u8string output, core::HashWrapper<Signature> signature, autofrotz::State state, std::vector<autofrotz::zword> significantWords);
-    template<typename _InputIterator, typename _InputEndIterator> explicit ActionResult (const Deserialiser<_InputIterator, _InputEndIterator> &);
+    explicit ActionResult (const SerialiserBase &);
     template<typename _Walker> void beWalked (_Walker &w);
   };
   pub virtual void processNode (
@@ -506,7 +506,7 @@ class Multiverse {
     Node &operator= (const Node &) = delete;
     Node (Node &&) = delete;
     Node &operator= (Node &&) = delete;
-    pub template<typename _InputIterator, typename _InputEndIterator> explicit Node (const Deserialiser<_InputIterator, _InputEndIterator> &);
+    pub explicit Node (const SerialiserBase &);
     pub template<typename _Walker> void beWalked (_Walker &w);
 
     pub static Signature createSignature (const autofrotz::Vm &vm, const Rangeset &ignoredByteRangeset);

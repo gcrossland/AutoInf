@@ -19,6 +19,9 @@ Signature::Signature () {
 Signature::Signature (size_t sizeHint) : b(sizeHint) {
 }
 
+Signature::Signature (const SerialiserBase &) : Signature() {
+}
+
 bool Signature::empty () const noexcept {
   return b.empty();
 }
@@ -390,6 +393,9 @@ ActionExecutor::ActionResult::ActionResult (ActionSet::Size id, u8string output,
 ActionExecutor::ActionResult::ActionResult (ActionSet::Size id, u8string output, HashWrapper<Signature> signature, State state, vector<zword> significantWords) :
   id(id), output(move(output)), similarSiblingReverseOffset(0), signature(move(signature)), state(move(state)), significantWords(move(significantWords))
 {
+}
+
+ActionExecutor::ActionResult::ActionResult (const SerialiserBase &) {
 }
 
 LocalActionExecutor::LocalActionExecutor (Story &&story, u8string &r_initialOutput) :
@@ -832,6 +838,9 @@ Multiverse::Node::Node (unique_ptr<Listener> &&listener, Node *primeParentNode, 
     this->state.reset(new State(move(state)));
   }
   DW(, "created new Node with sig of hash ", this->signature.hashFast());
+}
+
+Multiverse::Node::Node (const SerialiserBase &) : primeParentNode(nullptr), primeParentNodeInvalid(false) {
 }
 
 Signature Multiverse::Node::createSignature (const Vm &vm, const Rangeset &ignoredByteRangeset) {

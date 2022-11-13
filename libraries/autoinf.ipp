@@ -434,14 +434,14 @@ template<typename _InputIterator, typename _InputEndIterator> template<typename 
 }
 
 template<typename _InputIterator, typename _InputEndIterator> template<typename _T, iff(
-  std::is_constructible<_T, Deserialiser<_InputIterator, _InputEndIterator>>::value
+  std::is_constructible<_T, const SerialiserBase &>::value
 )> void Deserialiser<_InputIterator, _InputEndIterator>::emplaceBack (vector<_T> &r_value) {
   DW(, "emplacing_back a ",typeid(_T).name()," object with the custom deserialisation constructor");
   r_value.emplace_back(*this);
 }
 
 template<typename _InputIterator, typename _InputEndIterator> template<typename _T, iff(
-  !std::is_constructible<_T, Deserialiser<_InputIterator, _InputEndIterator>>::value
+  !std::is_constructible<_T, const SerialiserBase &>::value
 )> void Deserialiser<_InputIterator, _InputEndIterator>::emplaceBack (vector<_T> &r_value) {
   DW(, "emplacing_back a ",typeid(_T).name()," object with the default constructor");
   r_value.emplace_back();
@@ -529,14 +529,14 @@ template<typename _InputIterator, typename _InputEndIterator> template<typename 
 }
 
 template<typename _InputIterator, typename _InputEndIterator> template<typename _T, iff(
-  std::is_constructible<_T, Deserialiser<_InputIterator, _InputEndIterator>>::value
+  std::is_constructible<_T, const SerialiserBase &>::value
 )> _T *Deserialiser<_InputIterator, _InputEndIterator>::construct () {
   DW(, "constructing a ",typeid(_T).name()," object with the custom deserialisation constructor");
   return new _T(*this);
 }
 
 template<typename _InputIterator, typename _InputEndIterator> template<typename _T, iff(
-  !std::is_constructible<_T, Deserialiser<_InputIterator, _InputEndIterator>>::value
+  !std::is_constructible<_T, const SerialiserBase &>::value
 )> _T *Deserialiser<_InputIterator, _InputEndIterator>::construct () {
   DW(, "constructing a ",typeid(_T).name()," object with the default constructor");
   return new _T();
@@ -591,9 +591,6 @@ template<typename _InputIterator, typename _InputEndIterator> template<typename 
   _T *p;
   this->process(p);
   o.reset(p);
-}
-
-template<typename _InputIterator, typename _InputEndIterator> Signature::Signature (const Deserialiser<_InputIterator, _InputEndIterator> &) : Signature() {
 }
 
 template<typename _Walker> void Signature::beWalked (_Walker &w) {
@@ -837,9 +834,6 @@ template<typename _Walker> void Rangeset::beWalked (_Walker &w) {
   });
 }
 
-template<typename _InputIterator, typename _InputEndIterator> ActionExecutor::ActionResult::ActionResult (const Deserialiser<_InputIterator, _InputEndIterator> &) {
-}
-
 template<typename _Walker> void ActionExecutor::ActionResult::beWalked (_Walker &w) {
   DS();
   w.process(id);
@@ -848,9 +842,6 @@ template<typename _Walker> void ActionExecutor::ActionResult::beWalked (_Walker 
   w.process(signature);
   w.process(state);
   w.process(significantWords);
-}
-
-template<typename _InputIterator, typename _InputEndIterator> Multiverse::Node::Node (const Deserialiser<_InputIterator, _InputEndIterator> &) : primeParentNode(nullptr), primeParentNodeInvalid(false) {
 }
 
 template<typename _Walker> void Multiverse::Node::beWalked (_Walker &w) {
