@@ -34,6 +34,8 @@ class SerialiserBase {
   pub typedef size_t SubtypeId;
 };
 
+template<typename _T, typename _Signature> concept Functor = std::convertible_to<_T, std::function<_Signature>>;
+
 template<typename _OutputIterator> class Serialiser : public SerialiserBase {
   prv _OutputIterator &i;
   prv std::map<void *, std::tuple<id, void *>> allocations;
@@ -63,9 +65,7 @@ template<typename _OutputIterator> class Serialiser : public SerialiserBase {
   pub void process (is64f &r_value);
   pub void process (core::string<iu8f> &r_value);
   pub void process (core::u8string &r_value);
-  pub template<typename _T, typename _WalkingFunctor, iff(
-    std::is_convertible<_WalkingFunctor, std::function<void (_T &, Serialiser<_OutputIterator> &)>>::value
-  )> void process (std::vector<_T> &r_value, const _WalkingFunctor &walkElement);
+  pub template<typename _T, Functor<void (_T &, Serialiser<_OutputIterator> &)> _WalkingFunctor> void process (std::vector<_T> &r_value, const _WalkingFunctor &walkElement);
   pub template<typename _T> void process (std::vector<_T> &r_value);
   pub void process (bitset::Bitset &r_value);
   pub void process (autofrotz::State &r_value);
@@ -74,14 +74,18 @@ template<typename _OutputIterator> class Serialiser : public SerialiserBase {
   prv typedef decltype(allocations) decltype_allocations;
   prv typename decltype_allocations::value_type *findAllocationStart (void *ptr);
   // (serialising a ptr to a nonarray object allocation (or such a ptr cast to a superclass), which may or may not have been seen before)
-  pub template<typename _T, typename _TypeDeductionFunctor, typename _ConstructionFunctor, typename _WalkingFunctor, iff(
-    std::is_convertible<_TypeDeductionFunctor, std::function<std::tuple<SubtypeId, void *, size_t> (_T *)>>::value &&
-    std::is_convertible<_WalkingFunctor, std::function<void (_T *, void *, SubtypeId, Serialiser<_OutputIterator> &)>>::value
-  )> void derefAndProcess (_T *&o, const _TypeDeductionFunctor &deduceReferentType, const _ConstructionFunctor &, const _WalkingFunctor &walkReferent);
-  pub template<typename _T, typename _TypeDeductionFunctor, typename _ConstructionFunctor, typename _WalkingFunctor, iff(
-    std::is_convertible<_TypeDeductionFunctor, std::function<std::tuple<SubtypeId, void *, size_t> (_T *)>>::value &&
-    std::is_convertible<_WalkingFunctor, std::function<void (_T *, void *, SubtypeId, Serialiser<_OutputIterator> &)>>::value
-  )> void derefAndProcess (std::unique_ptr<_T> &o, const _TypeDeductionFunctor &deduceReferentType, const _ConstructionFunctor &, const _WalkingFunctor &walkReferent);
+  pub template<
+    typename _T,
+    Functor<std::tuple<SubtypeId, void *, size_t> (_T *)> _TypeDeductionFunctor,
+    typename _ConstructionFunctor,
+    Functor<void (_T *, void *, SubtypeId, Serialiser<_OutputIterator> &)> _WalkingFunctor
+  > void derefAndProcess (_T *&o, const _TypeDeductionFunctor &deduceReferentType, const _ConstructionFunctor &, const _WalkingFunctor &walkReferent);
+  pub template<
+    typename _T,
+    Functor<std::tuple<SubtypeId, void *, size_t> (_T *)> _TypeDeductionFunctor,
+    typename _ConstructionFunctor,
+    Functor<void (_T *, void *, SubtypeId, Serialiser<_OutputIterator> &)> _WalkingFunctor
+  > void derefAndProcess (std::unique_ptr<_T> &o, const _TypeDeductionFunctor &deduceReferentType, const _ConstructionFunctor &, const _WalkingFunctor &walkReferent);
   // (a variant for when _T isn't polymorphic)
   pub template<typename _T> void derefAndProcess (_T *&o);
   pub template<typename _T> void derefAndProcess (std::unique_ptr<_T> &o);
@@ -124,28 +128,30 @@ template<typename _InputIterator, typename _InputEndIterator> class Deserialiser
   pub void process (is64f &r_value);
   pub void process (core::string<iu8f> &r_value);
   pub void process (core::u8string &r_value);
-  pub template<typename _T, typename _WalkingFunctor, iff(
-    std::is_convertible<_WalkingFunctor, std::function<void (_T &, Deserialiser<_InputIterator, _InputEndIterator> &)>>::value
-  )> void process (std::vector<_T> &r_value, const _WalkingFunctor &walkElement);
+  pub template<typename _T, Functor<void (_T &, Deserialiser<_InputIterator, _InputEndIterator> &)> _WalkingFunctor> void process (std::vector<_T> &r_value, const _WalkingFunctor &walkElement);
   pub template<typename _T> void process (std::vector<_T> &r_value);
-  prv template<typename _T, iff(std::is_constructible<_T, const SerialiserBase &>::value)> void emplaceBack (std::vector<_T> &r_value);
-  prv template<typename _T, iff(!std::is_constructible<_T, const SerialiserBase &>::value)> void emplaceBack (std::vector<_T> &r_value);
+  prv template<std::constructible_from<const SerialiserBase &> _T> void emplaceBack (std::vector<_T> &r_value);
+  prv template<typename _T> void emplaceBack (std::vector<_T> &r_value);
   pub void process (bitset::Bitset &r_value);
   pub void process (autofrotz::State &r_value);
   pub template<typename _Walkable> void process (core::HashWrapper<_Walkable> &r_value);
   pub template<typename _Walkable> void process (_Walkable &r_value);
   prv id readAllocationId ();
-  pub template<typename _T, typename _TypeDeductionFunctor, typename _ConstructionFunctor, typename _WalkingFunctor, iff(
-    std::is_convertible<_ConstructionFunctor, std::function<std::tuple<_T *, void *, size_t> (SubtypeId)>>::value &&
-    std::is_convertible<_WalkingFunctor, std::function<void (_T *, void *, SubtypeId, Deserialiser<_InputIterator, _InputEndIterator> &)>>::value
-  )> void derefAndProcess (_T *&o, const _TypeDeductionFunctor &, const _ConstructionFunctor &constructReferent, const _WalkingFunctor &walkReferent);
-  pub template<typename _T, typename _TypeDeductionFunctor, typename _ConstructionFunctor, typename _WalkingFunctor, iff(
-    std::is_convertible<_ConstructionFunctor, std::function<std::tuple<_T *, void *, size_t> (SubtypeId)>>::value &&
-    std::is_convertible<_WalkingFunctor, std::function<void (_T *, void *, SubtypeId, Deserialiser<_InputIterator, _InputEndIterator> &)>>::value
-  )> void derefAndProcess (std::unique_ptr<_T> &o, const _TypeDeductionFunctor &, const _ConstructionFunctor &constructReferent, const _WalkingFunctor &walkReferent);
+  pub template<
+    typename _T,
+    typename _TypeDeductionFunctor,
+    Functor<std::tuple<_T *, void *, size_t> (SubtypeId)> _ConstructionFunctor,
+    Functor<void (_T *, void *, SubtypeId, Deserialiser<_InputIterator, _InputEndIterator> &)> _WalkingFunctor
+  > void derefAndProcess (_T *&o, const _TypeDeductionFunctor &, const _ConstructionFunctor &constructReferent, const _WalkingFunctor &walkReferent);
+  pub template<
+    typename _T,
+    typename _TypeDeductionFunctor,
+    Functor<std::tuple<_T *, void *, size_t> (SubtypeId)> _ConstructionFunctor,
+    Functor<void (_T *, void *, SubtypeId, Deserialiser<_InputIterator, _InputEndIterator> &)> _WalkingFunctor
+  > void derefAndProcess (std::unique_ptr<_T> &o, const _TypeDeductionFunctor &, const _ConstructionFunctor &constructReferent, const _WalkingFunctor &walkReferent);
   pub template<typename _T> void derefAndProcess (_T *&o);
-  prv template<typename _T, iff(std::is_constructible<_T, const SerialiserBase &>::value)> _T *construct ();
-  prv template<typename _T, iff(!std::is_constructible<_T, const SerialiserBase &>::value)> _T *construct ();
+  prv template<std::constructible_from<const SerialiserBase &> _T> _T *construct ();
+  prv template<typename _T> _T *construct ();
   pub template<typename _T> void derefAndProcess (std::unique_ptr<_T> &o);
   pub template<typename _T> void derefAndProcess (_T *&o, size_t count);
   pub template<typename _T> void derefAndProcess (std::unique_ptr<_T []> &o, size_t count);
@@ -529,7 +535,7 @@ class Multiverse {
     pub void invalidatePrimeParent ();
     pub static void rebuildPrimeParents (Multiverse &multiverse);
 
-    pub template<typename _F, iff(std::is_convertible<_F, std::function<bool (Node *)>>::value)> void forEach (const _F &f);
+    pub template<Functor<bool (Node *)> _F> void forEach (const _F &f);
 
     pub class Listener {
       prt Listener ();
